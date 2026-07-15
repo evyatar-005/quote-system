@@ -1,37 +1,99 @@
-// Morning ("חשבונית ירוקה") integration — PLACEHOLDER.
-//
-// There is no live Morning API key/account yet. This module exists so every
-// call site (the agent's "הנפק הצעת מחיר" button, the manager's approval
-// flow) already has the right shape to call once real credentials show up —
-// only `issueQuoteToMorning` below needs to become a real `fetch` call then.
-//
-// TODO once Morning API access exists:
-//   1. Get the API key + base URL + the exact quote-creation endpoint from
-//      Morning's docs (https://www.greeninvoice.co.il/ API, likely).
-//   2. Map our Quote fields → Morning's expected request body. Best guess so
-//      far (confirm against their real schema before wiring this up):
-//        client_name        → client.name
-//        quote_number       → description / externalId
-//      line_items[].description/quantity/unitPrice → income[] rows
-//        price_before_vat   → amount (before tax)
-//        price_with_vat     → total (after tax)
-//        payment_type       → paymentType / installments count
-//   3. Store the API key server-side (never in the frontend) — add a
-//      `/api/morning/issue-quote` backend route that holds the real secret
-//      and proxies the call, instead of calling Morning directly from here.
+// Morning ("חשבונית ירוקה") integration — talks to our own backend, which
+// holds the real Morning API credentials and proxies every call
+// (`src/routes/morning.js`). Nothing here ever touches Morning directly.
+
+const TOKEN_KEY = 'auth_token';
+
+const getToken = () => {
+  try {
+    return localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
+};
+
+// Mirrors base44Client.js's `request` helper (same auth header + JSON error
+// shape) so every fetch in the app behaves consistently — kept local here
+// since base44Client doesn't export its internal helper.
+async function request(path, { method = 'GET', body } = {}) {
+  const headers = {};
+  const token = getToken();
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const opts = { method, headers };
+  if (body !== undefined) {
+    headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(body);
+  }
+
+  const res = await fetch(path, opts);
+
+  if (!res.ok) {
+    let message = `Request failed with status ${res.status}`;
+    try {
+      const data = await res.json();
+      if (data && data.error) message = data.error;
+      else if (data && data.message) message = data.message;
+    } catch {
+      // non-JSON error body — keep default message
+    }
+    const err = new Error(message);
+    err.status = res.status;
+    throw err;
+  }
+
+  if (res.status === 204) return null;
+  const text = await res.text();
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
 
 /**
- * Attempts to issue a quote through Morning. Currently always resolves with
- * `{ issued: false, reason: 'not_configured' }` — never throws — so callers
- * can show a clear "not connected yet" message instead of a crash.
+ * Issues (creates) a Morning quote document for this quote. Never throws —
+ * the call site (agent's "הנפק הצעת מחיר" button) doesn't wrap this in its
+ * own try/catch beyond an outer one for the Quote.create call, so a thrown
+ * error here would surface as a worse, generic failure instead of the clear
+ * "not connected" / reason message the UI already knows how to show.
  */
 export async function issueQuoteToMorning(quote) {
-  console.info('[morningClient] Would issue to Morning (API not connected yet):', {
-    quote_number: quote.quote_number,
-    client_name: quote.client_name,
-    price_before_vat: quote.price_before_vat,
-    price_with_vat: quote.price_with_vat,
-    payment_type: quote.payment_type,
+  try {
+    const document = await request(`/api/morning/quotes/${quote.id}/document`, {
+      method: 'POST',
+      body: { type: 'quote' },
+    });
+    return { issued: true, document };
+  } catch (err) {
+    return { issued: false, reason: err?.message || 'unknown_error' };
+  }
+}
+
+/**
+ * Converts (or creates, if none exists yet) this quote's Morning document to
+ * `toType`. Throws on failure — the manager-side caller in
+ * QuoteDetailsModal.jsx catches it and shows a toast.
+ */
+export async function convertMorningDocument(quoteId, toType) {
+  return request(`/api/morning/quotes/${quoteId}/convert`, {
+    method: 'POST',
+    body: { toType },
   });
-  return { issued: false, reason: 'not_configured' };
+}
+
+/** Full document + audit-log history for one quote. Throws on failure. */
+export async function getMorningHistory(quoteId) {
+  return request(`/api/morning/quotes/${quoteId}/history`);
+}
+
+/** Current Morning credentials/config (admin only). Throws on failure. */
+export async function getMorningConfig() {
+  return request('/api/morning/config');
+}
+
+/** Saves Morning credentials/config (admin only). Throws on failure. */
+export async function saveMorningConfig(config) {
+  return request('/api/morning/config', { method: 'PUT', body: config });
 }

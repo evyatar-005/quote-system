@@ -1,7 +1,9 @@
-import { useMemo, useState } from "react";
-import { X, Loader2, CheckCircle2, Save } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { X, Loader2, CheckCircle2, Save, FileText, Receipt } from "lucide-react";
 import { PRODUCT_NAMES } from "@/components/calculator/CalculatorForm";
 import { base44 } from "@/api/base44Client";
+import { convertMorningDocument, getMorningHistory } from "@/api/morningClient";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
 const fmt = (val) =>
@@ -250,6 +252,95 @@ function CostBreakdown({ result }) {
         </CostCard>
       )}
     </>
+  );
+}
+
+const MORNING_ACTIONS = [
+  { toType: "dealInvoice", label: "הפוך לחשבון עסקה" },
+  { toType: "order", label: "הפוך להזמנה" },
+  { toType: "taxInvoice", label: "הפוך לחשבונית מס" },
+];
+
+// Manager-only Morning ("חשבונית ירוקה") document actions + audit trail for
+// this quote. Kept as its own component so a Morning API hiccup (history
+// fetch failing) can only ever blank out this one card, never the rest of
+// the modal's pricing UI.
+function MorningSection({ quoteId }) {
+  const [busyType, setBusyType] = useState(null);
+  const [history, setHistory] = useState(null);
+  const [historyError, setHistoryError] = useState(false);
+
+  const loadHistory = async () => {
+    try {
+      const data = await getMorningHistory(quoteId);
+      setHistory(data);
+      setHistoryError(false);
+    } catch {
+      setHistory(null);
+      setHistoryError(true);
+    }
+  };
+
+  useEffect(() => {
+    loadHistory();
+  }, [quoteId]);
+
+  const handleConvert = async (toType, label) => {
+    setBusyType(toType);
+    try {
+      await convertMorningDocument(quoteId, toType);
+      toast.success(`${label} — בוצע בהצלחה`);
+      await loadHistory();
+    } catch (err) {
+      toast.error(err?.message || "שגיאה בפעולת מורנינג");
+    }
+    setBusyType(null);
+  };
+
+  return (
+    <div>
+      <h3 className="text-sm font-semibold text-zinc-300 mb-2 uppercase tracking-wider">מורנינג</h3>
+      <div className="bg-[#16161F] rounded-xl p-3 space-y-3">
+        <div className="flex flex-wrap gap-2">
+          {MORNING_ACTIONS.map(({ toType, label }) => (
+            <button
+              key={toType}
+              onClick={() => handleConvert(toType, label)}
+              disabled={busyType !== null}
+              className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border border-white/15 text-zinc-200 hover:border-[#C9A84C]/50 hover:text-[#C9A84C] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {busyType === toType ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <div className="border-t border-white/10 pt-2 space-y-1.5 max-h-40 overflow-y-auto">
+          {historyError ? (
+            <p className="text-xs text-zinc-500">אין היסטוריית מורנינג להצעה זו.</p>
+          ) : !history ? (
+            <p className="text-xs text-zinc-500">טוען היסטוריה...</p>
+          ) : history.log?.length === 0 ? (
+            <p className="text-xs text-zinc-500">אין פעולות מורנינג שבוצעו עדיין.</p>
+          ) : (
+            history.log.map((entry) => (
+              <div key={entry.id} className="flex items-center justify-between gap-2 text-xs py-1 border-b border-white/5 last:border-b-0">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <Receipt className="w-3 h-3 text-zinc-500 shrink-0" />
+                  <span className="text-zinc-300 truncate">{entry.action}</span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-zinc-500">{new Date(entry.created_at).toLocaleString("he-IL")}</span>
+                  <Badge variant={entry.success ? "default" : "destructive"} className="text-[10px] px-1.5 py-0">
+                    {entry.success ? "הצלחה" : "נכשל"}
+                  </Badge>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -757,6 +848,10 @@ export default function QuoteDetailsModal({ quote, onClose, onSaved }) {
                 </div>
               </div>
             </div>
+          </div>
+
+          <div className="mt-4">
+            <MorningSection quoteId={quote.id} />
           </div>
         </div>
       </div>

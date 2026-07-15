@@ -7,6 +7,8 @@ const { seedSignshop } = require('./db/seed-signshop');
 const registerAuth     = require('./routes/auth');
 const registerEntities = require('./routes/entities');
 const registerNotifications = require('./routes/notifications');
+const registerMorning  = require('./routes/morning');
+const registerUpdate   = require('./routes/update');
 
 const PORT    = process.env.PORT || 3000;
 const DB_PATH = path.join(__dirname, '../database.sqlite');
@@ -81,6 +83,8 @@ registerEntities(app, db, {
   requireAdmin,
 });
 registerNotifications(app, db, { requireAuth, requireAdmin });
+registerMorning(app, db, { requireAuth, requireAdmin });
+registerUpdate(app, db, { requireAuth, requireAdmin });
 
 // ─── Version info — read by deploy/UPDATE.ps1's post-deploy smoke check and
 // by anyone wanting to confirm which release is live without RDP access ─────
@@ -149,6 +153,8 @@ app.listen(PORT, () => {
   console.log('  GET    /api/notifications            PUT  /api/notifications/:id/read');
   console.log('  POST   /api/quotes/:id/decision      (manager approve/reject)');
   console.log('  GET    /api/version                  (running version/commit/deployedAt)');
+  console.log('  GET/PUT /api/morning/config           POST /api/morning/quotes/:id/document|convert  GET /api/morning/quotes/:id/history');
+  console.log('  GET    /api/admin/check-update        POST /api/admin/update');
 });
 
 // ─── Removed (2026-07-07 pre-launch cleanup) ─────────────────────────────────

@@ -26,10 +26,12 @@ import SalesPriceTable from "../components/admin/SalesPriceTable";
 import GlobalParamsSection from "../components/admin/GlobalParamsSection";
 import LightboxPriceTable from "../components/admin/LightboxPriceTable";
 import MinimumPricesSection from "../components/admin/MinimumPricesSection";
+import MorningSettingsSection from "../components/admin/MorningSettingsSection";
+import AboutSection from "../components/admin/AboutSection";
 import LogoutButton from "@/components/LogoutButton";
 import CollapsibleSection from "../components/admin/CollapsibleSection";
 import UsersManagementSection from "../components/admin/UsersManagementSection";
-import { ShieldAlert, Users } from "lucide-react";
+import { ShieldAlert, Users, Receipt, Info } from "lucide-react";
 
 
 const DEFAULT_CONFIG = {
@@ -235,7 +237,7 @@ export default function AdminDashboard() {
           {/* Each tab gets its own muted brand hue (from the Printela palette)
               so the four domains — pricing / costs / minimums / users — read
               as visually distinct areas, not just interchangeable tabs. */}
-          <TabsList className="grid w-full grid-cols-4 max-w-3xl mb-6">
+          <TabsList className="grid w-full grid-cols-3 sm:grid-cols-6 max-w-4xl mb-6">
             <TabsTrigger value="selling-prices" className="gap-2 data-[state=active]:text-brand-gold">
               <Calculator className="w-4 h-4" /> קביעת מחירי מכירה
             </TabsTrigger>
@@ -247,6 +249,12 @@ export default function AdminDashboard() {
             </TabsTrigger>
             <TabsTrigger value="users" className="gap-2 data-[state=active]:text-brand-purple">
               <Users className="w-4 h-4" /> משתמשים
+            </TabsTrigger>
+            <TabsTrigger value="morning" className="gap-2 data-[state=active]:text-brand-green">
+              <Receipt className="w-4 h-4" /> מורנינג
+            </TabsTrigger>
+            <TabsTrigger value="about" className="gap-2 data-[state=active]:text-slate-600">
+              <Info className="w-4 h-4" /> אודות
             </TabsTrigger>
           </TabsList>
 
@@ -260,6 +268,14 @@ export default function AdminDashboard() {
 
           <TabsContent value="users" className="space-y-6 mt-0">
             <UsersManagementSection />
+          </TabsContent>
+
+          <TabsContent value="morning" className="space-y-6 mt-0">
+            <MorningSettingsSection />
+          </TabsContent>
+
+          <TabsContent value="about" className="space-y-6 mt-0">
+            <AboutSection />
           </TabsContent>
 
           <TabsContent value="costs" className="space-y-6 mt-0">

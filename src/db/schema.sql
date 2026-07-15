@@ -204,8 +204,61 @@ CREATE TABLE IF NOT EXISTS notifications (
   created_at          TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
+-- ════════════════════════════════════════════════════════════════════════════
+-- Morning (Green Invoice) integration — quote → order/invoice document sync.
+-- ════════════════════════════════════════════════════════════════════════════
+
+-- Single row (id=1) holding the API key pair. client_secret is stored in
+-- plaintext here (same trust boundary as database.sqlite itself, which is
+-- gitignored and never leaves the host) — never returned as-is over the API.
+CREATE TABLE IF NOT EXISTS morning_credentials (
+  id            INTEGER PRIMARY KEY,
+  client_id     TEXT,
+  client_secret TEXT,
+  base_url      TEXT,
+  sandbox       INTEGER NOT NULL DEFAULT 1,
+  updated_at    TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Caches local free-text client_name → Morning client id so ensureMorningClient
+-- doesn't re-search/re-create a client on every document call.
+CREATE TABLE IF NOT EXISTS morning_clients_map (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  local_client_name TEXT NOT NULL UNIQUE,
+  morning_client_id TEXT NOT NULL,
+  created_at        TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- One row per Morning document created/converted from a local quote. A quote
+-- can have several rows over its lifetime (quote -> order -> invoice), each
+-- linked back to the previous one via linked_from_id.
+CREATE TABLE IF NOT EXISTS morning_documents_map (
+  id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+  quote_id               INTEGER NOT NULL,
+  morning_document_id    TEXT NOT NULL,
+  morning_document_type  INTEGER NOT NULL,
+  morning_document_number TEXT,
+  linked_from_id         INTEGER,
+  created_at             TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Audit trail of every create/convert attempt, success or failure, for support.
+CREATE TABLE IF NOT EXISTS morning_sync_log (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  quote_id      INTEGER,
+  action        TEXT NOT NULL,
+  request_json  TEXT,
+  response_json TEXT,
+  success       INTEGER NOT NULL,
+  error_message TEXT,
+  created_by    TEXT,
+  created_at    TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
 -- SQLite doesn't auto-index FK-like columns — these are all looked up by value.
 CREATE INDEX IF NOT EXISTS idx_notifications_recipient  ON notifications(recipient_username);
 CREATE INDEX IF NOT EXISTS idx_sub_products_product      ON sub_products(product_id);
 CREATE INDEX IF NOT EXISTS idx_product_variants_sub      ON product_variants(sub_product_id);
 CREATE INDEX IF NOT EXISTS idx_signshop_quotes_created_by ON signshop_quotes(created_by);
+CREATE INDEX IF NOT EXISTS idx_morning_documents_map_quote ON morning_documents_map(quote_id);
+CREATE INDEX IF NOT EXISTS idx_morning_sync_log_quote      ON morning_sync_log(quote_id);

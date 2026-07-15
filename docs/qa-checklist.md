@@ -27,11 +27,26 @@ test suite yet (`npm test` is currently a placeholder).
 - [ ] If the change touched quotes/notifications: send a quote for
       approval and confirm the manager sees a notification
 
+## 3a. Morning (Green Invoice) integration — if this change touched it
+
+- [ ] `GET /api/morning/config` (as admin) returns `configured:false` cleanly
+      when no credentials are set — server must not crash on a missing config row
+- [ ] Admin dashboard → "הגדרות מורנינג" loads, saves client_id/secret/sandbox,
+      and a blank secret field on save does NOT wipe the previously stored secret
+- [ ] Once real sandbox `client_id`/`client_secret` are configured: issue a
+      quote (`issueQuoteToMorning`), then use QuoteDetailsModal's Morning buttons
+      to convert it (חשבון עסקה / הזמנה / חשבונית מס), and confirm in the Morning
+      sandbox account that the documents were created and linked correctly
+- [ ] History list in QuoteDetailsModal shows both the create and convert
+      actions, in order, with correct success/failure badges
+
 ## 4. Diff review (security + hygiene)
 
 - [ ] `git diff <last-tag>..HEAD --stat` reviewed — no unexpected files
 - [ ] Confirm `database.sqlite`, `.env`, any API keys/secrets are **not**
-      staged (check `.gitignore` still covers them)
+      staged (check `.gitignore` still covers them) — this includes Morning
+      `client_id`/`client_secret`, which live only in the `morning_credentials`
+      DB row, never in code or `.env`
 - [ ] `node_modules/` and `sign-smart-quote/dist/` are not staged
 
 ## 5. Version bump
