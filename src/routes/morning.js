@@ -79,4 +79,23 @@ module.exports = function registerMorning(app, db, deps) {
   app.get('/api/morning/quotes/:id/history', requireAuth, (req, res) => {
     res.json(sync.getHistory(db, req.params.id));
   });
+
+  // ── GET /api/morning/quotes/documents?ids=1,2,3 ───────────────────────────
+  // Batched latest-document lookup for the QuotesHistory list — avoids one
+  // request per row.
+  app.get('/api/morning/quotes/documents', requireAuth, (req, res) => {
+    const ids = (req.query.ids || '').split(',').map(s => parseInt(s, 10)).filter(Number.isInteger);
+    res.json(sync.getLatestDocuments(db, ids));
+  });
+
+  // ── GET /api/morning/clients/search?q= ────────────────────────────────────
+  // Powers the client-search autocomplete on the quote form.
+  app.get('/api/morning/clients/search', requireAuth, async (req, res) => {
+    try {
+      const items = await sync.searchClients(db, req.query.q);
+      res.json({ items });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  });
 };

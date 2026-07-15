@@ -27,11 +27,13 @@ import GlobalParamsSection from "../components/admin/GlobalParamsSection";
 import LightboxPriceTable from "../components/admin/LightboxPriceTable";
 import MinimumPricesSection from "../components/admin/MinimumPricesSection";
 import MorningSettingsSection from "../components/admin/MorningSettingsSection";
+import GreenApiSettingsSection from "../components/admin/GreenApiSettingsSection";
+import MondaySettingsSection from "../components/admin/MondaySettingsSection";
 import AboutSection from "../components/admin/AboutSection";
 import LogoutButton from "@/components/LogoutButton";
 import CollapsibleSection from "../components/admin/CollapsibleSection";
 import UsersManagementSection from "../components/admin/UsersManagementSection";
-import { ShieldAlert, Users, Receipt, Info } from "lucide-react";
+import { ShieldAlert, Users, Receipt, Info, MessageCircle, LayoutGrid } from "lucide-react";
 
 
 const DEFAULT_CONFIG = {
@@ -237,7 +239,7 @@ export default function AdminDashboard() {
           {/* Each tab gets its own muted brand hue (from the Printela palette)
               so the four domains — pricing / costs / minimums / users — read
               as visually distinct areas, not just interchangeable tabs. */}
-          <TabsList className="grid w-full grid-cols-3 sm:grid-cols-6 max-w-4xl mb-6">
+          <TabsList className="grid w-full grid-cols-4 sm:grid-cols-8 max-w-6xl mb-6">
             <TabsTrigger value="selling-prices" className="gap-2 data-[state=active]:text-brand-gold">
               <Calculator className="w-4 h-4" /> קביעת מחירי מכירה
             </TabsTrigger>
@@ -252,6 +254,12 @@ export default function AdminDashboard() {
             </TabsTrigger>
             <TabsTrigger value="morning" className="gap-2 data-[state=active]:text-brand-green">
               <Receipt className="w-4 h-4" /> מורנינג
+            </TabsTrigger>
+            <TabsTrigger value="greenapi" className="gap-2 data-[state=active]:text-emerald-600">
+              <MessageCircle className="w-4 h-4" /> GreenAPI
+            </TabsTrigger>
+            <TabsTrigger value="monday" className="gap-2 data-[state=active]:text-orange-600">
+              <LayoutGrid className="w-4 h-4" /> Monday
             </TabsTrigger>
             <TabsTrigger value="about" className="gap-2 data-[state=active]:text-slate-600">
               <Info className="w-4 h-4" /> אודות
@@ -272,6 +280,14 @@ export default function AdminDashboard() {
 
           <TabsContent value="morning" className="space-y-6 mt-0">
             <MorningSettingsSection />
+          </TabsContent>
+
+          <TabsContent value="greenapi" className="space-y-6 mt-0">
+            <GreenApiSettingsSection />
+          </TabsContent>
+
+          <TabsContent value="monday" className="space-y-6 mt-0">
+            <MondaySettingsSection />
           </TabsContent>
 
           <TabsContent value="about" className="space-y-6 mt-0">

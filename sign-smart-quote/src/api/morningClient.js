@@ -88,6 +88,17 @@ export async function getMorningHistory(quoteId) {
   return request(`/api/morning/quotes/${quoteId}/history`);
 }
 
+/** Client-search autocomplete for the quote form. Throws on failure. */
+export async function searchMorningClients(query) {
+  const { items } = await request(`/api/morning/clients/search?q=${encodeURIComponent(query)}`);
+  return items;
+}
+
+/** Latest Morning document per quote id, batched for a list view. Throws on failure. */
+export async function getLatestMorningDocuments(quoteIds) {
+  return request(`/api/morning/quotes/documents?ids=${quoteIds.join(',')}`);
+}
+
 /** Current Morning credentials/config (admin only). Throws on failure. */
 export async function getMorningConfig() {
   return request('/api/morning/config');

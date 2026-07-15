@@ -3,6 +3,7 @@ import CalculatorTab from "./CalculatorTab";
 import { PRODUCT_NAMES, PRODUCT_CODES, categoryOf, productImage } from "./CalculatorForm";
 import { base44 } from "@/api/base44Client";
 import { issueQuoteToMorning } from "@/api/morningClient";
+import ClientSearchField from "./ClientSearchField";
 import { Plus, Trash2, ShoppingCart, BarChart3, Tag, Lightbulb, Shapes, Layers, Save, Send, FileOutput, Loader2, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -80,6 +81,12 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
   // "ערוך" on its summary row.
   const [lockedIds, setLockedIds] = useState({});
   const [clientName, setClientName] = useState("");
+  const [clientPhone, setClientPhone] = useState("");
+  // Set when a result from ClientSearchField (an existing Morning client) is
+  // picked — lets buildQuotePayload skip re-searching/re-creating that client
+  // in Morning. Cleared whenever the name is edited by hand afterwards, since
+  // that means it's no longer necessarily the same client.
+  const [morningClientId, setMorningClientId] = useState(null);
   const [documentTitle, setDocumentTitle] = useState("");
   // Free-text background for the sales manager — visible only in the review
   // screen (QuotesHistory/QuoteDetailsModal), never on the client-facing document.
@@ -236,6 +243,9 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
 
   const buildQuotePayload = (status) => ({
     client_name: clientName.trim(),
+    client_phone: clientPhone.trim(),
+    client_address: clientAddress.trim(),
+    morning_client_id: morningClientId || undefined,
     product_category: categoryOf(formDataMap[items[0]?.id]?.productType),
     payment_type: installmentCount > 1 ? `installments:${installmentCount}` : "cash",
     price_before_vat: Math.round(grandBeforeVat * 100) / 100,
@@ -261,7 +271,7 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
     status,
   });
 
-  const isQuoteValid = clientName.trim() && grandTotal > 0;
+  const isQuoteValid = clientName.trim() && clientPhone.trim() && grandTotal > 0;
 
   // Warn on refresh/tab-close/back-button while there's real unsaved work —
   // nothing here is persisted anywhere until one of the three buttons below is
@@ -275,7 +285,7 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
     const handler = (e) => { e.preventDefault(); e.returnValue = ""; };
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
-  }, [clientName, grandTotal, savedQuoteNumber]);
+  }, [clientName, clientPhone, grandTotal, savedQuoteNumber]);
 
   const handleSave = async () => {
     if (!isQuoteValid) return;
@@ -345,10 +355,26 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
               <div className="space-y-1.5">
                 <label className="text-sm font-semibold text-slate-600">שם לקוח <span className="text-red-500">*</span></label>
-                <input
+                <ClientSearchField
                   value={clientName}
-                  onChange={(e) => setClientName(e.target.value)}
-                  placeholder="שם הלקוח"
+                  onChange={(v) => { setClientName(v); setMorningClientId(null); }}
+                  onSelect={(c) => {
+                    setClientName(c.name);
+                    setClientPhone(c.phone || "");
+                    setClientAddress(c.address || "");
+                    setMorningClientId(c.id);
+                  }}
+                  placeholder="שם הלקוח — חפש לקוח קיים או הקלד חדש"
+                  className="w-full h-9 bg-transparent border-0 border-b-2 border-slate-300 px-0.5 py-1 text-base placeholder:text-slate-300 focus-visible:outline-none focus-visible:border-amber-400"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-slate-600">טלפון לקוח <span className="text-red-500">*</span></label>
+                <input
+                  value={clientPhone}
+                  onChange={(e) => setClientPhone(e.target.value)}
+                  placeholder="050-1234567"
+                  dir="ltr"
                   className="w-full h-9 bg-transparent border-0 border-b-2 border-slate-300 px-0.5 py-1 text-base placeholder:text-slate-300 focus-visible:outline-none focus-visible:border-amber-400"
                 />
               </div>

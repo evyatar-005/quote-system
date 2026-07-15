@@ -5,6 +5,8 @@
 //   - loadConfig()  → flat { key: value } object from signshop_config
 //   - upsertConfig  → prepared stmt taking { key, value, label }
 
+const { ensureMorningClient } = require('../services/morning/sync');
+
 // Entities backed by a plain table (generic CRUD).
 const REGISTRY = {
   PriceTier:            { table: 'signshop_price_tiers',    cols: ['product_type', 'thickness_mm', 'price_per_sqm', 'min_price', 'agent_min_price_per_sqm'] },
@@ -140,6 +142,7 @@ module.exports = function registerEntities(app, db, deps) {
   // ═══════════════════════════════════════════════════════════════════════
   function quoteCreate(body, user) {
     if (!body.client_name?.toString().trim()) throw Object.assign(new Error('client_name required'), { status: 400 });
+    if (!body.client_phone?.toString().trim()) throw Object.assign(new Error('client_phone required'), { status: 400 });
     for (const priceCol of ['price_before_vat', 'price_with_vat']) {
       const v = body[priceCol];
       if (v != null && (typeof v !== 'number' || v < 0)) {
@@ -162,6 +165,22 @@ module.exports = function registerEntities(app, db, deps) {
     const { lastInsertRowid } = ins.run(row);
     const quoteNumber = `מכירות-${String(lastInsertRowid).padStart(2, '0')}`;
     db.prepare(`UPDATE signshop_quotes SET quote_number = ? WHERE id = ?`).run(quoteNumber, lastInsertRowid);
+
+    // Register the client in Morning right away rather than waiting for this
+    // quote to be issued as a document — but never let a Morning/network
+    // hiccup fail the quote save itself, so this is fire-and-forget.
+    if (body.morning_client_id) {
+      // Selected from the search box — already exists in Morning, just cache
+      // the mapping so issuing later skips a redundant search call.
+      try {
+        db.prepare(`INSERT OR IGNORE INTO morning_clients_map (local_client_name, morning_client_id) VALUES (?, ?)`)
+          .run(body.client_name.toString().trim(), body.morning_client_id);
+      } catch (_) {}
+    } else {
+      ensureMorningClient(db, body.client_name, { phone: body.client_phone, address: body.client_address })
+        .catch(err => console.error(`[quoteCreate] Morning client registration failed for quote #${lastInsertRowid}:`, err.message));
+    }
+
     return quoteRowById(lastInsertRowid);
   }
 

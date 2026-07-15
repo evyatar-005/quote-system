@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { Link } from "react-router-dom";
-import { ArrowRight, Search, FileText, Loader2, User, Calendar, TrendingUp, Trash2, CheckCircle2, XCircle, Settings, BarChart3, LogOut, ChevronDown, X } from "lucide-react";
+import { ArrowRight, Search, FileText, Loader2, User, Calendar, TrendingUp, Trash2, CheckCircle2, XCircle, Settings, BarChart3, LogOut, ChevronDown, X, PackagePlus, Eye } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import QuoteDetailsModal from "@/components/QuoteDetailsModal";
+import { convertMorningDocument, getLatestMorningDocuments } from "@/api/morningClient";
+import { toast } from "sonner";
 import { useAuth } from "@/lib/AuthContext";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import printellaLogo from "@/assets/printella-logo.png";
@@ -19,6 +21,8 @@ const STATUS_COLORS = {
   rejected: "bg-red-50 text-red-500",
 };
 const CATEGORY_LABELS = { logo: "לוגו", sticker: "מדבקות", kapa: "קאפה", lokobond: "לוקובונד", foamex: "פיוויסי", rollup: "רול אפ", glass: "זכוכית", lightbox: "ארגז מואר" };
+// Morning document type codes — see docs/morning-api-reference.md / src/services/morning/mappings.js
+const MORNING_TYPE_LABELS = { 10: "הצעת מחיר", 100: "הזמנה", 300: "חשבון עסקה", 305: "חשבונית מס" };
 // Same muted Printela-brand hues used in the product picker (CalculatorForm),
 // so a category reads the same color everywhere in the app.
 const CATEGORY_COLORS = {
@@ -66,10 +70,22 @@ export default function QuotesHistory() {
   // Row ids with a decide/delete request in flight — disables that row's action
   // buttons so a double-click can't fire two decision calls for the same quote.
   const [pendingIds, setPendingIds] = useState(() => new Set());
+  // Latest Morning document per quote id — {quoteId: {morning_document_number, document_url, ...}}
+  const [morningDocs, setMorningDocs] = useState({});
+  const [convertingIds, setConvertingIds] = useState(() => new Set());
+  const [previewUrl, setPreviewUrl] = useState(null);
 
   const loadQuotes = async () => {
     const data = await base44.entities.Quote.list("-created_date", 200);
     setQuotes(data);
+
+    if (data.length > 0) {
+      try {
+        setMorningDocs(await getLatestMorningDocuments(data.map(q => q.id)));
+      } catch {
+        // Morning not configured / unreachable — the list still works without it.
+      }
+    }
 
     // Load seller names — created_by is the username (see quoteCreate in
     // src/routes/entities.js), not email, since email is optional on accounts.
@@ -197,6 +213,27 @@ export default function QuotesHistory() {
     await withPending(q.id, async () => {
       await base44.quotes.decide(q.id, decision, q.quote_number);
       setQuotes((prev) => prev.map((x) => (x.id === q.id ? { ...x, status: decision } : x)));
+    });
+  };
+
+  // Converts this quote's Morning document into an order ("הזמנה") — reuses
+  // the same endpoint as QuoteDetailsModal's MorningSection, just triggered
+  // from the list row instead of the detail view.
+  const handleConvertToOrder = async (q) => {
+    if (convertingIds.has(q.id)) return;
+    setConvertingIds((prev) => new Set(prev).add(q.id));
+    try {
+      await convertMorningDocument(q.id, "order");
+      const docs = await getLatestMorningDocuments([q.id]);
+      setMorningDocs((prev) => ({ ...prev, ...docs }));
+      toast.success(`הצעה ${q.quote_number} הפכה להזמנה במורנינג`);
+    } catch (err) {
+      toast.error(err?.message || "שגיאה בהפיכת המסמך להזמנה");
+    }
+    setConvertingIds((prev) => {
+      const next = new Set(prev);
+      next.delete(q.id);
+      return next;
     });
   };
 
@@ -462,6 +499,21 @@ export default function QuotesHistory() {
                                 <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{new Date(q.created_date).toLocaleDateString("he-IL")}</span>
                                 {q.notes && <span className="text-slate-400 truncate max-w-xs">{q.notes}</span>}
                               </div>
+                    {morningDocs[q.id] && (
+                      <div className="flex items-center gap-2 mt-1 text-xs text-slate-400" onClick={(e) => e.stopPropagation()}>
+                        <span>
+                          מסמך מורנינג: {MORNING_TYPE_LABELS[morningDocs[q.id].morning_document_type] || "מסמך"} #{morningDocs[q.id].morning_document_number || morningDocs[q.id].morning_document_id}
+                        </span>
+                        {morningDocs[q.id].document_url && (
+                          <button
+                            onClick={() => setPreviewUrl(morningDocs[q.id].document_url)}
+                            className="flex items-center gap-1 text-primary hover:underline"
+                          >
+                            <Eye className="w-3 h-3" /> הצג מסמך
+                          </button>
+                        )}
+                      </div>
+                    )}
                     {q.agent_note && (
                       <div className="flex items-start gap-1.5 mt-1.5 text-sm bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 max-w-xl">
                         <span className="text-amber-600 font-semibold shrink-0">הערת סוכן:</span>
@@ -514,6 +566,16 @@ export default function QuotesHistory() {
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
+                    {morningDocs[q.id] && (
+                      <button
+                        onClick={() => handleConvertToOrder(q)}
+                        disabled={convertingIds.has(q.id)}
+                        title="הפוך להזמנה במורנינג"
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                      >
+                        {convertingIds.has(q.id) ? <Loader2 className="w-4 h-4 animate-spin" /> : <PackagePlus className="w-4 h-4" />}
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -528,6 +590,26 @@ export default function QuotesHistory() {
           onClose={() => setSelectedQuote(null)}
           onSaved={() => { setSelectedQuote(null); loadQuotes(); }}
         />
+      )}
+
+      {previewUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+          onClick={() => setPreviewUrl(null)}
+        >
+          <div
+            className="relative bg-white rounded-2xl shadow-xl w-full max-w-3xl h-[85vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setPreviewUrl(null)}
+              className="absolute left-3 top-3 z-10 p-1.5 rounded-lg bg-white/90 hover:bg-slate-100 border border-slate-200 transition-colors"
+            >
+              <X className="w-4 h-4 text-slate-600" />
+            </button>
+            <iframe src={previewUrl} title="מסמך מורנינג" className="w-full h-full rounded-2xl" />
+          </div>
+        </div>
       )}
     </div>
   );

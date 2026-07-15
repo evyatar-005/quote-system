@@ -9,6 +9,8 @@ const registerEntities = require('./routes/entities');
 const registerNotifications = require('./routes/notifications');
 const registerMorning  = require('./routes/morning');
 const registerUpdate   = require('./routes/update');
+const registerGreenApi = require('./routes/greenapi');
+const registerMonday   = require('./routes/monday');
 
 const PORT    = process.env.PORT || 3000;
 const DB_PATH = path.join(__dirname, '../database.sqlite');
@@ -38,6 +40,20 @@ for (const col of [
   // from `notes` (the document title shown on the quote itself), and shown only to
   // the manager in QuotesHistory/QuoteDetailsModal, never on the client-facing document.
   'ALTER TABLE signshop_quotes ADD COLUMN agent_note TEXT',
+  // Required going forward (enforced in routes/entities.js quoteCreate) — needed
+  // to auto-send the issued Morning document to the client over WhatsApp.
+  'ALTER TABLE signshop_quotes ADD COLUMN client_phone TEXT',
+  // Optional — auto-filled when a client is picked from the Morning client
+  // search, sent on to Morning when a new client gets created from this quote.
+  'ALTER TABLE signshop_quotes ADD COLUMN client_address TEXT',
+]) {
+  try { db.exec(col); } catch (_) {}
+}
+
+// Stores the Morning-returned PDF download link at document-creation time, so
+// QuotesHistory can show/open it without an extra Morning API round-trip.
+for (const col of [
+  'ALTER TABLE morning_documents_map ADD COLUMN document_url TEXT',
 ]) {
   try { db.exec(col); } catch (_) {}
 }
@@ -85,6 +101,8 @@ registerEntities(app, db, {
 registerNotifications(app, db, { requireAuth, requireAdmin });
 registerMorning(app, db, { requireAuth, requireAdmin });
 registerUpdate(app, db, { requireAuth, requireAdmin });
+registerGreenApi(app, db, { requireAuth, requireAdmin });
+registerMonday(app, db, { requireAuth, requireAdmin });
 
 // ─── Version info — read by deploy/UPDATE.ps1's post-deploy smoke check and
 // by anyone wanting to confirm which release is live without RDP access ─────
@@ -154,7 +172,10 @@ app.listen(PORT, () => {
   console.log('  POST   /api/quotes/:id/decision      (manager approve/reject)');
   console.log('  GET    /api/version                  (running version/commit/deployedAt)');
   console.log('  GET/PUT /api/morning/config           POST /api/morning/quotes/:id/document|convert  GET /api/morning/quotes/:id/history');
+  console.log('  GET    /api/morning/clients/search    (client-search autocomplete for the quote form)');
   console.log('  GET    /api/admin/check-update        POST /api/admin/update');
+  console.log('  GET/PUT /api/greenapi/config          (WhatsApp auto-send credentials)');
+  console.log('  GET/PUT /api/monday/config            GET /api/monday/boards|boards/:id/groups');
 });
 
 // ─── Removed (2026-07-07 pre-launch cleanup) ─────────────────────────────────

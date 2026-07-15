@@ -3,6 +3,36 @@
 All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`).
 
+## [1.0.6] - 2026-07-16
+
+Required client phone, Morning client-search, automatic WhatsApp delivery
+(GreenAPI), a first monday.com admin tab, and order-conversion straight from
+the quotes list.
+
+- **Client phone is now required** on every quote (`client_phone` column on
+  `signshop_quotes`, enforced in `quoteCreate`) — needed so a document can be
+  sent to the client automatically.
+- **Client search** on the quote form — typing a name searches Morning's
+  existing clients live (`GET /api/morning/clients/search`) via a new
+  combobox (`ClientSearchField.jsx`); picking one fills phone/address.
+  A brand-new client (not picked from search) is now registered in Morning
+  **at quote-save time**, not only when a document is later issued.
+- **GreenAPI (WhatsApp) integration** — every Morning document
+  created/converted is automatically sent to the client's WhatsApp as a PDF
+  (`src/services/greenapi/{client,send}.js`), with its own admin settings
+  tab and a `whatsapp_send_log` audit table. Verified against GreenAPI's
+  real API docs (`sendFileByUrl`) before implementing.
+- **monday.com admin tab** — API token + board/group picker (populated live
+  from monday's GraphQL API once a token is saved). Auto-filling a new
+  order's fields on "הפוך להזמנה" is intentionally not built yet — it needs
+  the real column layout of the target board, inspected once real
+  credentials are provided.
+- **Quotes list (`/quotes`)** — each row with a Morning document now shows
+  its document number/type and a "הצג מסמך" button (PDF in a popup, not a
+  new tab), plus a "הפוך להזמנה" button to convert it to an order without
+  opening the quote's detail view. Backed by a new batched lookup endpoint
+  (`GET /api/morning/quotes/documents`) instead of one call per row.
+
 ## [1.0.5] - 2026-07-15
 
 Morning (Green Invoice) integration, self-update from the admin UI, and the

@@ -255,6 +255,38 @@ CREATE TABLE IF NOT EXISTS morning_sync_log (
   created_at    TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
+-- monday.com credentials + chosen destination for new-order items — one row,
+-- admin-only, same shape as morning_credentials.
+CREATE TABLE IF NOT EXISTS monday_credentials (
+  id          INTEGER PRIMARY KEY,
+  api_token   TEXT,
+  board_id    TEXT,
+  group_id    TEXT,
+  updated_at  TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- GreenAPI (WhatsApp) credentials — one row, admin-only, same shape as
+-- morning_credentials.
+CREATE TABLE IF NOT EXISTS greenapi_credentials (
+  id           INTEGER PRIMARY KEY,
+  instance_id  TEXT,
+  api_token    TEXT,
+  api_url      TEXT,
+  media_url    TEXT,
+  updated_at   TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Audit trail of every automatic WhatsApp send attempt, success or failure.
+CREATE TABLE IF NOT EXISTS whatsapp_send_log (
+  id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+  quote_id            INTEGER,
+  morning_document_id TEXT,
+  phone               TEXT,
+  success             INTEGER NOT NULL,
+  error_message       TEXT,
+  created_at          TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
 -- SQLite doesn't auto-index FK-like columns — these are all looked up by value.
 CREATE INDEX IF NOT EXISTS idx_notifications_recipient  ON notifications(recipient_username);
 CREATE INDEX IF NOT EXISTS idx_sub_products_product      ON sub_products(product_id);
@@ -262,3 +294,4 @@ CREATE INDEX IF NOT EXISTS idx_product_variants_sub      ON product_variants(sub
 CREATE INDEX IF NOT EXISTS idx_signshop_quotes_created_by ON signshop_quotes(created_by);
 CREATE INDEX IF NOT EXISTS idx_morning_documents_map_quote ON morning_documents_map(quote_id);
 CREATE INDEX IF NOT EXISTS idx_morning_sync_log_quote      ON morning_sync_log(quote_id);
+CREATE INDEX IF NOT EXISTS idx_whatsapp_send_log_quote     ON whatsapp_send_log(quote_id);
