@@ -1,0 +1,22 @@
+node_modules/
+database.sqlite
+dist/
+*.log
+.env
+.env.local
+.playwright-mcp/
+.DS_Store
+
+# Unrelated sibling projects that happen to live in this same workspace
+# folder — not part of the quote system, must never enter this repo's history.
+_archive/
+aa-admin/
+aa-mvp/
+tenderos/
+tenderos-pr3/
+
+# Claude Code dev tooling — used to build this app, not read by the running
+# app itself, and not meant to ship in a company handoff.
+CLAUDE.md
+.claude/
+sign-smart-quote/CLAUDE.md

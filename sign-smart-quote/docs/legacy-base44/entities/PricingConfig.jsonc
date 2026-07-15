@@ -1,0 +1,256 @@
+{
+  "name": "PricingConfig",
+  "type": "object",
+  "properties": {
+    "config_name": {
+      "type": "string",
+      "title": "\u05e9\u05dd \u05ea\u05e6\u05d5\u05e8\u05d4",
+      "default": "default"
+    },
+    "pvc_white_cost_per_mm": {
+      "type": "number",
+      "title": "\u05e2\u05dc\u05d5\u05ea PVC \u05dc\u05d1\u05df (\u20aa/\u05de\"\u05de/\u05de\"\u05e8)"
+    },
+    "pvc_black_cost_per_mm": {
+      "type": "number",
+      "title": "\u05e2\u05dc\u05d5\u05ea PVC \u05e9\u05d7\u05d5\u05e8 (\u20aa/\u05de\"\u05de/\u05de\"\u05e8)"
+    },
+    "perspex_cost_per_mm": {
+      "type": "number",
+      "title": "\u05e2\u05dc\u05d5\u05ea \u05e4\u05e8\u05e1\u05e4\u05e7\u05e1 (\u20aa/\u05de\"\u05de/\u05de\"\u05e8)"
+    },
+    "perspex_mirror_cost_per_mm": {
+      "type": "number",
+      "title": "\u05e2\u05dc\u05d5\u05ea \u05e4\u05e8\u05e1\u05e4\u05e7\u05e1 \u05de\u05e8\u05d0\u05d4 (\u20aa/\u05de\"\u05de/\u05de\"\u05e8)"
+    },
+    "perspex_gold_metallic_cost_per_mm": {
+      "type": "number",
+      "title": "\u05e2\u05dc\u05d5\u05ea \u05e4\u05e8\u05e1\u05e4\u05e7\u05e1 \u05d6\u05d4\u05d1 \u05de\u05d8\u05d0\u05dc\u05d9 (\u20aa/\u05de\"\u05de/\u05de\"\u05e8)"
+    },
+    "lokobond_cost_per_sqm": {
+      "type": "number",
+      "title": "\u05e2\u05dc\u05d5\u05ea \u05dc\u05d5\u05e7\u05d5\u05d1\u05d5\u05e0\u05d3 (\u20aa/\u05de\"\u05e8)"
+    },
+    "lightbox_led_waterproof_cost": {
+      "type": "number",
+      "title": "\u05e2\u05dc\u05d5\u05ea \u05dc\u05d3\u05d9\u05dd \u05de\u05d5\u05d2\u05e0\u05d9 \u05de\u05d9\u05dd \u05dc\u05d0\u05e8\u05d2\u05d6 \u05de\u05d5\u05d0\u05e8 (\u20aa/\u05d9\u05d7\u05d9\u05d3\u05d4)"
+    },
+    "ink_cost": {
+      "type": "number",
+      "title": "\u05e2\u05dc\u05d5\u05ea \u05d3\u05d9\u05d5 (\u20aa/\u05de\"\u05e8)"
+    },
+    "mounting_board_cost": {
+      "type": "number",
+      "title": "\u05e2\u05dc\u05d5\u05ea \u05dc\u05d5\u05d7 \u05d4\u05ea\u05e7\u05e0\u05d4 (\u20aa/\u05d9\u05d7\u05d9\u05d3\u05d4)"
+    },
+    "dowel_cost_per_sqm": {
+      "type": "number",
+      "title": "\u05e2\u05dc\u05d5\u05ea \u05d3\u05d5\u05e5 (\u20aa/\u05de\"\u05e8)"
+    },
+    "packaging_cost": {
+      "type": "number",
+      "title": "\u05e2\u05dc\u05d5\u05ea \u05d0\u05e8\u05d9\u05d6\u05d4 (\u20aa/\u05d9\u05d7\u05d9\u05d3\u05d4)"
+    },
+    "instruction_sheet_cost": {
+      "type": "number",
+      "title": "\u05e2\u05dc\u05d5\u05ea \u05d3\u05e3 \u05d4\u05e1\u05d1\u05e8 (\u20aa/\u05d9\u05d7\u05d9\u05d3\u05d4)"
+    },
+    "spacers_cost": {
+      "type": "number",
+      "title": "\u05e2\u05dc\u05d5\u05ea \u05e1\u05e4\u05d9\u05d9\u05e1\u05e8\u05d9\u05dd (\u20aa/\u05d9\u05d7\u05d9\u05d3\u05d4)"
+    },
+    "spacers_per_element": {
+      "type": "number",
+      "title": "\u05de\u05e1\u05e4\u05e8 \u05e1\u05e4\u05d9\u05d9\u05e1\u05e8\u05d9\u05dd \u05dc\u05d0\u05dc\u05de\u05e0\u05d8"
+    },
+    "spray_paint_cost": {
+      "type": "number",
+      "title": "\u05e2\u05dc\u05d5\u05ea \u05e1\u05e4\u05e8\u05d9\u05d9 \u05e6\u05d1\u05e2 RAL (\u20aa/\u05d9\u05d7\u05d9\u05d3\u05d4)"
+    },
+    "spray_paint_per_sqm": {
+      "type": "number",
+      "title": "\u05de\u05e1\u05e4\u05e8 \u05e1\u05e4\u05e8\u05d9\u05d9 \u05dc\u05de\"\u05e8"
+    },
+    "raw_material_waste_percent": {
+      "type": "number",
+      "title": "\u05d0\u05d7\u05d5\u05d6 \u05e4\u05d7\u05ea \u05d7\u05d5\u05de\u05e8\u05d9 \u05d2\u05dc\u05dd (%)"
+    },
+    "pre_print_time_minutes": {
+      "type": "number",
+      "title": "\u05d6\u05de\u05df \u05e7\u05d3\u05dd \u05d4\u05d3\u05e4\u05e1\u05d4 (\u05d3\u05e7\u05d5\u05ea)"
+    },
+    "print_time_per_sqm_minutes": {
+      "type": "number",
+      "title": "\u05d6\u05de\u05df \u05d4\u05d3\u05e4\u05e1\u05d4 \u05dc\u05de\"\u05e8 (\u05d3\u05e7\u05d5\u05ea)"
+    },
+    "laser_cut_cost_per_unit": {
+      "type": "number",
+      "title": "\u05e2\u05dc\u05d5\u05ea \u05d7\u05d9\u05ea\u05d5\u05da \u05dc\u05d9\u05d9\u05d6\u05e8 \u05dc\u05d9\u05d7\u05d9\u05d3\u05d4"
+    },
+    "laser_cut_time_minutes": {
+      "type": "number",
+      "title": "\u05d6\u05de\u05df \u05d7\u05d9\u05ea\u05d5\u05da \u05dc\u05d9\u05d9\u05d6\u05e8 (\u05d3\u05e7\u05d5\u05ea)"
+    },
+    "soma_cut_cost_per_unit": {
+      "type": "number",
+      "title": "\u05e2\u05dc\u05d5\u05ea \u05d7\u05d9\u05ea\u05d5\u05da \u05e1\u05d5\u05de\u05d0 \u05dc\u05d9\u05d7\u05d9\u05d3\u05d4"
+    },
+    "soma_cut_time_minutes": {
+      "type": "number",
+      "title": "\u05d6\u05de\u05df \u05d7\u05d9\u05ea\u05d5\u05da \u05e1\u05d5\u05de\u05d0 (\u05d3\u05e7\u05d5\u05ea)"
+    },
+    "packaging_time_minutes": {
+      "type": "number",
+      "title": "\u05d6\u05de\u05df \u05d0\u05e8\u05d9\u05d6\u05d4 (\u05d3\u05e7\u05d5\u05ea)"
+    },
+    "packaging_labor_cost": {
+      "type": "number",
+      "title": "\u05e2\u05dc\u05d5\u05ea \u05e2\u05d1\u05d5\u05d3\u05ea \u05d0\u05e8\u05d9\u05d6\u05d4"
+    },
+    "paint_room_cost": {
+      "type": "number",
+      "title": "\u05e2\u05dc\u05d5\u05ea \u05e2\u05d1\u05d5\u05d3\u05d4 \u05d1\u05d7\u05d3\u05e8 \u05e6\u05d1\u05e2"
+    },
+    "print_hour_cost": {
+      "type": "number",
+      "title": "\u05e2\u05dc\u05d5\u05ea \u05e9\u05e2\u05ea \u05d3\u05e4\u05d5\u05e1"
+    },
+    "general_worker_hour_cost": {
+      "type": "number",
+      "title": "\u05e2\u05dc\u05d5\u05ea \u05e9\u05e2\u05ea \u05e2\u05d5\u05d1\u05d3 \u05db\u05dc\u05dc\u05d9"
+    },
+    "operational_overhead_percent": {
+      "type": "number",
+      "title": "\u05d0\u05d7\u05d5\u05d6 \u05ea\u05e7\u05d5\u05e8\u05d4 \u05ea\u05e4\u05e2\u05d5\u05dc\u05d9\u05ea (%)"
+    },
+    "sales_agent_commission_percent": {
+      "type": "number",
+      "title": "\u05e2\u05de\u05dc\u05ea \u05e1\u05d5\u05db\u05df \u05de\u05db\u05d9\u05e8\u05d5\u05ea (%)"
+    },
+    "marketing_commission_percent": {
+      "type": "number",
+      "title": "\u05e2\u05de\u05dc\u05ea \u05e9\u05d9\u05d5\u05d5\u05e7 / \u05e7\u05de\u05e4\u05d9\u05d9\u05e0\u05d9\u05dd (%)"
+    },
+    "surcharge_special_materials": {
+      "type": "number",
+      "title": "\u05ea\u05d5\u05e1\u05e4\u05ea \u05de\u05d7\u05d9\u05e8 - \u05d7\u05d5\u05de\u05e8\u05d9\u05dd \u05de\u05d9\u05d5\u05d7\u05d3\u05d9\u05dd"
+    },
+    "surcharge_extra_work": {
+      "type": "number",
+      "title": "\u05ea\u05d5\u05e1\u05e4\u05ea \u05de\u05d7\u05d9\u05e8 - \u05e2\u05d1\u05d5\u05d3\u05d4 \u05e0\u05d5\u05e1\u05e4\u05ea"
+    },
+    "surcharge_paint_room": {
+      "type": "number",
+      "title": "\u05ea\u05d5\u05e1\u05e4\u05ea \u05de\u05d7\u05d9\u05e8 - \u05d7\u05d3\u05e8 \u05e6\u05d1\u05e2"
+    },
+    "surcharge_perspex": {
+      "type": "number",
+      "title": "\u05ea\u05d5\u05e1\u05e4\u05ea \u05de\u05d7\u05d9\u05e8 - \u05e4\u05e8\u05e1\u05e4\u05e7\u05e1"
+    },
+    "paint_selling_surcharge_single": {
+      "type": "number",
+      "title": "\u05ea\u05d5\u05e1\u05e4\u05ea \u05de\u05db\u05d9\u05e8\u05d4 - \u05e6\u05d1\u05d9\u05e2\u05d4 \u05d2\u05d5\u05d5\u05df \u05d9\u05d7\u05d9\u05d3 (\u20aa)"
+    },
+    "paint_selling_surcharge_double": {
+      "type": "number",
+      "title": "\u05ea\u05d5\u05e1\u05e4\u05ea \u05de\u05db\u05d9\u05e8\u05d4 - \u05e6\u05d1\u05d9\u05e2\u05d4 2 \u05d2\u05d5\u05d5\u05e0\u05d9\u05dd (\u20aa)"
+    },
+    "payment_default_surcharge_percent": {
+      "type": "number",
+      "title": "\u05ea\u05d5\u05e1\u05e4\u05ea \u05ea\u05e0\u05d0\u05d9 \u05ea\u05e9\u05dc\u05d5\u05dd \u05d1\u05e8\u05d9\u05e8\u05ea \u05de\u05d7\u05d3\u05dc (%)",
+      "default": 5
+    },
+    "payment_installment_surcharge_percent": {
+      "type": "number",
+      "title": "\u05ea\u05d5\u05e1\u05e4\u05ea \u05e2\u05de\u05dc\u05ea \u05ea\u05e9\u05dc\u05d5\u05de\u05d9\u05dd (2-3 \u05ea\u05e9\u05dc\u05d5\u05de\u05d9\u05dd) (%)",
+      "default": 2.5
+    },
+    "vinyl_sticker_material_cost_per_sqm": {
+      "type": "number",
+      "title": "\u05e2\u05dc\u05d5\u05ea \u05de\u05d3\u05d1\u05e7\u05ea \u05d5\u05e0\u05d9\u05dc - \u05d7\u05d5\u05de\u05e8 (\u20aa/\u05de\"\u05e8)"
+    },
+    "vinyl_sticker_ink_cost_per_sqm": {
+      "type": "number",
+      "title": "\u05e2\u05dc\u05d5\u05ea \u05de\u05d3\u05d1\u05e7\u05ea \u05d5\u05e0\u05d9\u05dc - \u05d3\u05d9\u05d5 (\u20aa/\u05de\"\u05e8)"
+    },
+    "vinyl_sticker_install_cost_per_sqm": {
+      "type": "number",
+      "title": "\u05e2\u05dc\u05d5\u05ea \u05d4\u05ea\u05e7\u05e0\u05ea \u05d5\u05e0\u05d9\u05dc (\u20aa/\u05de\"\u05e8)"
+    },
+    "vinyl_sticker_install_min_price": {
+      "type": "number",
+      "title": "\u05de\u05d7\u05d9\u05e8 \u05de\u05d9\u05e0\u05d9\u05de\u05d5\u05dd \u05d4\u05ea\u05e7\u05e0\u05ea \u05d5\u05e0\u05d9\u05dc - \u05de\u05e8\u05db\u05d6 (\u20aa)"
+    },
+    "vinyl_sticker_install_min_price_south": {
+      "type": "number",
+      "title": "\u05de\u05d7\u05d9\u05e8 \u05de\u05d9\u05e0\u05d9\u05de\u05d5\u05dd \u05d4\u05ea\u05e7\u05e0\u05ea \u05d5\u05e0\u05d9\u05dc - \u05d3\u05e8\u05d5\u05dd (\u20aa)"
+    },
+    "vinyl_sticker_print_time_per_sqm": {
+      "type": "number",
+      "title": "\u05d6\u05de\u05df \u05d4\u05d3\u05e4\u05e1\u05d4 \u05d5\u05e0\u05d9\u05dc (\u05d3\u05e7\u05d5\u05ea/\u05de\"\u05e8)"
+    },
+    "vinyl_sticker_cut_time_per_sqm": {
+      "type": "number",
+      "title": "\u05d6\u05de\u05df \u05d7\u05d9\u05ea\u05d5\u05da \u05d5\u05e0\u05d9\u05dc (\u05d3\u05e7\u05d5\u05ea/\u05de\"\u05e8)"
+    },
+    "vinyl_sticker_pre_print_time_minutes": {
+      "type": "number",
+      "title": "\u05d6\u05de\u05df \u05e7\u05d3\u05dd \u05d4\u05d3\u05e4\u05e1\u05d4 \u05d5\u05e0\u05d9\u05dc (\u05d3\u05e7\u05d5\u05ea)"
+    },
+    "vinyl_sticker_pre_cut_time_minutes": {
+      "type": "number",
+      "title": "\u05d6\u05de\u05df \u05e7\u05d3\u05dd \u05d7\u05d9\u05ea\u05d5\u05da \u05d5\u05e0\u05d9\u05dc (\u05d3\u05e7\u05d5\u05ea)"
+    },
+    "texture_sticker_material_cost_per_sqm": {
+      "type": "number",
+      "title": "\u05e2\u05dc\u05d5\u05ea \u05de\u05d3\u05d1\u05e7\u05ea \u05d8\u05e7\u05e1\u05d8\u05d5\u05e8\u05d4 - \u05d7\u05d5\u05de\u05e8 (\u20aa/\u05de\"\u05e8)"
+    },
+    "texture_sticker_ink_cost_per_sqm": {
+      "type": "number",
+      "title": "\u05e2\u05dc\u05d5\u05ea \u05de\u05d3\u05d1\u05e7\u05ea \u05d8\u05e7\u05e1\u05d8\u05d5\u05e8\u05d4 - \u05d3\u05d9\u05d5 (\u20aa/\u05de\"\u05e8)"
+    },
+    "texture_sticker_install_cost_per_sqm": {
+      "type": "number",
+      "title": "\u05e2\u05dc\u05d5\u05ea \u05d4\u05ea\u05e7\u05e0\u05ea \u05d8\u05e7\u05e1\u05d8\u05d5\u05e8\u05d4 (\u20aa/\u05de\"\u05e8)"
+    },
+    "texture_sticker_install_min_price": {
+      "type": "number",
+      "title": "\u05de\u05d7\u05d9\u05e8 \u05de\u05d9\u05e0\u05d9\u05de\u05d5\u05dd \u05d4\u05ea\u05e7\u05e0\u05ea \u05d8\u05e7\u05e1\u05d8\u05d5\u05e8\u05d4 - \u05de\u05e8\u05db\u05d6 (\u20aa)"
+    },
+    "texture_sticker_install_min_price_south": {
+      "type": "number",
+      "title": "\u05de\u05d7\u05d9\u05e8 \u05de\u05d9\u05e0\u05d9\u05de\u05d5\u05dd \u05d4\u05ea\u05e7\u05e0\u05ea \u05d8\u05e7\u05e1\u05d8\u05d5\u05e8\u05d4 - \u05d3\u05e8\u05d5\u05dd (\u20aa)"
+    },
+    "texture_sticker_print_time_per_sqm": {
+      "type": "number",
+      "title": "\u05d6\u05de\u05df \u05d4\u05d3\u05e4\u05e1\u05d4 \u05d8\u05e7\u05e1\u05d8\u05d5\u05e8\u05d4 (\u05d3\u05e7\u05d5\u05ea/\u05de\"\u05e8)"
+    },
+    "texture_sticker_cut_time_per_sqm": {
+      "type": "number",
+      "title": "\u05d6\u05de\u05df \u05d7\u05d9\u05ea\u05d5\u05da \u05d8\u05e7\u05e1\u05d8\u05d5\u05e8\u05d4 (\u05d3\u05e7\u05d5\u05ea/\u05de\"\u05e8)"
+    },
+    "texture_sticker_pre_print_time_minutes": {
+      "type": "number",
+      "title": "\u05d6\u05de\u05df \u05e7\u05d3\u05dd \u05d4\u05d3\u05e4\u05e1\u05d4 \u05d8\u05e7\u05e1\u05d8\u05d5\u05e8\u05d4 (\u05d3\u05e7\u05d5\u05ea)"
+    },
+    "texture_sticker_pre_cut_time_minutes": {
+      "type": "number",
+      "title": "\u05d6\u05de\u05df \u05e7\u05d3\u05dd \u05d7\u05d9\u05ea\u05d5\u05da \u05d8\u05e7\u05e1\u05d8\u05d5\u05e8\u05d4 (\u05d3\u05e7\u05d5\u05ea)"
+    },
+    "lightbox_perspex_front_cost_per_sqm": {
+      "type": "number",
+      "title": "\u05e4\u05e8\u05e1\u05e4\u05e7\u05e1 \u05d7\u05d6\u05d9\u05ea \u05d0\u05e8\u05d2\u05d6 (\u20aa/\u05de\"\u05e8)"
+    },
+    "lightbox_perspex_double_cost_per_sqm": {
+      "type": "number",
+      "title": "\u05e4\u05e8\u05e1\u05e4\u05e7\u05e1 2 \u05e6\u05d3\u05d3\u05d9\u05dd (\u20aa/\u05de\"\u05e8)"
+    },
+    "lightbox_lokobond_back_cost_per_sqm": {
+      "type": "number",
+      "title": "\u05dc\u05d5\u05e7\u05d5\u05d1\u05d5\u05e0\u05d3 \u05d2\u05d1 (\u20aa/\u05de\"\u05e8)"
+    }
+  },
+  "required": [
+    "config_name"
+  ]
+}

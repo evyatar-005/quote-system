@@ -1,0 +1,116 @@
+{
+  "name": "Quote",
+  "type": "object",
+  "properties": {
+    "quote_number": {
+      "type": "string",
+      "title": "\u05de\u05e1\u05e4\u05e8 \u05d4\u05e6\u05e2\u05ea \u05de\u05d7\u05d9\u05e8"
+    },
+    "client_name": {
+      "type": "string",
+      "title": "\u05e9\u05dd \u05dc\u05e7\u05d5\u05d7"
+    },
+    "product_category": {
+      "type": "string",
+      "title": "\u05e7\u05d8\u05d2\u05d5\u05e8\u05d9\u05d4",
+      "enum": [
+        "logo",
+        "sticker",
+        "lightbox"
+      ]
+    },
+    "product_type": {
+      "type": "string",
+      "title": "\u05e1\u05d5\u05d2 \u05de\u05d5\u05e6\u05e8"
+    },
+    "width_m": {
+      "type": "number",
+      "title": "\u05e8\u05d5\u05d7\u05d1 (\u05de')"
+    },
+    "height_m": {
+      "type": "number",
+      "title": "\u05d2\u05d5\u05d1\u05d4 (\u05de')"
+    },
+    "thickness_mm": {
+      "type": "string",
+      "title": "\u05e2\u05d5\u05d1\u05d9 (\u05de\u05f4\u05de)"
+    },
+    "elements": {
+      "type": "number",
+      "title": "\u05d0\u05dc\u05de\u05e0\u05d8\u05d9\u05dd"
+    },
+    "extras": {
+      "type": "array",
+      "title": "\u05ea\u05d5\u05e1\u05e4\u05d5\u05ea",
+      "items": {
+        "type": "string"
+      }
+    },
+    "include_installation": {
+      "type": "string",
+      "title": "\u05d4\u05ea\u05e7\u05e0\u05d4"
+    },
+    "region": {
+      "type": "string",
+      "title": "\u05d0\u05d6\u05d5\u05e8 \u05d4\u05ea\u05e7\u05e0\u05d4"
+    },
+    "payment_type": {
+      "type": "string",
+      "title": "\u05e1\u05d5\u05d2 \u05ea\u05e9\u05dc\u05d5\u05dd",
+      "enum": [
+        "full",
+        "cash",
+        "installments"
+      ]
+    },
+    "price_before_vat": {
+      "type": "number",
+      "title": "\u05de\u05d7\u05d9\u05e8 \u05dc\u05e4\u05e0\u05d9 \u05de\u05e2\u05f4\u05de"
+    },
+    "price_with_vat": {
+      "type": "number",
+      "title": "\u05de\u05d7\u05d9\u05e8 \u05e2\u05dd \u05de\u05e2\u05f4\u05de"
+    },
+    "calculation_data": {
+      "type": "string",
+      "title": "\u05e0\u05ea\u05d5\u05e0\u05d9 \u05d7\u05d9\u05e9\u05d5\u05d1 (JSON)"
+    },
+    "notes": {
+      "type": "string",
+      "title": "\u05d4\u05e2\u05e8\u05d5\u05ea"
+    },
+    "status": {
+      "type": "string",
+      "title": "\u05e1\u05d8\u05d8\u05d5\u05e1",
+      "enum": [
+        "draft",
+        "sent",
+        "approved",
+        "rejected"
+      ],
+      "default": "draft"
+    },
+    "line_items": {
+      "type": "string",
+      "title": "\u05e4\u05e8\u05d9\u05d8\u05d9\u05dd (JSON)"
+    },
+    "discount_type": {
+      "type": "string",
+      "title": "\u05e1\u05d5\u05d2 \u05d4\u05e0\u05d7\u05d4",
+      "enum": [
+        "percentage",
+        "amount"
+      ],
+      "default": "amount"
+    },
+    "discount_value": {
+      "type": "number",
+      "title": "\u05e2\u05e8\u05da \u05d4\u05d4\u05e0\u05d7\u05d4",
+      "default": 0
+    }
+  },
+  "required": [
+    "quote_number",
+    "client_name"
+  ]
+}

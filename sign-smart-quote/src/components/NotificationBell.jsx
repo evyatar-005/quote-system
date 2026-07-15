@@ -1,0 +1,135 @@
+import { useState, useEffect, useRef } from "react";
+import { Bell, CheckCircle2, XCircle, Send, Loader2, X, Trash2 } from "lucide-react";
+import { base44 } from "@/api/base44Client";
+import { issueQuoteToMorning } from "@/api/morningClient";
+import { toast } from "sonner";
+
+const TYPE_ICON = { approved: CheckCircle2, rejected: XCircle };
+const TYPE_COLOR = { approved: "text-emerald-400", rejected: "text-red-400" };
+
+export default function NotificationBell() {
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState([]);
+  const [issuingId, setIssuingId] = useState(null);
+  const ref = useRef(null);
+
+  // Silent on failure (e.g. session expired — base44Client already redirects
+  // to login on a 401) and guards against an unexpected response shape, so a
+  // bad response can't throw on the destructure and this doesn't spam an
+  // unhandled rejection every 30s if the network/endpoint is briefly down.
+  const load = () => base44.notifications.list()
+    .then((data) => setItems(Array.isArray(data?.notifications) ? data.notifications : []))
+    .catch((err) => console.error("[NotificationBell] failed to load notifications:", err));
+
+  useEffect(() => {
+    load();
+    const interval = setInterval(load, 30000); // light polling — no websocket in this app
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const onClickOutside = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, []);
+
+  const unreadCount = items.filter((n) => !n.is_read).length;
+
+  const handleOpen = () => {
+    setOpen((o) => !o);
+    if (!open && unreadCount > 0) {
+      base44.notifications.markAllRead().then(load).catch((err) => console.error("[NotificationBell] failed to mark all read:", err));
+    }
+  };
+
+  const handleDelete = (id) => {
+    setItems((prev) => prev.filter((n) => n.id !== id));
+    base44.notifications.remove(id);
+  };
+
+  const handleDeleteAll = () => {
+    setItems([]);
+    base44.notifications.removeAll();
+  };
+
+  const handleIssue = async (n) => {
+    setIssuingId(n.id);
+    const result = await issueQuoteToMorning({ quote_number: n.quote_number, client_name: "", price_before_vat: null, price_with_vat: null });
+    setIssuingId(null);
+    if (!result.issued) {
+      toast.message("החיבור למורנינג עדיין לא מוגדר", {
+        description: "הנתונים מוכנים לשליחה — ההנפקה תתחיל לעבוד ברגע שיהיה חשבון/מפתח API של מורנינג.",
+      });
+    }
+  };
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={handleOpen}
+        className="relative p-2 rounded-lg border border-black hover:bg-slate-50 transition-colors"
+        title="התראות"
+      >
+        <Bell className="w-4 h-4 text-slate-600" />
+        {unreadCount > 0 && (
+          <span className="absolute -top-1 -left-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
+            {unreadCount}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div className="absolute left-0 mt-2 w-80 max-h-96 overflow-y-auto bg-white border-2 border-black rounded-xl shadow-lg z-50" dir="rtl">
+          <div className="p-3 border-b border-black flex items-center justify-between">
+            <span className="text-sm font-semibold text-slate-700">התראות</span>
+            {items.length > 0 && (
+              <button
+                onClick={handleDeleteAll}
+                className="flex items-center gap-1 text-xs text-slate-400 hover:text-red-500 transition-colors"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> מחק הכל
+              </button>
+            )}
+          </div>
+          {items.length === 0 ? (
+            <p className="p-4 text-sm text-slate-400 text-center">אין התראות</p>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              {items.map((n) => {
+                const Icon = TYPE_ICON[n.type] || Bell;
+                return (
+                  <div key={n.id} className="p-3 space-y-2">
+                    <div className="flex items-start gap-2">
+                      <Icon className={`w-4 h-4 mt-0.5 shrink-0 ${TYPE_COLOR[n.type] || "text-slate-400"}`} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-slate-700">{n.message}</p>
+                        <p className="text-xs text-slate-400 mt-0.5">{new Date(n.created_at).toLocaleString("he-IL")}</p>
+                      </div>
+                      <button
+                        onClick={() => handleDelete(n.id)}
+                        className="p-1 rounded text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors shrink-0"
+                        title="הסר התראה"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    {n.type === "approved" && (
+                      <button
+                        onClick={() => handleIssue(n)}
+                        disabled={issuingId === n.id}
+                        className="w-full flex items-center justify-center gap-1.5 text-xs py-1.5 rounded-lg border border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 disabled:opacity-50"
+                      >
+                        {issuingId === n.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                        הנפק הצעת מחיר ללקוח
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

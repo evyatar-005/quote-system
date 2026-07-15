@@ -1,0 +1,170 @@
+@import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Disable the browser's automatic scroll-anchoring. Without this, dragging the
+   price-range slider (which reflows the sticky order sidebar on commit) makes
+   the browser "helpfully" re-adjust scroll position to compensate — which
+   reads as the sidebar suddenly jumping. */
+html {
+  overflow-anchor: none;
+}
+
+@layer base {
+  :root {
+    --font-heebo: 'Heebo', sans-serif;
+    --background: 0 0% 100%;
+    --foreground: 222 47% 8%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 8%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 8%;
+    --primary: 43 47% 54%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 14% 94%;
+    --secondary-foreground: 222 47% 8%;
+    --muted: 220 14% 94%;
+    --muted-foreground: 220 8% 35%;
+    --accent: 248 30% 52%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 0%;
+    --input: 0 0% 0%;
+    --ring: 43 47% 54%;
+
+    /* Brand palette — muted, desaturated readings of the Printela logo's 5
+       quadrant colors (pink / gold / teal / green / purple). Used sparingly as
+       category accents (product tabs, admin sections) so different areas of
+       the app read as visually distinct domains without shouting. --brand-gold
+       is intentionally the same value as --primary: it's the color already in
+       use everywhere as #C9A84C, so this just gives it a token name too. */
+    --brand-pink: 336 42% 56%;
+    --brand-gold: 43 47% 54%;
+    --brand-teal: 191 38% 44%;
+    --brand-green: 100 30% 46%;
+    --brand-purple: 248 30% 52%;
+
+    --chart-1: 43 47% 54%;
+    --chart-2: 336 42% 56%;
+    --chart-3: 191 38% 44%;
+    --chart-4: 100 30% 46%;
+    --chart-5: 248 30% 52%;
+    --radius: 0.75rem;
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 43 47% 54%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 220 14% 96%;
+    --sidebar-accent-foreground: 222 47% 11%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 43 47% 54%;
+  }
+
+  .dark {
+    --background: 222 47% 6%;
+    --foreground: 220 14% 96%;
+    --card: 222 47% 9%;
+    --card-foreground: 220 14% 96%;
+    --popover: 222 47% 9%;
+    --popover-foreground: 220 14% 96%;
+    --primary: 43 55% 62%;
+    --primary-foreground: 222 47% 8%;
+    --secondary: 222 47% 14%;
+    --secondary-foreground: 220 14% 96%;
+    --muted: 222 47% 14%;
+    --muted-foreground: 220 8% 56%;
+    --accent: 248 40% 68%;
+    --accent-foreground: 222 47% 8%;
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 0%;
+    --input: 0 0% 100%;
+    --ring: 43 55% 62%;
+
+    /* Same 5 brand hues, lifted in lightness so they still read clearly
+       against a dark background instead of the light-mode readings above. */
+    --brand-pink: 336 48% 66%;
+    --brand-gold: 43 55% 62%;
+    --brand-teal: 191 42% 58%;
+    --brand-green: 100 32% 58%;
+    --brand-purple: 248 40% 68%;
+
+    --chart-1: 43 55% 62%;
+    --chart-2: 336 48% 66%;
+    --chart-3: 191 42% 58%;
+    --chart-4: 100 32% 58%;
+    --chart-5: 248 40% 68%;
+    --sidebar-background: 222 47% 6%;
+    --sidebar-foreground: 220 14% 96%;
+    --sidebar-primary: 43 55% 62%;
+    --sidebar-primary-foreground: 222 47% 8%;
+    --sidebar-accent: 222 47% 14%;
+    --sidebar-accent-foreground: 220 14% 96%;
+    --sidebar-border: 222 47% 16%;
+    --sidebar-ring: 43 55% 62%;
+  }
+}
+
+/* Agent price-range slider (לוקובונד/פיויסי) — red (cheap/agent-min) → green
+   (expensive/starting price) track, with volume-control-style segment ticks. */
+.price-range-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 22px;
+  background: transparent;
+  cursor: pointer;
+  /* A drag that strays a pixel outside the track selects surrounding text
+     instead, popping the browser's floating selection toolbar mid-drag —
+     reads as the whole screen "jumping". Disabling selection on the slider
+     itself (plus its row, in index.css/CalculatorForm) stops that. */
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+.price-range-slider::-webkit-slider-runnable-track {
+  height: 14px;
+  border-radius: 4px;
+  background:
+    repeating-linear-gradient(to right, rgba(255,255,255,0.65) 0 2px, transparent 2px 12px),
+    linear-gradient(to right, #ef4444, #f59e0b, #22c55e);
+  border: 1px solid rgba(0,0,0,0.15);
+}
+.price-range-slider::-moz-range-track {
+  height: 14px;
+  border-radius: 4px;
+  background:
+    repeating-linear-gradient(to right, rgba(255,255,255,0.65) 0 2px, transparent 2px 12px),
+    linear-gradient(to right, #ef4444, #f59e0b, #22c55e);
+  border: 1px solid rgba(0,0,0,0.15);
+}
+.price-range-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 22px;
+  border-radius: 3px;
+  background: #ffffff;
+  border: 2px solid #334155;
+  margin-top: -5px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+.price-range-slider::-moz-range-thumb {
+  width: 14px;
+  height: 22px;
+  border-radius: 3px;
+  background: #ffffff;
+  border: 2px solid #334155;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground font-heebo font-semibold;
+  }
+}
