@@ -64,14 +64,20 @@ function Install-And-Build($tag) {
 function Start-Server-And-Check {
     Write-Step "Starting the server..."
     Start-ScheduledTask -TaskName $taskName
-    Start-Sleep -Seconds 5
 
-    try {
-        $resp = Invoke-WebRequest -Uri "http://localhost:3000" -UseBasicParsing -TimeoutSec 10
-        return ($resp.StatusCode -eq 200)
-    } catch {
-        return $false
+    # DB init/seeding + first request can take a while on a loaded server
+    # (especially with real-time antivirus scanning), so poll for up to
+    # ~60 seconds instead of checking once right away.
+    for ($i = 1; $i -le 20; $i++) {
+        Start-Sleep -Seconds 3
+        try {
+            $resp = Invoke-WebRequest -Uri "http://localhost:3000" -UseBasicParsing -TimeoutSec 5
+            if ($resp.StatusCode -eq 200) { return $true }
+        } catch {
+            Write-Host "  ...not responding yet (attempt $i/20)"
+        }
     }
+    return $false
 }
 
 # --- 1. Must be run as Administrator (needed to control the scheduled task) ---
