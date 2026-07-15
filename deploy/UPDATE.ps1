@@ -61,7 +61,25 @@ function Install-And-Build($tag) {
     Set-Content -Path (Join-Path $repoRoot "VERSION.txt") -Value $versionInfo -Encoding utf8
 }
 
+function Ensure-Task-Configured {
+    # Always re-register the auto-start task (not just "create if missing") -
+    # this guarantees correct settings (SYSTEM account, run at every boot,
+    # auto-restart on crash) even if it was never created or got misconfigured.
+    # The server must come back up by itself after any unplanned shutdown or
+    # restart, with nobody needing to log in.
+    Write-Step "(Re-)configuring auto-start task..."
+    $serverScript = Join-Path $repoRoot "src\server.js"
+    $nodeExe = Join-Path $nodePath "node.exe"
+    $action = New-ScheduledTaskAction -Execute $nodeExe -Argument "`"$serverScript`"" -WorkingDirectory $repoRoot
+    $trigger = New-ScheduledTaskTrigger -AtStartup
+    $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+    $settings = New-ScheduledTaskSettingsSet -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
+    Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+    Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
+}
+
 function Start-Server-And-Check {
+    Ensure-Task-Configured
     Write-Step "Starting the server..."
     Start-ScheduledTask -TaskName $taskName
 
