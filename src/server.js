@@ -82,6 +82,22 @@ registerEntities(app, db, {
 });
 registerNotifications(app, db, { requireAuth, requireAdmin });
 
+// ─── Version info — read by deploy/UPDATE.ps1's post-deploy smoke check and
+// by anyone wanting to confirm which release is live without RDP access ─────
+const PKG_VERSION = require('../package.json').version;
+const VERSION_FILE = path.join(__dirname, '../VERSION.txt');
+
+app.get('/api/version', (req, res) => {
+  let commit = null;
+  let deployedAt = null;
+  try {
+    const info = JSON.parse(fs.readFileSync(VERSION_FILE, 'utf8'));
+    commit = info.commit || null;
+    deployedAt = info.deployedAt || null;
+  } catch (_) {}
+  res.json({ version: PKG_VERSION, commit, deployedAt });
+});
+
 // ─── Static frontend (sign-smart-quote/dist) ─────────────────────────────────
 
 // Vite fingerprints every built JS/CSS file (e.g. index-Ccnoi4ni.js), so those
@@ -132,6 +148,7 @@ app.listen(PORT, () => {
   console.log('  GET    /api/admin/users              POST/PUT/DELETE /api/admin/users/:id');
   console.log('  GET    /api/notifications            PUT  /api/notifications/:id/read');
   console.log('  POST   /api/quotes/:id/decision      (manager approve/reject)');
+  console.log('  GET    /api/version                  (running version/commit/deployedAt)');
 });
 
 // ─── Removed (2026-07-07 pre-launch cleanup) ─────────────────────────────────

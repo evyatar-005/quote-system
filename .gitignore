@@ -7,6 +7,11 @@ dist/
 .playwright-mcp/
 .DS_Store
 
+# Written by deploy/UPDATE.ps1 on the production server — not source, and
+# machine/deploy-specific, so it must never be committed.
+backups/
+VERSION.txt
+
 # Unrelated sibling projects that happen to live in this same workspace
 # folder — not part of the quote system, must never enter this repo's history.
 _archive/
