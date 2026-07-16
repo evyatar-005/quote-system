@@ -3,7 +3,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useState, useRef, useEffect } from "react";
-import { ChevronDown, Check, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Check, X } from "lucide-react";
 import logo001 from "@/assets/products/logo-001.png";
 import sticker002 from "@/assets/products/sticker-002.png";
 import kapa004 from "@/assets/products/kapa-004.png";
@@ -469,7 +469,101 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
                   </>
                 )}
               </div>
-            ) : (
+            ) : expandedParent ? (() => {
+              const cat = filteredCatalog.find((c) => c.parent === expandedParent);
+              if (!cat) return null;
+              const kapaSubs = cat.parent === "008" ? kapaPriceTiers : null;
+              const rollupSubs = cat.parent === "009" ? rollupPriceTiers : null;
+              const glassSubs = cat.parent === "010" ? glassPriceTiers : null;
+              const [, accentBg] = (CATEGORY_ACCENT[cat.parent] || "border-slate-300 bg-black").split(" ");
+              return (
+                <div>
+                  {/* חזור — סוגר את תת-הרשימה וחוזר לרשימת המקטים הראשית */}
+                  <button
+                    type="button"
+                    onClick={() => setExpandedParent(null)}
+                    className="sticky top-0 z-10 w-full flex items-center gap-2 px-4 py-2.5 text-right border-b-2 border-slate-200 bg-slate-50 hover:bg-slate-100 transition-colors"
+                  >
+                    <ChevronRight className="w-4 h-4 text-slate-500 shrink-0" />
+                    <span className="text-base font-semibold text-slate-600">חזור</span>
+                    <span className={`mr-1 text-base font-mono font-semibold px-2 py-0.5 rounded text-white ${accentBg}`}>{cat.parent}</span>
+                    <span className="text-xl font-bold text-slate-800 truncate">{cat.label}</span>
+                  </button>
+                  <div className="divide-y divide-slate-100">
+                    {kapaSubs
+                      ? kapaSubs.map((t) => (
+                          <button
+                            type="button"
+                            key={t.id}
+                            onClick={() => selectKapa(t)}
+                            className="w-full flex items-center justify-between gap-3 px-4 py-1.5 text-right hover:bg-amber-50 transition-colors"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              {CATEGORY_IMAGES[cat.parent] && (
+                                <img src={CATEGORY_IMAGES[cat.parent]} alt={t.description} className="w-10 h-10 rounded-lg object-cover shrink-0" />
+                              )}
+                              <span className="text-base font-mono text-slate-400 w-14 shrink-0">{cat.parent}</span>
+                              <span className="text-lg font-semibold text-slate-700 truncate">{t.description}</span>
+                            </div>
+                            <span className="text-lg font-bold text-amber-600 shrink-0">₪{t.price}</span>
+                          </button>
+                        ))
+                      : rollupSubs
+                      ? rollupSubs.map((t) => (
+                          <button
+                            type="button"
+                            key={t.id}
+                            onClick={() => selectRollup(t)}
+                            className="w-full flex items-center justify-between gap-3 px-4 py-1.5 text-right hover:bg-amber-50 transition-colors"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              {CATEGORY_IMAGES[cat.parent] && (
+                                <img src={CATEGORY_IMAGES[cat.parent]} alt={t.description} className="w-10 h-10 rounded-lg object-cover shrink-0" />
+                              )}
+                              <span className="text-base font-mono text-slate-400 w-14 shrink-0">{cat.parent}</span>
+                              <span className="text-lg font-semibold text-slate-700 truncate">{t.description}</span>
+                            </div>
+                            <span className="text-lg font-bold text-amber-600 shrink-0">₪{t.price_unit_1}</span>
+                          </button>
+                        ))
+                      : glassSubs
+                      ? glassSubs.map((t) => (
+                          <button
+                            type="button"
+                            key={t.id}
+                            onClick={() => selectGlass(t)}
+                            className="w-full flex items-center justify-between gap-3 px-4 py-1.5 text-right hover:bg-amber-50 transition-colors"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              {CATEGORY_IMAGES[cat.parent] && (
+                                <img src={CATEGORY_IMAGES[cat.parent]} alt={t.description} className="w-10 h-10 rounded-lg object-cover shrink-0" />
+                              )}
+                              <span className="text-base font-mono text-slate-400 w-14 shrink-0">{cat.parent}</span>
+                              <span className="text-lg font-semibold text-slate-700 truncate">{t.description}</span>
+                            </div>
+                            <span className="text-lg font-bold text-amber-600 shrink-0">₪{t.selling_price}</span>
+                          </button>
+                        ))
+                      : cat.subs.map((pt) => (
+                          <button
+                            type="button"
+                            key={pt}
+                            onClick={() => selectSub(pt)}
+                            className="w-full flex items-center gap-3 px-4 py-1.5 text-right hover:bg-amber-50 transition-colors"
+                          >
+                            <div className="w-10 h-10 shrink-0 flex items-center justify-center">
+                              {CATEGORY_IMAGES[cat.parent] && (
+                                <img src={CATEGORY_IMAGES[cat.parent]} alt={PRODUCT_NAMES[pt]} className="w-10 h-10 rounded-lg object-cover" />
+                              )}
+                            </div>
+                            <span className="text-base font-mono text-slate-400 w-14 shrink-0">{PRODUCT_CODES[pt]}</span>
+                            <span className="text-lg font-semibold text-slate-700">{PRODUCT_NAMES[pt]}</span>
+                          </button>
+                        ))}
+                  </div>
+                </div>
+              );
+            })() : (
               <>
             {showFreeProduct && (
               <button
@@ -483,107 +577,28 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
               </button>
             )}
             {filteredCatalog.map((cat) => {
-              const open = expandedParent === cat.parent;
-              const kapaSubs = cat.parent === "008" ? kapaPriceTiers : null;
-              const rollupSubs = cat.parent === "009" ? rollupPriceTiers : null;
-              const glassSubs = cat.parent === "010" ? glassPriceTiers : null;
               const [accentBorder, accentBg] = (CATEGORY_ACCENT[cat.parent] || "border-slate-300 bg-black").split(" ");
               return (
-                <div key={cat.parent} className="border-b border-slate-100 last:border-0">
-                  <button
-                    type="button"
-                    onClick={() => setExpandedParent(open ? null : cat.parent)}
-                    className={`w-full flex items-center justify-between gap-3 px-4 py-2 text-right border-r-4 ${accentBorder} transition-colors ${open ? "bg-slate-50" : "bg-white hover:bg-slate-50"}`}
-                  >
-                    <div className="flex items-center gap-3">
-                      {/* Fixed-size slot even when a category has no photo yet (e.g.
-                          שילוט פרספקס) — keeps the code badge aligned with rows
-                          that do have one, instead of shifting left. */}
-                      <div className="w-10 h-10 shrink-0 flex items-center justify-center">
-                        {CATEGORY_IMAGES[cat.parent] && (
-                          <img src={CATEGORY_IMAGES[cat.parent]} alt={cat.label} className="w-10 h-10 rounded-lg object-cover" />
-                        )}
-                      </div>
-                      <span className={`text-base font-mono font-semibold px-2 py-0.5 rounded text-white ${accentBg}`}>{cat.parent}</span>
-                      <span className="text-xl font-bold text-slate-800">{cat.label}</span>
+                <button
+                  type="button"
+                  key={cat.parent}
+                  onClick={() => setExpandedParent(cat.parent)}
+                  className={`w-full flex items-center justify-between gap-3 px-4 py-2 text-right border-r-4 border-b border-slate-100 last:border-b-0 ${accentBorder} bg-white hover:bg-slate-50 transition-colors`}
+                >
+                  <div className="flex items-center gap-3">
+                    {/* Fixed-size slot even when a category has no photo yet (e.g.
+                        שילוט פרספקס) — keeps the code badge aligned with rows
+                        that do have one, instead of shifting left. */}
+                    <div className="w-10 h-10 shrink-0 flex items-center justify-center">
+                      {CATEGORY_IMAGES[cat.parent] && (
+                        <img src={CATEGORY_IMAGES[cat.parent]} alt={cat.label} className="w-10 h-10 rounded-lg object-cover" />
+                      )}
                     </div>
-                    <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`} />
-                  </button>
-                  {open && (
-                    <div className="divide-y divide-slate-100 border-t border-slate-100 bg-slate-50/50">
-                      {kapaSubs
-                        ? kapaSubs.map((t) => (
-                            <button
-                              type="button"
-                              key={t.id}
-                              onClick={() => selectKapa(t)}
-                              className="w-full flex items-center justify-between gap-3 px-4 py-1.5 text-right hover:bg-amber-50 transition-colors"
-                            >
-                              <div className="flex items-center gap-3 min-w-0">
-                                {CATEGORY_IMAGES[cat.parent] && (
-                                  <img src={CATEGORY_IMAGES[cat.parent]} alt={t.description} className="w-10 h-10 rounded-lg object-cover shrink-0" />
-                                )}
-                                <span className="text-base font-mono text-slate-400 w-14 shrink-0">{cat.parent}</span>
-                                <span className="text-lg font-semibold text-slate-700 truncate">{t.description}</span>
-                              </div>
-                              <span className="text-lg font-bold text-amber-600 shrink-0">₪{t.price}</span>
-                            </button>
-                          ))
-                        : rollupSubs
-                        ? rollupSubs.map((t) => (
-                            <button
-                              type="button"
-                              key={t.id}
-                              onClick={() => selectRollup(t)}
-                              className="w-full flex items-center justify-between gap-3 px-4 py-1.5 text-right hover:bg-amber-50 transition-colors"
-                            >
-                              <div className="flex items-center gap-3 min-w-0">
-                                {CATEGORY_IMAGES[cat.parent] && (
-                                  <img src={CATEGORY_IMAGES[cat.parent]} alt={t.description} className="w-10 h-10 rounded-lg object-cover shrink-0" />
-                                )}
-                                <span className="text-base font-mono text-slate-400 w-14 shrink-0">{cat.parent}</span>
-                                <span className="text-lg font-semibold text-slate-700 truncate">{t.description}</span>
-                              </div>
-                              <span className="text-lg font-bold text-amber-600 shrink-0">₪{t.price_unit_1}</span>
-                            </button>
-                          ))
-                        : glassSubs
-                        ? glassSubs.map((t) => (
-                            <button
-                              type="button"
-                              key={t.id}
-                              onClick={() => selectGlass(t)}
-                              className="w-full flex items-center justify-between gap-3 px-4 py-1.5 text-right hover:bg-amber-50 transition-colors"
-                            >
-                              <div className="flex items-center gap-3 min-w-0">
-                                {CATEGORY_IMAGES[cat.parent] && (
-                                  <img src={CATEGORY_IMAGES[cat.parent]} alt={t.description} className="w-10 h-10 rounded-lg object-cover shrink-0" />
-                                )}
-                                <span className="text-base font-mono text-slate-400 w-14 shrink-0">{cat.parent}</span>
-                                <span className="text-lg font-semibold text-slate-700 truncate">{t.description}</span>
-                              </div>
-                              <span className="text-lg font-bold text-amber-600 shrink-0">₪{t.selling_price}</span>
-                            </button>
-                          ))
-                        : cat.subs.map((pt) => (
-                            <button
-                              type="button"
-                              key={pt}
-                              onClick={() => selectSub(pt)}
-                              className="w-full flex items-center gap-3 px-4 py-1.5 text-right hover:bg-amber-50 transition-colors"
-                            >
-                              <div className="w-10 h-10 shrink-0 flex items-center justify-center">
-                                {CATEGORY_IMAGES[cat.parent] && (
-                                  <img src={CATEGORY_IMAGES[cat.parent]} alt={PRODUCT_NAMES[pt]} className="w-10 h-10 rounded-lg object-cover" />
-                                )}
-                              </div>
-                              <span className="text-base font-mono text-slate-400 w-14 shrink-0">{PRODUCT_CODES[pt]}</span>
-                              <span className="text-lg font-semibold text-slate-700">{PRODUCT_NAMES[pt]}</span>
-                            </button>
-                          ))}
-                    </div>
-                  )}
-                </div>
+                    <span className={`text-base font-mono font-semibold px-2 py-0.5 rounded text-white ${accentBg}`}>{cat.parent}</span>
+                    <span className="text-xl font-bold text-slate-800">{cat.label}</span>
+                  </div>
+                  <ChevronDown className="w-4 h-4 text-slate-400 -rotate-90" />
+                </button>
               );
             })}
             {/* בקרוב — מוצרים בלי מחיר/עלות מוגדרים עדיין */}
@@ -712,6 +727,13 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
   if (values.itemLocked) {
     const dims = !isFixedPrice && values.widthM && values.heightM ? `${values.widthM}×${values.heightM} מ׳ | ` : "";
     const thickness = showThicknessField && values.thicknessMm ? `עובי ${values.thicknessMm} מ״מ | ` : "";
+    // Same formula as useCalculator.jsx's shelvesSellingPrice / the inline
+    // display above the "אישור פרטי מוצר" button — kept visible after locking
+    // too, not just while the fields are still open for editing.
+    const shelvesPrice = isKapa
+      ? (parseInt(values.standardShelves) || 0) * (parseFloat(config?.kapa_shelf_standard_price) || 0) +
+        (parseInt(values.customShelves) || 0) * (parseFloat(config?.kapa_shelf_custom_price) || 0)
+      : 0;
     return (
       <div className="flex items-center justify-between gap-4 rounded-xl border-2 border-emerald-300 bg-emerald-50 p-4">
         <div className="flex items-center gap-3 min-w-0">
@@ -723,6 +745,11 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
               {dims}{thickness}כמות {q}
             </div>
             {values.lineLabel && <div className="text-base text-slate-400 mt-0.5 truncate">{values.lineLabel}</div>}
+            {shelvesPrice > 0 && (
+              <div className="text-sm text-amber-600 mt-0.5 truncate">
+                עלות מדפים: ₪ {shelvesPrice.toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-4 shrink-0">
@@ -939,6 +966,22 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
                   dir="ltr" placeholder="0"
                 />
               </Field>
+              {(() => {
+                // Same formula as useCalculator.jsx's shelvesSellingPrice — shown
+                // inline here too so the agent sees the shelf price impact right
+                // where they set the quantities, not only in the final breakdown.
+                const shelvesPrice =
+                  (parseInt(values.standardShelves) || 0) * (parseFloat(config?.kapa_shelf_standard_price) || 0) +
+                  (parseInt(values.customShelves) || 0) * (parseFloat(config?.kapa_shelf_custom_price) || 0);
+                if (shelvesPrice <= 0) return null;
+                return (
+                  <Field label="עלות מדפים" width="w-28">
+                    <div className="h-9 flex items-center text-base font-semibold text-amber-600">
+                      ₪ {shelvesPrice.toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
+                  </Field>
+                );
+              })()}
             </>
           )}
 

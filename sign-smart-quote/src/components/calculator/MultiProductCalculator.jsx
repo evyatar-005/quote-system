@@ -185,7 +185,10 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
   const orderCashBase = total + shippingWithVat;
   const grandTotalBeforeDocMin = orderCashBase * orderMultiplier;
   // מחיר מינימום למסמך — רצפה על ההזמנה כולה, ללא קשר למספר המוצרים בתוכה.
-  const documentMinimumPrice = parseFloat(config?.document_minimum_price) || 0;
+  // קאפה לא כפוף למינימום הזמנה: אם יש בהזמנה פריט קאפה (גם בהזמנה מעורבת),
+  // הרצפה למסמך לא חלה — מחירי המינימום הפרטניים של שאר הפריטים ממשיכים לחול כרגיל.
+  const hasKapaItem = items.some((item) => categoryOf(formDataMap[item.id]?.productType) === "kapa");
+  const documentMinimumPrice = hasKapaItem ? 0 : (parseFloat(config?.document_minimum_price) || 0);
   const grandTotal = grandTotalBeforeDocMin > 0 ? Math.max(grandTotalBeforeDocMin, documentMinimumPrice) : grandTotalBeforeDocMin;
   const grandBeforeVat = grandTotal / vatMultiplier;
   const vatAmount = grandTotal - grandBeforeVat;
@@ -426,6 +429,10 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
                 const unitArea = w > 0 && h > 0 ? w * h : null;
                 const totalArea = unitArea != null ? unitArea * q : null;
                 const extraCount = (formData?.extraRows || []).length;
+                const shelvesPrice = categoryOf(pt) === "kapa"
+                  ? (parseInt(formData?.standardShelves) || 0) * (parseFloat(config?.kapa_shelf_standard_price) || 0) +
+                    (parseInt(formData?.customShelves) || 0) * (parseFloat(config?.kapa_shelf_custom_price) || 0)
+                  : 0;
                 return (
                   <div key={item.id} className="flex items-center justify-between gap-4 border-2 border-slate-200 rounded-2xl px-4 sm:px-5 py-3.5 bg-white">
                     <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -447,6 +454,9 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
                             <span className="text-slate-300 mx-1">·</span>
                             סה"כ {totalArea.toFixed(2)} מ"ר
                           </div>
+                        )}
+                        {shelvesPrice > 0 && (
+                          <div className="text-xs text-amber-600 mt-0.5">עלות מדפים: {fmt(shelvesPrice)}</div>
                         )}
                       </div>
                     </div>

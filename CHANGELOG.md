@@ -3,6 +3,19 @@
 All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`).
 
+## [1.0.7] - 2026-07-16
+
+Kapa shelf cost now visible inline where the agent sets the quantity.
+
+- The קאפה ("Kapa") product card shows a live "עלות מדפים" (shelf cost)
+  figure next to the shelf-quantity inputs, computed from
+  `kapa_shelf_standard_price`/`kapa_shelf_custom_price` — previously this
+  was only visible after the fact, folded into the line's total or in the
+  separate cost-breakdown views (`CostResults.jsx`, `QuoteDetailsModal.jsx`).
+  Now also shown in both the per-product "אישור פרטי מוצר" confirmed card
+  (`CalculatorForm.jsx`) and the multi-product collapsed summary row
+  (`MultiProductCalculator.jsx`).
+
 ## [1.0.6] - 2026-07-16
 
 Required client phone, Morning client-search, automatic WhatsApp delivery
