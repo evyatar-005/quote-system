@@ -3,6 +3,23 @@
 All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`).
 
+## [1.0.8] - 2026-07-16
+
+`deploy/UPDATE.ps1` now protects the production database against ever being
+lost, including across a full delete-and-reclone of the install folder.
+
+- Every update backs up `database.sqlite` to a location **outside**
+  `C:\quote-system` (a sibling folder, `quote-system-backups`) — not just
+  the existing in-repo `backups\` copy — so the backup survives even if the
+  whole app folder is deleted and re-cloned from scratch.
+- If a deploy finds no `database.sqlite` at all (a fresh clone), it now
+  automatically restores the last known-good backup from that external
+  location before starting the server, instead of booting with an empty,
+  freshly-seeded database. Prompted directly by a real incident this
+  session: a clean reinstall from GitHub wiped all configured pricing/
+  credentials/users because that data only ever lived in the (correctly
+  gitignored) database file, never in git.
+
 ## [1.0.7] - 2026-07-16
 
 Kapa shelf cost now visible inline where the agent sets the quantity.

@@ -7,10 +7,15 @@
 #    .\UPDATE.ps1                  Update to the latest tag on origin/main
 #    .\UPDATE.ps1 -Version v1.0.5  Update (or roll back) to a specific tag
 #
-#  What it does: backs up the local database, stops the running server,
-#  checks out the requested git tag, reinstalls/rebuilds, restarts the
-#  server, and verifies it responds. If the post-update check fails, it
-#  automatically rolls back to the previously running tag.
+#  What it does: backs up the local database to a location OUTSIDE the repo
+#  folder (so it survives even a full delete-and-reclone of C:\quote-system),
+#  stops the running server, checks out the requested git tag, reinstalls/
+#  rebuilds, restarts the server, and verifies it responds. If the database
+#  is missing after checkout (e.g. a fresh clone with no database.sqlite at
+#  all), it's restored automatically from the last known-good external
+#  backup before the server starts — a reinstall never starts from an empty
+#  database as long as any prior backup exists. If the post-update check
+#  fails, it automatically rolls back to the previously running tag.
 # ============================================================================
 
 param(
@@ -23,6 +28,10 @@ $deployDir  = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot   = Split-Path -Parent $deployDir
 $nodePath   = "C:\Program Files\nodejs"
 $env:PATH   = $env:PATH + ";$nodePath;C:\Program Files\Git\cmd"
+# Deliberately a SIBLING of the repo folder, not a subfolder of it — a
+# `Remove-Item -Recurse C:\quote-system` (like a clean reinstall) must not be
+# able to wipe this out along with the app.
+$externalBackupDir = Join-Path (Split-Path -Parent $repoRoot) "quote-system-backups"
 
 function Write-Step($msg) {
     Write-Host ""
@@ -106,16 +115,39 @@ if (-not $isAdmin) {
 }
 
 # --- 2. Backup the local database before touching anything ---
+# Two backups are kept: a timestamped one (history/manual recovery) inside
+# the repo (existing behavior), AND a copy outside the repo entirely —
+# database-latest.sqlite in $externalBackupDir — which is what step 2b uses
+# to auto-restore if this turns out to be a fresh install with no database
+# of its own yet.
 Write-Step "Backing up database.sqlite..."
 $backupDir = Join-Path $repoRoot "backups"
 New-Item -ItemType Directory -Force -Path $backupDir | Out-Null
+New-Item -ItemType Directory -Force -Path $externalBackupDir | Out-Null
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $dbPath = Join-Path $repoRoot "database.sqlite"
+$externalLatest = Join-Path $externalBackupDir "database-latest.sqlite"
 if (Test-Path $dbPath) {
     Copy-Item $dbPath (Join-Path $backupDir "database-$stamp.sqlite")
-    Write-Host "Backed up to backups\database-$stamp.sqlite"
+    Copy-Item $dbPath (Join-Path $externalBackupDir "database-$stamp.sqlite")
+    Copy-Item $dbPath $externalLatest -Force
+    Write-Host "Backed up to backups\database-$stamp.sqlite and $externalBackupDir"
 } else {
-    Write-Host "No database.sqlite found yet - skipping backup (first deploy?)." -ForegroundColor Yellow
+    Write-Host "No database.sqlite found in the repo folder yet." -ForegroundColor Yellow
+}
+
+# --- 2b. If this install has no database of its own, restore the last known-
+# good one instead of letting the app start from an empty, freshly-seeded
+# database. Covers a fresh git clone (e.g. after a clean reinstall) that
+# never had database.sqlite at all. ---
+if (-not (Test-Path $dbPath)) {
+    if (Test-Path $externalLatest) {
+        Write-Step "No database.sqlite here - restoring the last known-good backup..."
+        Copy-Item $externalLatest $dbPath
+        Write-Host "Restored database.sqlite from $externalLatest"
+    } else {
+        Write-Host "No prior backup found either - starting from a fresh, freshly-seeded database (first deploy ever?)." -ForegroundColor Yellow
+    }
 }
 
 # --- 3. Record the currently-running tag (for rollback) ---
