@@ -171,14 +171,23 @@ module.exports = function registerEntities(app, db, deps) {
     // hiccup fail the quote save itself, so this is fire-and-forget.
     if (body.morning_client_id) {
       // Selected from the search box — already exists in Morning, just cache
-      // the mapping so issuing later skips a redundant search call.
+      // the mapping so issuing later skips a redundant search call. An
+      // explicit selection always wins over whatever was cached before (e.g.
+      // an earlier quote under the same free-typed name resolved to a
+      // different Morning client) — DO UPDATE, not IGNORE.
       try {
-        db.prepare(`INSERT OR IGNORE INTO morning_clients_map (local_client_name, morning_client_id) VALUES (?, ?)`)
-          .run(body.client_name.toString().trim(), body.morning_client_id);
+        db.prepare(
+          `INSERT INTO morning_clients_map (local_client_name, morning_client_id) VALUES (?, ?)
+           ON CONFLICT(local_client_name) DO UPDATE SET morning_client_id = excluded.morning_client_id`
+        ).run(body.client_name.toString().trim(), body.morning_client_id);
       } catch (_) {}
     } else {
-      ensureMorningClient(db, body.client_name, { phone: body.client_phone, address: body.client_address })
-        .catch(err => console.error(`[quoteCreate] Morning client registration failed for quote #${lastInsertRowid}:`, err.message));
+      ensureMorningClient(db, body.client_name, {
+        phone: body.client_phone,
+        address: body.client_address,
+        vatId: body.client_vat_id,
+        email: body.client_email,
+      }).catch(err => console.error(`[quoteCreate] Morning client registration failed for quote #${lastInsertRowid}:`, err.message));
     }
 
     return quoteRowById(lastInsertRowid);

@@ -46,6 +46,10 @@ for (const col of [
   // Optional — auto-filled when a client is picked from the Morning client
   // search, sent on to Morning when a new client gets created from this quote.
   'ALTER TABLE signshop_quotes ADD COLUMN client_address TEXT',
+  // Optional — business ID (ח.פ / עוסק מורשה) and email, sent on to Morning
+  // as taxId / emails so the saved client record there is complete.
+  'ALTER TABLE signshop_quotes ADD COLUMN client_vat_id TEXT',
+  'ALTER TABLE signshop_quotes ADD COLUMN client_email TEXT',
 ]) {
   try { db.exec(col); } catch (_) {}
 }

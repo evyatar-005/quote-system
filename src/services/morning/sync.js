@@ -6,24 +6,49 @@ const { request } = require('./client');
 const { CURRENCY, VAT_TYPE_DEFAULT, LANG } = require('./mappings');
 const { sendDocumentToWhatsApp } = require('../greenapi/send');
 
+// Shared shape for both client creation and updates — every field we've
+// collected on the quote form, so the Morning-side record is always a full
+// saved client, not just a bare name.
+function buildClientBody(name, extra = {}) {
+  const body = { name };
+  if (extra.phone) body.phone = extra.phone;
+  if (extra.address) body.address = extra.address;
+  if (extra.vatId) body.taxId = extra.vatId;
+  if (extra.email) body.emails = [extra.email];
+  return body;
+}
+
 async function ensureMorningClient(db, clientName, extra = {}) {
   const name = (clientName || '').trim();
   if (!name) throw new Error('Quote has no client_name');
 
+  const body = buildClientBody(name, extra);
   const cached = db.prepare(`SELECT morning_client_id FROM morning_clients_map WHERE local_client_name = ?`).get(name);
-  if (cached) return cached.morning_client_id;
+  if (cached) {
+    // Client already saved in Morning — keep it up to date with whatever
+    // details were entered on this quote (phone/address/vatId/email can
+    // change or be filled in later) rather than only ever writing them once.
+    try {
+      await request(db, 'PUT', `/clients/${cached.morning_client_id}`, body);
+    } catch (err) {
+      console.error(`[ensureMorningClient] update failed for ${cached.morning_client_id}:`, err.message);
+    }
+    return cached.morning_client_id;
+  }
 
   const found = await request(db, 'POST', '/clients/search', { name, pageSize: 1 });
   let morningClientId = null;
   const candidate = found && found.items && found.items[0];
   if (candidate && candidate.name && candidate.name.toLowerCase() === name.toLowerCase()) {
     morningClientId = candidate.id;
+    try {
+      await request(db, 'PUT', `/clients/${morningClientId}`, body);
+    } catch (err) {
+      console.error(`[ensureMorningClient] update failed for ${morningClientId}:`, err.message);
+    }
   } else {
-    // New client — include contact details we already collected on the quote
-    // form so Morning's record isn't just a bare name.
-    const body = { name };
-    if (extra.phone) body.phone = extra.phone;
-    if (extra.address) body.address = extra.address;
+    // New client — include every contact detail we already collected on the
+    // quote form so Morning's record isn't just a bare name.
     const created = await request(db, 'POST', '/clients', body);
     morningClientId = created.id;
   }
@@ -49,6 +74,8 @@ async function searchClients(db, query) {
     name: c.name,
     phone: c.phone || c.mobile || '',
     address: c.address || '',
+    vatId: c.taxId || '',
+    email: (c.emails && c.emails[0]) || '',
   }));
 }
 
@@ -85,7 +112,12 @@ async function createOrConvertDocument(db, { quoteId, targetType, actorUsername 
     quote = db.prepare(`SELECT * FROM signshop_quotes WHERE id = ?`).get(quoteId);
     if (!quote) throw new Error('Quote not found');
 
-    const morningClientId = await ensureMorningClient(db, quote.client_name, { phone: quote.client_phone, address: quote.client_address });
+    const morningClientId = await ensureMorningClient(db, quote.client_name, {
+      phone: quote.client_phone,
+      address: quote.client_address,
+      vatId: quote.client_vat_id,
+      email: quote.client_email,
+    });
 
     const prevMap = db.prepare(
       `SELECT * FROM morning_documents_map WHERE quote_id = ? ORDER BY id DESC LIMIT 1`
