@@ -74,6 +74,7 @@ function buildIncomeRows(quote) {
     price: item.unitPrice,
     currency: CURRENCY,
     vatType: VAT_TYPE_DEFAULT,
+    ...(item.sku ? { catalogNum: item.sku } : {}),
   }));
 }
 

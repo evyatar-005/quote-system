@@ -216,6 +216,20 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
   // catalog rows like kapa/rollup/glass never set widthM/heightM).
   const dimsSuffix = (fd) => fd?.widthM && fd?.heightM ? ` (${fd.widthM}×${fd.heightM} מ׳)` : "";
 
+  // Fixed-price catalog families (kapa/rollup/glass) carry their own per-row
+  // SKU on the calc result; everything else uses its static מק"ט from the
+  // picker (same code shown next to the product everywhere in the UI). The
+  // product name is appended too — the bare code isn't meaningful on its own
+  // inside Morning's מק"ט column.
+  const lineSku = (formData) => {
+    if (formData?.productType === "free_product") return null;
+    const code = formData?.result?.kapaSku || formData?.result?.rollupSku || formData?.result?.glassSku
+      || PRODUCT_CODES[formData?.productType] || null;
+    if (!code) return null;
+    const name = PRODUCT_NAMES[formData?.productType] || formData?.productType;
+    return `${code} ${name}`;
+  };
+
   const buildLineItems = () => {
     const lines = [];
     items.forEach((item, index) => {
@@ -229,6 +243,7 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
         freeText: formData.lineLabel || "",
         quantity: parseInt(formData.quantity) || 1,
         unitPrice: formData.result?.sellingPricePerUnit ?? 0,
+        sku: lineSku(formData),
       });
       (formData.extraRows || []).forEach((row) => {
         if (!row.result) return;
@@ -238,8 +253,24 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
           freeText: row.lineLabel || "",
           quantity: parseInt(row.quantity) || 1,
           unitPrice: row.result.sellingPricePerUnit ?? 0,
+          sku: lineSku(formData),
         });
       });
+    });
+    // משלוח/איסוף עצמי — תמיד שורה משלו במורנינג, גם כשאיסוף עצמי (מחיר 0),
+    // כדי שהמסמך ישקף איך הלקוח מקבל את ההזמנה, וגם שסכום השורות יכלול בפועל
+    // את עלות המשלוח (לא רק את מחירי המוצרים). משלוח כולל את כתובת הלקוח
+    // בתיאור השורה עצמה, כדי שיהיה ברור לאן נשלחת ההזמנה.
+    const shippingDescription = delivery === "shipping"
+      ? `משלוח${clientAddress.trim() ? ` לכתובת ${clientAddress.trim()}` : ""}`
+      : "איסוף עצמי";
+    lines.push({
+      groupLabel: null,
+      description: shippingDescription,
+      freeText: "",
+      quantity: 1,
+      unitPrice: delivery === "shipping" ? (parseFloat(shipping) || 0) : 0,
+      sku: delivery === "shipping" ? "משלוח" : "איסוף עצמי",
     });
     return lines;
   };
@@ -274,7 +305,7 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
     status,
   });
 
-  const isQuoteValid = clientName.trim() && clientPhone.trim() && grandTotal > 0;
+  const isQuoteValid = clientName.trim() && clientPhone.trim() && clientAddress.trim() && documentTitle.trim() && grandTotal > 0;
 
   // Warn on refresh/tab-close/back-button while there's real unsaved work —
   // nothing here is persisted anywhere until one of the three buttons below is
@@ -382,7 +413,7 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="text-sm font-semibold text-slate-600">כותרת המסמך</label>
+                <label className="text-sm font-semibold text-slate-600">כותרת המסמך <span className="text-red-500">*</span></label>
                 <input
                   value={documentTitle}
                   onChange={(e) => setDocumentTitle(e.target.value)}
@@ -434,7 +465,14 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
                     (parseInt(formData?.customShelves) || 0) * (parseFloat(config?.kapa_shelf_custom_price) || 0)
                   : 0;
                 return (
-                  <div key={item.id} className="flex items-center justify-between gap-4 border-2 border-slate-200 rounded-2xl px-4 sm:px-5 py-3.5 bg-white">
+                  // Whole row opens the product for editing — not just the small
+                  // "ערוך" text — so re-opening a locked line to tweak, say, the
+                  // quantity is a single click anywhere on it.
+                  <div
+                    key={item.id}
+                    onClick={() => toggleItemLock(item.id, false)}
+                    className="flex items-center justify-between gap-4 border-2 border-slate-200 rounded-2xl px-4 sm:px-5 py-3.5 bg-white cursor-pointer hover:border-amber-300 transition-colors"
+                  >
                     <div className="flex items-center gap-3 min-w-0 flex-1">
                       {img && !isFree && (
                         <img src={img} alt="" className="w-12 h-12 rounded-xl object-cover shrink-0 border border-slate-200" />
@@ -461,15 +499,10 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
                       </div>
                     </div>
                     <span className="text-base font-bold text-amber-600 shrink-0">{fmt(prices[item.id])}</span>
-                    <button
-                      onClick={() => toggleItemLock(item.id, false)}
-                      className="text-sm text-slate-500 hover:text-amber-600 transition-colors px-2 py-1 rounded-lg hover:bg-amber-50 shrink-0"
-                    >
-                      ערוך
-                    </button>
+                    <span className="text-sm text-slate-500 px-2 py-1 shrink-0">ערוך</span>
                     {items.length > 1 && (
                       <button
-                        onClick={() => removeItem(item.id)}
+                        onClick={(e) => { e.stopPropagation(); removeItem(item.id); }}
                         className="flex items-center gap-1 text-sm text-red-500/70 hover:text-red-400 transition-colors px-2 py-1 rounded-lg hover:bg-red-500/10 shrink-0"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -519,6 +552,7 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
                       lokobondAreaTiers={lokobondAreaTiers}
                       glassPriceTiers={glassPriceTiers}
                       defaultForm={EMPTY_ITEM_FORM}
+                      initialFormData={formDataMap[item.id]}
                       enforceMinimumPrice={getEnforceMinimumPrice(config, formDataMap[item.id], items.length)}
                       orderAreaOverride={(() => {
                         const cat = categoryOf(formDataMap[item.id]?.productType);
@@ -573,7 +607,7 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
               <span className="font-semibold text-slate-700">{clientName || "—"}</span>
             </div>
             <div className="space-y-1">
-              <label className="text-sm text-slate-400">כתובת</label>
+              <label className="text-sm text-slate-400">כתובת <span className="text-red-500">*</span></label>
               <input
                 value={clientAddress}
                 onChange={(e) => setClientAddress(e.target.value)}
@@ -734,7 +768,7 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
           <p className="text-xs text-slate-400 text-center -mt-1">מנפיק ישירות ללקוח דרך מורנינג, בלי לעבור בדיקת מנהל מכירות</p>
 
           {!isQuoteValid && (
-            <p className="text-xs text-slate-400 text-center">יש להזין שם לקוח ולפחות מוצר אחד עם מחיר</p>
+            <p className="text-xs text-slate-400 text-center">יש להזין שם לקוח, טלפון, כתובת וכותרת מסמך, ולפחות מוצר אחד עם מחיר</p>
           )}
         </div>
       </div>

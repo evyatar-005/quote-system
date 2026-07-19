@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import CalculatorForm, { categoryOf, PRODUCT_NAMES, PRODUCT_CODES, productImage } from "./CalculatorForm";
+import CalculatorForm, { categoryOf, Field, UNDERLINE, UNDERLINE_CENTER, READONLY } from "./CalculatorForm";
 import { calculate } from "./useCalculator";
 import CostResults from "./CostResults";
 import SalesResults from "./SalesResults";
@@ -17,13 +17,14 @@ const DIMENSION_FAMILIES = ["logo", "sticker", "lokobond", "foamex", "perspexBoa
 
 let nextRowId = 1;
 
-export default function CalculatorTab({ config, priceTiers, stickerPriceTiers, paintSurchargeTiers = [], kapaPriceTiers = [], rollupPriceTiers = [], lokobondAreaTiers = [], glassPriceTiers = [], defaultForm, allowedProducts, onPriceChange, productCategory, onFormDataChange, enforceMinimumPrice = true, paymentKey = "cash", installmentCount = 2, orderAreaOverride = null }) {
-  const [form, setForm] = useState(defaultForm);
-  const [extraRows, setExtraRows] = useState([]);
-  // Locks the base "מידה 1" fields once another size row is added — same flow
-  // as locking a whole product card at the order level: keeps the card from
-  // reading as several open editable rows at once. "ערוך" reopens it.
-  const [baseLocked, setBaseLocked] = useState(false);
+export default function CalculatorTab({ config, priceTiers, stickerPriceTiers, paintSurchargeTiers = [], kapaPriceTiers = [], rollupPriceTiers = [], lokobondAreaTiers = [], glassPriceTiers = [], defaultForm, initialFormData, allowedProducts, onPriceChange, productCategory, onFormDataChange, enforceMinimumPrice = true, paymentKey = "cash", installmentCount = 2, orderAreaOverride = null }) {
+  // initialFormData is the parent's already-known state for this item (e.g.
+  // re-expanding a product the agent previously locked/collapsed at the order
+  // level). Without seeding from it, this component would remount from a
+  // blank defaultForm and silently discard everything the agent had entered —
+  // every useState below must be seeded the same way for that reason.
+  const [form, setForm] = useState(() => initialFormData || defaultForm);
+  const [extraRows, setExtraRows] = useState(() => initialFormData?.extraRows || []);
 
   const isSticker = STICKER_TYPES.includes(form.productType);
   // Same-family "extra size" rows — lets an agent add another size/quantity of
@@ -112,49 +113,7 @@ export default function CalculatorTab({ config, priceTiers, stickerPriceTiers, p
           <h3 className="text-sm font-semibold text-slate-600 uppercase tracking-wider">
             פרטי המוצר{extraRows.length > 0 ? " — מידה 1" : ""}
           </h3>
-          {baseLocked && (
-            <button
-              onClick={() => setBaseLocked(false)}
-              className="text-sm text-slate-500 hover:text-amber-600 transition-colors px-2 py-1 rounded-lg hover:bg-amber-50"
-            >
-              ערוך
-            </button>
-          )}
         </div>
-        {baseLocked ? (() => {
-          const isFree = form.productType === "free_product";
-          const img = form.productType ? productImage(form.productType) : null;
-          const sku = form.productType ? PRODUCT_CODES[form.productType] : null;
-          const w = parseFloat(form.widthM) || 0;
-          const h = parseFloat(form.heightM) || 0;
-          const unitArea = w > 0 && h > 0 ? w * h : null;
-          const totalArea = unitArea != null ? unitArea * q : null;
-          return (
-            <div className="flex items-center justify-between gap-4 border-2 border-slate-200 rounded-2xl px-4 py-3.5 bg-white">
-              <div className="flex items-center gap-3 min-w-0 flex-1">
-                {img && !isFree && (
-                  <img src={img} alt="" className="w-12 h-12 rounded-xl object-cover shrink-0 border border-slate-200" />
-                )}
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-semibold text-slate-700 truncate">
-                      {isFree ? (form.lineLabel || "מוצר חופשי") : (PRODUCT_NAMES[form.productType] || form.productType)}
-                    </span>
-                    {sku && <span className="text-xs font-mono text-slate-400 shrink-0">מק"ט {sku}</span>}
-                  </div>
-                  {unitArea != null && (
-                    <div className="text-base font-semibold text-slate-600 mt-0.5">
-                      {w}×{h} מ' <span className="text-slate-300 mx-1">·</span> כמות {form.quantity || 1}
-                      <span className="text-slate-300 mx-1">·</span>
-                      סה"כ {totalArea.toFixed(2)} מ"ר
-                    </div>
-                  )}
-                </div>
-              </div>
-              <span className="text-base font-bold text-amber-600 shrink-0">{result ? fmt(priceWithVat * q) : "—"}</span>
-            </div>
-          );
-        })() : (
         <CalculatorForm
           values={form}
           onChange={(newForm) => {
@@ -185,18 +144,17 @@ export default function CalculatorTab({ config, priceTiers, stickerPriceTiers, p
             return info;
           })()}
         />
-        )}
       </div>
 
       {/* Extra size/quantity rows — same SKU as above, different size and/or
           quantity (e.g. 10 PVC signs in different sizes for one client). */}
       {canAddExtraRows && extraRows.map((row, i) => {
         const rowResult = extraRowResults[i];
-        const rowPrice = rowResult ? rowCashPrice(rowResult) : null;
+        const rowPrice = rowResult ? rowResult.sellingPriceAll : null;
         return (
-          <div key={row.id} className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+          <div key={row.id} className="border-t-2 border-dashed border-slate-300 pt-5 mt-2 space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold text-slate-500 uppercase tracking-wider">מידה {i + 2}</span>
+              <span className="text-sm font-bold text-amber-600 uppercase tracking-wider">מידה {i + 2}</span>
               <button
                 onClick={() => setExtraRows(prev => prev.filter(r => r.id !== row.id))}
                 className="flex items-center gap-1 text-sm text-red-400 hover:text-red-500 transition-colors"
@@ -204,66 +162,61 @@ export default function CalculatorTab({ config, priceTiers, stickerPriceTiers, p
                 <Trash2 className="w-3.5 h-3.5" /> הסר
               </button>
             </div>
-            <div className="space-y-1.5">
-              <label className="text-base font-semibold text-slate-700">תיאור / מיקום</label>
-              <input
-                type="text"
-                value={row.lineLabel}
-                onChange={(e) => setExtraRows(prev => prev.map(r => r.id === row.id ? { ...r, lineLabel: e.target.value } : r))}
-                placeholder="לדוגמה: קיר 2, ויטרינה שמאל..."
-                className="flex h-10 w-full rounded-md border border-black bg-white px-3 py-1 text-base placeholder:text-slate-300 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              />
-            </div>
-            <div className="grid grid-cols-3 gap-3">
-              <div className="space-y-1.5">
-                <label className="text-base font-semibold text-slate-700">אורך (מ') <span className="text-red-500">*</span></label>
+            {/* Same Morning-style single row + underline field styling as מידה 1 above. */}
+            <div className="flex flex-wrap items-start gap-x-4 gap-y-5">
+              <Field label="אורך (מ')" width="w-24" required>
                 <input
                   type="number" step="0.01" min="0" dir="ltr"
                   value={row.widthM}
                   onChange={(e) => setExtraRows(prev => prev.map(r => r.id === row.id ? { ...r, widthM: e.target.value } : r))}
                   placeholder="0.00"
-                  className="flex h-10 w-full rounded-md border border-black bg-white px-3 py-1 text-base placeholder:text-slate-300 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  className={`${UNDERLINE_CENTER} w-full`}
                 />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-base font-semibold text-slate-700">גובה (מ') <span className="text-red-500">*</span></label>
+              </Field>
+              <Field label="גובה (מ')" width="w-24" required>
                 <input
                   type="number" step="0.01" min="0" dir="ltr"
                   value={row.heightM}
                   onChange={(e) => setExtraRows(prev => prev.map(r => r.id === row.id ? { ...r, heightM: e.target.value } : r))}
                   placeholder="0.00"
-                  className="flex h-10 w-full rounded-md border border-black bg-white px-3 py-1 text-base placeholder:text-slate-300 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  className={`${UNDERLINE_CENTER} w-full`}
                 />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-base font-semibold text-slate-700">כמות</label>
+              </Field>
+              <Field label="כמות" width="w-20">
                 <input
                   type="number" step="1" min="1" dir="ltr"
                   value={row.quantity}
                   onChange={(e) => setExtraRows(prev => prev.map(r => r.id === row.id ? { ...r, quantity: e.target.value } : r))}
                   placeholder="1"
-                  className="flex h-10 w-full rounded-md border border-black bg-white px-3 py-1 text-base placeholder:text-slate-300 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  className={`${UNDERLINE_CENTER} w-full`}
                 />
-              </div>
-            </div>
-            {showElementsForRows && (
-              <div className="space-y-1.5">
-                <label className="text-base font-semibold text-slate-700">מספר אלמנטים</label>
+              </Field>
+              {showElementsForRows && (
+                <Field label="מספר אלמנטים" width="w-28">
+                  <input
+                    type="number" step="1" min="0" dir="ltr"
+                    value={row.elements}
+                    onChange={(e) => setExtraRows(prev => prev.map(r => r.id === row.id ? { ...r, elements: e.target.value } : r))}
+                    placeholder={form.elements || "1"}
+                    className={`${UNDERLINE_CENTER} w-full`}
+                  />
+                </Field>
+              )}
+              <Field label="תיאור / מיקום" width="w-64">
                 <input
-                  type="number" step="1" min="0" dir="ltr"
-                  value={row.elements}
-                  onChange={(e) => setExtraRows(prev => prev.map(r => r.id === row.id ? { ...r, elements: e.target.value } : r))}
-                  placeholder={form.elements || "1"}
-                  className="flex h-10 w-full rounded-md border border-black bg-white px-3 py-1 text-base placeholder:text-slate-300 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  type="text"
+                  value={row.lineLabel}
+                  onChange={(e) => setExtraRows(prev => prev.map(r => r.id === row.id ? { ...r, lineLabel: e.target.value } : r))}
+                  placeholder="לדוגמה: קיר 2, ויטרינה שמאל..."
+                  className={`${UNDERLINE} w-full`}
                 />
-              </div>
-            )}
-            {rowPrice && (
-              <div className="flex justify-between items-center text-base bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
-                <span className="text-slate-500">מחיר שורה זו (כולל מע״מ, לכמות שהוזנה)</span>
-                <span className="font-bold text-amber-600 text-lg">{fmt(rowPrice)}</span>
-              </div>
-            )}
+              </Field>
+              {rowPrice != null && (
+                <Field label="מחיר שורה (ללא מע״מ)" width="w-32">
+                  <div className={`${READONLY} font-bold text-amber-600`}>{fmt(rowPrice)}</div>
+                </Field>
+              )}
+            </div>
           </div>
         );
       })}
@@ -273,7 +226,6 @@ export default function CalculatorTab({ config, priceTiers, stickerPriceTiers, p
         <button
           onClick={() => {
             setExtraRows(prev => [...prev, { id: nextRowId++, lineLabel: "", widthM: "", heightM: "", quantity: "1", elements: "" }]);
-            setBaseLocked(true);
           }}
           className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border border-dashed border-black text-base font-semibold text-slate-500 hover:border-amber-400 hover:text-amber-600 hover:bg-amber-50 transition-all"
         >

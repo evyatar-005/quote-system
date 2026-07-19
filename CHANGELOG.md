@@ -3,6 +3,35 @@
 All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`).
 
+## [1.0.9] - 2026-07-19
+
+Calculator fixes: line-item SKUs sent to Morning, shipping always its own
+line, one consolidated product-lock mechanism (fixing a triple-"ערוך" bug),
+and payment-adjusted picker prices.
+
+- **Morning line items now carry a SKU** (`sku` field on each income row) —
+  fixed-price catalog products (kapa/rollup/glass) use their own per-row
+  SKU, everything else its static מק"ט (`MultiProductCalculator.jsx`).
+- **Shipping/pickup is now always its own line** in the Morning document
+  (`buildLineItems`) — "משלוח לכתובת X" with the real shipping cost, or
+  "איסוף עצמי" at ₪0 — instead of being invisible/folded into the total.
+- **Fixed a triple-"ערוך" (edit) bug**: locking a product card previously
+  went through three separate, overlapping lock mechanisms (`CalculatorForm`'s
+  `itemLocked`, `CalculatorTab`'s `baseLocked`, and `MultiProductCalculator`'s
+  `lockedIds`), each rendering its own summary/edit control. Consolidated
+  into one — `MultiProductCalculator`'s `lockedIds` — with `initialFormData`
+  now correctly threaded back down so re-opening a locked card doesn't lose
+  what was already entered.
+- **Required fields expanded**: client address and document title are now
+  required before issuing (matching phone, added in 1.0.6) — a WhatsApp/
+  Morning document needs somewhere real to go and a real title.
+- **מידה 2+ (extra-size) rows** redesigned to match the main product row's
+  single-line Morning-style layout instead of a separate boxed sub-form.
+- Catalog picker prices (kapa/rollup/glass) now reflect the order's actual
+  payment method (cash vs. installments surcharge) instead of always
+  showing the flat cash price, which could mismatch the price actually
+  charged once picked.
+
 ## [1.0.8] - 2026-07-16
 
 `deploy/UPDATE.ps1` now protects the production database against ever being

@@ -194,14 +194,14 @@ const fmt = (val) => val != null ? `₪ ${Number(val).toLocaleString('he-IL', { 
 // Clean underline field style — same principle as the "שם לקוח" input at the top
 // of the quote: no boxed rounded rectangle, just a bottom rule that turns amber on
 // focus. Reused across every input/select in the item row.
-const UNDERLINE = "h-10 bg-transparent border-0 border-b-2 border-slate-300 rounded-none px-1 focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-amber-400";
-const UNDERLINE_CENTER = `${UNDERLINE} text-center`;
+export const UNDERLINE = "h-10 bg-transparent border-0 border-b-2 border-slate-300 rounded-none px-1 focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-amber-400";
+export const UNDERLINE_CENTER = `${UNDERLINE} text-center`;
 // Read-only computed value (מחיר יחידה / סה״כ) — same underline, no box.
-const READONLY = "h-10 flex items-center justify-center border-0 border-b-2 border-slate-300 text-base";
+export const READONLY = "h-10 flex items-center justify-center border-0 border-b-2 border-slate-300 text-base";
 
 // Compact field wrapper used inside the single Morning-style row — label on top,
 // control below, fixed-ish width but allowed to grow a bit ("קצת שמנה", not narrow).
-function Field({ label, width = "w-24", required = false, children }) {
+export function Field({ label, width = "w-24", required = false, children }) {
   return (
     <div className={`flex flex-col gap-1 ${width} shrink-0`}>
       <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
@@ -312,6 +312,10 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
   if (paymentKey === 'installments') {
     priceMultiplier = 1 + (installmentCount - 1) * installmentSurchargePct;
   }
+  // Catalog/picker prices are stored as cash prices — shown adjusted for the
+  // order's current payment method so the picker matches the price the agent
+  // sees once the row is picked (no 210-vs-215-style mismatch).
+  const paymentAdjustedPrice = (p) => Math.round((parseFloat(p) || 0) * priceMultiplier);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -384,13 +388,13 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
     const rollupSubs = cat.parent === "009" ? rollupPriceTiers : null;
     const glassSubs = cat.parent === "010" ? glassPriceTiers : null;
     if (kapaSubs) {
-      return kapaSubs.map((t) => ({ key: `kapa-${t.id}`, image: CATEGORY_IMAGES[cat.parent], code: cat.parent, title: t.description, sub: cat.label, price: t.price, onClick: () => selectKapa(t) }));
+      return kapaSubs.map((t) => ({ key: `kapa-${t.id}`, image: CATEGORY_IMAGES[cat.parent], code: cat.parent, title: t.description, sub: cat.label, price: paymentAdjustedPrice(t.price), onClick: () => selectKapa(t) }));
     }
     if (rollupSubs) {
-      return rollupSubs.map((t) => ({ key: `rollup-${t.id}`, image: CATEGORY_IMAGES[cat.parent], code: PRODUCT_CODES[t.product_type] || cat.parent, title: t.description, sub: cat.label, price: t.price_unit_1, onClick: () => selectRollup(t) }));
+      return rollupSubs.map((t) => ({ key: `rollup-${t.id}`, image: CATEGORY_IMAGES[cat.parent], code: PRODUCT_CODES[t.product_type] || cat.parent, title: t.description, sub: cat.label, price: paymentAdjustedPrice(t.price_unit_1), onClick: () => selectRollup(t) }));
     }
     if (glassSubs) {
-      return glassSubs.map((t) => ({ key: `glass-${t.id}`, image: CATEGORY_IMAGES[cat.parent], code: cat.parent, title: t.description, sub: cat.label, price: t.selling_price, onClick: () => selectGlass(t) }));
+      return glassSubs.map((t) => ({ key: `glass-${t.id}`, image: CATEGORY_IMAGES[cat.parent], code: cat.parent, title: t.description, sub: cat.label, price: paymentAdjustedPrice(t.selling_price), onClick: () => selectGlass(t) }));
     }
     return cat.subs.map((pt) => ({ key: pt, image: CATEGORY_IMAGES[cat.parent], code: PRODUCT_CODES[pt], title: PRODUCT_NAMES[pt], sub: cat.label, price: null, onClick: () => selectSub(pt) }));
   }).filter((entry) => `${entry.title} ${entry.code} ${entry.sub}`.toLowerCase().includes(pickerSearchQuery)) : [];
@@ -505,7 +509,7 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
                               <span className="text-base font-mono text-slate-400 w-14 shrink-0">{cat.parent}</span>
                               <span className="text-lg font-semibold text-slate-700 truncate">{t.description}</span>
                             </div>
-                            <span className="text-lg font-bold text-amber-600 shrink-0">₪{t.price}</span>
+                            <span className="text-lg font-bold text-amber-600 shrink-0">₪{paymentAdjustedPrice(t.price)}</span>
                           </button>
                         ))
                       : rollupSubs
@@ -523,7 +527,7 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
                               <span className="text-base font-mono text-slate-400 w-14 shrink-0">{cat.parent}</span>
                               <span className="text-lg font-semibold text-slate-700 truncate">{t.description}</span>
                             </div>
-                            <span className="text-lg font-bold text-amber-600 shrink-0">₪{t.price_unit_1}</span>
+                            <span className="text-lg font-bold text-amber-600 shrink-0">₪{paymentAdjustedPrice(t.price_unit_1)}</span>
                           </button>
                         ))
                       : glassSubs
@@ -541,7 +545,7 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
                               <span className="text-base font-mono text-slate-400 w-14 shrink-0">{cat.parent}</span>
                               <span className="text-lg font-semibold text-slate-700 truncate">{t.description}</span>
                             </div>
-                            <span className="text-lg font-bold text-amber-600 shrink-0">₪{t.selling_price}</span>
+                            <span className="text-lg font-bold text-amber-600 shrink-0">₪{paymentAdjustedPrice(t.selling_price)}</span>
                           </button>
                         ))
                       : cat.subs.map((pt) => (
@@ -720,57 +724,12 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
     : isGlass ? CATEGORY_IMAGES["010"]
     : CATEGORY_IMAGES[PRODUCT_CODES[values.productType]?.split("-")[0]];
 
-  // Once the agent confirms this product line, the whole rubric locks into a
-  // compact read-only summary — every field (מק"ט, מידות, תוספות, תיאור...)
-  // becomes non-editable at once, not just the price slider. "ערוך" reopens
-  // the full form to adjust and re-confirm.
-  if (values.itemLocked) {
-    const dims = !isFixedPrice && values.widthM && values.heightM ? `${values.widthM}×${values.heightM} מ׳ | ` : "";
-    const thickness = showThicknessField && values.thicknessMm ? `עובי ${values.thicknessMm} מ״מ | ` : "";
-    // Same formula as useCalculator.jsx's shelvesSellingPrice / the inline
-    // display above the "אישור פרטי מוצר" button — kept visible after locking
-    // too, not just while the fields are still open for editing.
-    const shelvesPrice = isKapa
-      ? (parseInt(values.standardShelves) || 0) * (parseFloat(config?.kapa_shelf_standard_price) || 0) +
-        (parseInt(values.customShelves) || 0) * (parseFloat(config?.kapa_shelf_custom_price) || 0)
-      : 0;
-    return (
-      <div className="flex items-center justify-between gap-4 rounded-xl border-2 border-emerald-300 bg-emerald-50 p-4">
-        <div className="flex items-center gap-3 min-w-0">
-          {skuImg && <img src={skuImg} alt={skuLabel} className="w-12 h-12 rounded-lg object-cover shrink-0" />}
-          <div className="min-w-0">
-            <div className="text-sm font-mono font-bold text-emerald-700 truncate">מק"ט {skuCode}</div>
-            <div className="text-lg font-semibold text-slate-800 leading-tight truncate">{skuLabel}</div>
-            <div className="text-base text-slate-500 mt-0.5 truncate">
-              {dims}{thickness}כמות {q}
-            </div>
-            {values.lineLabel && <div className="text-base text-slate-400 mt-0.5 truncate">{values.lineLabel}</div>}
-            {shelvesPrice > 0 && (
-              <div className="text-sm text-amber-600 mt-0.5 truncate">
-                עלות מדפים: ₪ {shelvesPrice.toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </div>
-            )}
-          </div>
-        </div>
-        <div className="flex items-center gap-4 shrink-0">
-          <div className="text-left">
-            <div className="text-2xl font-bold text-emerald-700" dir="ltr">{fmt(totalExVat)}</div>
-            <div className="text-xs text-emerald-500">ללא מע״מ</div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Check className="w-5 h-5 text-emerald-600" />
-            <button
-              type="button"
-              onClick={() => set("itemLocked", false)}
-              className="text-base font-semibold text-emerald-700 hover:text-emerald-900 underline"
-            >
-              ערוך
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // Note: this component used to have its own "אישור פרטי מוצר" lock/confirm
+  // step (a compact emerald read-only summary, separate from the order-level
+  // and מידה-1 locks). It was removed — three independent, stacked "ערוך"
+  // buttons for the same product line meant re-opening a confirmed row to
+  // tweak its quantity took three separate clicks. The order-level lock
+  // (MultiProductCalculator) is the only lock left for a product line.
 
   return (
     <div className="flex flex-col gap-3" ref={formRowsRef} onKeyDown={handleEnterAdvances}>
@@ -779,7 +738,9 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
         <Field label='מק"ט' width="w-72">
           <button
             type="button"
-            onClick={clearProduct}
+            onClick={() => {
+              if (window.confirm('שינוי מק"ט ימחק את כל פרטי השורה שהוזנו (מידות, כמות, תוספות...). להמשיך?')) clearProduct();
+            }}
             title='שנה מק"ט'
             className="h-10 px-1 rounded-none border-0 border-b-2 border-slate-300 bg-transparent hover:border-amber-400 transition-colors flex items-center gap-2 text-right overflow-hidden"
           >
@@ -1076,15 +1037,6 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
         />
       </div>
 
-      {/* Confirms and locks the WHOLE product rubric (not just the price slider) —
-          every field above becomes read-only until "ערוך" is pressed again. */}
-      <button
-        type="button"
-        onClick={() => set("itemLocked", true)}
-        className="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-lg border border-emerald-300 bg-emerald-50 text-sm font-semibold text-emerald-700 hover:bg-emerald-100 hover:border-emerald-400 transition-colors"
-      >
-        <Check className="w-4 h-4" /> אישור פרטי מוצר
-      </button>
     </div>
   );
 }
