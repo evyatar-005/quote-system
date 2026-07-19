@@ -3,6 +3,29 @@
 All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`).
 
+## [1.0.10] - 2026-07-19
+
+Client details (VAT ID/email) on the quote form, and a fully-synced Morning client record.
+
+- **Shipping cost fix**: the document minimum-price floor was applied to
+  products + shipping combined, so an order under the minimum with shipping
+  added would only be charged the minimum instead of minimum + shipping.
+  The floor now applies to the products subtotal only; shipping is always
+  added on top.
+- **New client fields**: "ח.פ / עוסק מורשה" and "אימייל לקוח" on the quote
+  form (`client_vat_id`, `client_email` columns), sent to Morning as
+  `taxId`/`emails`.
+- **Morning client record now stays in sync**: previously a client was only
+  ever created once in Morning and never touched again; now every issue
+  also pushes an update (`PUT`) with the quote's current phone/address/VAT
+  ID/email, so an existing client doesn't go stale.
+- **Fixed a client-selection cache bug**: picking an existing client from
+  the search dropdown could be silently overridden by a stale name→id
+  mapping from an earlier quote under the same client name — an explicit
+  selection now always wins.
+- Picking a client from the search dropdown also autofills VAT ID/email
+  (previously only phone/address).
+
 ## [1.0.9] - 2026-07-19
 
 Calculator fixes: line-item SKUs sent to Morning, shipping always its own
