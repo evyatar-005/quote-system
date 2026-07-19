@@ -98,6 +98,8 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
   // quote (1 = מזומן, no surcharge). Applied on top of all products + shipping.
   const [installmentCount, setInstallmentCount] = useState(2);
   const [clientAddress, setClientAddress] = useState("");
+  const [clientVatId, setClientVatId] = useState("");
+  const [clientEmail, setClientEmail] = useState("");
   // Assigned by the server on save/send — never typed by the agent — so it's
   // unmistakably a number issued by "ממשק סוכני מכירות" (see quoteCreate in
   // src/routes/entities.js).
@@ -181,15 +183,21 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
   const shippingWithVat = shippingPreVat * vatMultiplier;          // cash, incl. VAT
   const shippingFinal = shippingWithVat * orderMultiplier;         // incl. payment surcharge
 
-  // Cash base for the whole order (products + shipping), before the surcharge.
-  const orderCashBase = total + shippingWithVat;
-  const grandTotalBeforeDocMin = orderCashBase * orderMultiplier;
-  // מחיר מינימום למסמך — רצפה על ההזמנה כולה, ללא קשר למספר המוצרים בתוכה.
+  // מחיר מינימום למסמך — רצפה על סכום המוצרים בלבד (לפני משלוח), ללא קשר
+  // למספר המוצרים בתוכה. המשלוח תמיד מתווסף מעל המינימום ולא "נבלע" בתוכו —
+  // אחרת הזמנה שהגיעה בדיוק למינימום המוצרים לא הייתה משלמת על המשלוח בכלל.
   // קאפה לא כפוף למינימום הזמנה: אם יש בהזמנה פריט קאפה (גם בהזמנה מעורבת),
   // הרצפה למסמך לא חלה — מחירי המינימום הפרטניים של שאר הפריטים ממשיכים לחול כרגיל.
   const hasKapaItem = items.some((item) => categoryOf(formDataMap[item.id]?.productType) === "kapa");
   const documentMinimumPrice = hasKapaItem ? 0 : (parseFloat(config?.document_minimum_price) || 0);
-  const grandTotal = grandTotalBeforeDocMin > 0 ? Math.max(grandTotalBeforeDocMin, documentMinimumPrice) : grandTotalBeforeDocMin;
+  const productsAfterDocMin = total > 0 ? Math.max(total, documentMinimumPrice) : total;
+
+  // Cash base for the whole order (products-after-minimum + shipping), before the surcharge.
+  const orderCashBase = productsAfterDocMin + shippingWithVat;
+  const grandTotal = orderCashBase * orderMultiplier;
+  // How much of grandTotal is the document-minimum top-up on the products
+  // alone (shipping is untouched by the minimum, so it cancels out here).
+  const docMinTopUpCash = (productsAfterDocMin - total) * orderMultiplier;
   const grandBeforeVat = grandTotal / vatMultiplier;
   const vatAmount = grandTotal - grandBeforeVat;
 
@@ -272,6 +280,22 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
       unitPrice: delivery === "shipping" ? (parseFloat(shipping) || 0) : 0,
       sku: delivery === "shipping" ? "משלוח" : "איסוף עצמי",
     });
+    // documentMinimumPrice (grandTotal) is a floor applied on top of the raw
+    // per-product prices above — without this line, Morning would only ever
+    // see the raw (below-minimum) sum and issue a document under the real
+    // charged amount. Convert the cash/incl-VAT/incl-installments shortfall
+    // back to the same pre-VAT, pre-installment-surcharge basis the other
+    // unitPrice values above are in.
+    if (docMinTopUpCash > 0.01) {
+      lines.push({
+        groupLabel: null,
+        description: "השלמה למחיר מינימום להזמנה",
+        freeText: "",
+        quantity: 1,
+        unitPrice: docMinTopUpCash / (vatMultiplier * orderMultiplier),
+        sku: null,
+      });
+    }
     return lines;
   };
 
@@ -279,6 +303,8 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
     client_name: clientName.trim(),
     client_phone: clientPhone.trim(),
     client_address: clientAddress.trim(),
+    client_vat_id: clientVatId.trim(),
+    client_email: clientEmail.trim(),
     morning_client_id: morningClientId || undefined,
     product_category: categoryOf(formDataMap[items[0]?.id]?.productType),
     payment_type: installmentCount > 1 ? `installments:${installmentCount}` : "cash",
@@ -396,6 +422,8 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
                     setClientName(c.name);
                     setClientPhone(c.phone || "");
                     setClientAddress(c.address || "");
+                    setClientVatId(c.vatId || "");
+                    setClientEmail(c.email || "");
                     setMorningClientId(c.id);
                   }}
                   placeholder="שם הלקוח — חפש לקוח קיים או הקלד חדש"
@@ -418,6 +446,27 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
                   value={documentTitle}
                   onChange={(e) => setDocumentTitle(e.target.value)}
                   placeholder="לדוגמה: שילוט חזית לחנות"
+                  className="w-full h-9 bg-transparent border-0 border-b-2 border-slate-300 px-0.5 py-1 text-base placeholder:text-slate-300 focus-visible:outline-none focus-visible:border-amber-400"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-slate-600">ח.פ / עוסק מורשה</label>
+                <input
+                  value={clientVatId}
+                  onChange={(e) => setClientVatId(e.target.value)}
+                  placeholder="512345678"
+                  dir="ltr"
+                  className="w-full h-9 bg-transparent border-0 border-b-2 border-slate-300 px-0.5 py-1 text-base placeholder:text-slate-300 focus-visible:outline-none focus-visible:border-amber-400"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-slate-600">אימייל לקוח</label>
+                <input
+                  type="email"
+                  value={clientEmail}
+                  onChange={(e) => setClientEmail(e.target.value)}
+                  placeholder="client@example.com"
+                  dir="ltr"
                   className="w-full h-9 bg-transparent border-0 border-b-2 border-slate-300 px-0.5 py-1 text-base placeholder:text-slate-300 focus-visible:outline-none focus-visible:border-amber-400"
                 />
               </div>
@@ -580,8 +629,9 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
       </div>
 
       {/* SIDEBAR — live order summary (sits on the right in RTL) */}
-      <div className="order-2 lg:order-1 w-full lg:w-72 lg:flex-shrink-0 space-y-4 lg:sticky lg:top-4">
-        <div className="bg-white border border-amber-200 rounded-2xl p-5 shadow-sm space-y-4">
+      <div className="order-2 lg:order-1 w-full lg:w-[34rem] lg:flex-shrink-0 lg:sticky lg:top-4">
+        <div className="flex flex-col lg:flex-row-reverse gap-4 items-start">
+        <div className="w-full lg:w-72 lg:flex-shrink-0 bg-white border border-amber-200 rounded-2xl p-5 shadow-sm space-y-4">
           <div className="flex items-center gap-2">
             <ShoppingCart className="w-4 h-4 text-amber-500" />
             <span className="text-base font-semibold text-amber-600">סיכום הזמנה</span>
@@ -713,7 +763,7 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
         </div>
 
         {/* Save / send */}
-        <div className="bg-white border-2 border-slate-300 rounded-2xl p-5 shadow-sm space-y-3">
+        <div className="w-full lg:w-72 lg:flex-shrink-0 bg-white border-2 border-slate-300 rounded-2xl p-5 shadow-sm space-y-3">
           <div className="flex items-center justify-between text-sm bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
             <span className="text-slate-500">מס׳ הצעת מחיר</span>
             <span className="font-semibold text-slate-700" dir="ltr">
@@ -770,6 +820,7 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
           {!isQuoteValid && (
             <p className="text-xs text-slate-400 text-center">יש להזין שם לקוח, טלפון, כתובת וכותרת מסמך, ולפחות מוצר אחד עם מחיר</p>
           )}
+        </div>
         </div>
       </div>
     </div>
