@@ -39,6 +39,7 @@ const PRODUCT_TYPES = [
   { key: "pvc_white", sku: "005-1", prefix: "לוגו בחיתוך צורני PVC", variant: "לבן" },
   { key: "pvc_black", sku: "005-2", prefix: "לוגו בחיתוך צורני PVC", variant: "שחור" },
   { key: "perspex_print", sku: "005-3", prefix: "לוגו בחיתוך צורני פרספקס", variant: "שקוף כולל הדפסה" },
+  { key: "perspex_print_back", sku: "005-9", prefix: "לוגו בחיתוך צורני פרספקס", variant: "בהדפסה אחורית" },
   { key: "perspex_black", sku: "005-4", prefix: "לוגו בחיתוך צורני פרספקס", variant: "שחור" },
   { key: "perspex_white", sku: "005-5", prefix: "לוגו בחיתוך צורני פרספקס", variant: "לבן" },
   { key: "perspex_milky", sku: "005-6", prefix: "לוגו בחיתוך צורני פרספקס", variant: "חלבי" },
