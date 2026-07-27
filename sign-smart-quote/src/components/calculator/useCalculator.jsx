@@ -12,6 +12,7 @@ const MATERIAL_COST_KEY_BY_PRODUCT_TYPE = {
   pvc_white: "pvc_white_cost_per_mm",
   pvc_black: "pvc_black_cost_per_mm",
   perspex_print: "perspex_cost_per_mm",
+  perspex_print_back: "perspex_cost_per_mm",
   perspex_black: "perspex_cost_per_mm",
   perspex_white: "perspex_cost_per_mm",
   perspex_milky: "perspex_cost_per_mm",
@@ -79,6 +80,7 @@ const PERSPEX_BOARD_MATERIAL_COST_KEY_BY_PRODUCT_TYPE = {
   perspex_board_black_glossy: "perspex_board_black_glossy_cost_per_mm",
   perspex_board_white: "perspex_board_white_cost_per_mm",
   perspex_board_milky: "perspex_board_milky_cost_per_mm",
+  perspex_board_back_print: "perspex_board_back_print_cost_per_mm",
 };
 function perspexBoardMaterialCostPerSqm(config, productType, thicknessMm) {
   const T = parseFloat(thicknessMm) || 0;
@@ -512,6 +514,7 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
 
     const tier = priceTiers.find(t => t.product_type === productType && String(t.thickness_mm) === "3");
     let sellingPricePerUnit;
+    let priceMissing = false;
     let priceRangeMin = null, priceRangeMax = null, effectivePricePerSqm = null;
     if (matchedAreaTier) {
       const startingPrice = parseFloat(matchedAreaTier.price_per_sqm) || 0;
@@ -531,7 +534,11 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
       if (enforceMinimumPrice && tier.min_price && priceFromTier < tier.min_price) priceFromTier = tier.min_price;
       sellingPricePerUnit = priceFromTier;
     } else {
+      // No matching price tier for this product/thickness — do NOT silently
+      // sell at raw cost. Surface this as an explicit pricing error instead;
+      // the UI shows it and blocks the quote until an admin sets a price.
       sellingPricePerUnit = baseCost;
+      priceMissing = true;
     }
 
     const salesAgentCommissionCost = sellingPricePerUnit * (parseFloat(config.sales_agent_commission_percent) || 0) / 100;
@@ -558,11 +565,13 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
       baseCost: round(baseCost),
       totalCostPerUnit: round(totalCostPerUnit),
       totalCostAll: round(totalCostAll + shippingCost),
-      sellingPricePerUnit: round(sellingPricePerUnit),
-      sellingPriceAll: round(sellingPriceAll),
+      priceMissing,
+      errorMessage: priceMissing ? 'לא הוגדר מחיר מכירה למוצר/עובי זה. יש להגדיר מחיר באדמין לפני יצירת הצעת מחיר.' : null,
+      sellingPricePerUnit: priceMissing ? null : round(sellingPricePerUnit),
+      sellingPriceAll: priceMissing ? null : round(sellingPriceAll),
       profitPerUnit: round(profitPerUnit),
       profitMarginPct: round(profitMarginPct),
-      priceWithVat: round(priceWithVat),
+      priceWithVat: priceMissing ? null : round(priceWithVat),
       isSticker: false,
       isKapa: false,
       productFamily: 'lokobond',
@@ -637,6 +646,7 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
 
     const tier = priceTiers.find(t => t.product_type === productType && String(t.thickness_mm) === String(thicknessMm));
     let sellingPricePerUnit;
+    let priceMissing = false;
     let priceRangeMin = null, priceRangeMax = null, effectivePricePerSqm = null;
     if (tier && tier.price_per_sqm) {
       const startingPrice = tier.price_per_sqm;
@@ -647,7 +657,11 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
       if (enforceMinimumPrice && tier.min_price && priceFromTier < tier.min_price) priceFromTier = tier.min_price;
       sellingPricePerUnit = priceFromTier;
     } else {
+      // No matching price tier for this product/thickness — do NOT silently
+      // sell at raw cost. Surface this as an explicit pricing error instead;
+      // the UI shows it and blocks the quote until an admin sets a price.
       sellingPricePerUnit = baseCost;
+      priceMissing = true;
     }
 
     const salesAgentCommissionCost = sellingPricePerUnit * (parseFloat(config.sales_agent_commission_percent) || 0) / 100;
@@ -674,14 +688,16 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
       baseCost: round(baseCost),
       totalCostPerUnit: round(totalCostPerUnit),
       totalCostAll: round(totalCostAll + shippingCost),
-      sellingPricePerUnit: round(sellingPricePerUnit),
-      sellingPriceAll: round(sellingPriceAll),
+      priceMissing,
+      errorMessage: priceMissing ? 'לא הוגדר מחיר מכירה למוצר/עובי זה. יש להגדיר מחיר באדמין לפני יצירת הצעת מחיר.' : null,
+      sellingPricePerUnit: priceMissing ? null : round(sellingPricePerUnit),
+      sellingPriceAll: priceMissing ? null : round(sellingPriceAll),
       priceRangeMin: priceRangeMin != null ? round(priceRangeMin) : null,
       priceRangeMax: priceRangeMax != null ? round(priceRangeMax) : null,
       effectivePricePerSqm: effectivePricePerSqm != null ? round(effectivePricePerSqm) : null,
       profitPerUnit: round(profitPerUnit),
       profitMarginPct: round(profitMarginPct),
-      priceWithVat: round(priceWithVat),
+      priceWithVat: priceMissing ? null : round(priceWithVat),
       isSticker: false,
       isKapa: false,
       productFamily: 'foamex',
@@ -745,6 +761,7 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
 
     const tier = priceTiers.find(t => t.product_type === productType && String(t.thickness_mm) === String(thicknessMm));
     let sellingPricePerUnit;
+    let priceMissing = false;
     let priceRangeMin = null, priceRangeMax = null, effectivePricePerSqm = null;
     if (tier && tier.price_per_sqm) {
       const startingPrice = tier.price_per_sqm;
@@ -755,7 +772,11 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
       if (enforceMinimumPrice && tier.min_price && priceFromTier < tier.min_price) priceFromTier = tier.min_price;
       sellingPricePerUnit = priceFromTier;
     } else {
+      // No matching price tier for this product/thickness — do NOT silently
+      // sell at raw cost. Surface this as an explicit pricing error instead;
+      // the UI shows it and blocks the quote until an admin sets a price.
       sellingPricePerUnit = baseCost;
+      priceMissing = true;
     }
 
     const salesAgentCommissionCost = sellingPricePerUnit * (parseFloat(config.sales_agent_commission_percent) || 0) / 100;
@@ -782,14 +803,16 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
       baseCost: round(baseCost),
       totalCostPerUnit: round(totalCostPerUnit),
       totalCostAll: round(totalCostAll + shippingCost),
-      sellingPricePerUnit: round(sellingPricePerUnit),
-      sellingPriceAll: round(sellingPriceAll),
+      priceMissing,
+      errorMessage: priceMissing ? 'לא הוגדר מחיר מכירה למוצר/עובי זה. יש להגדיר מחיר באדמין לפני יצירת הצעת מחיר.' : null,
+      sellingPricePerUnit: priceMissing ? null : round(sellingPricePerUnit),
+      sellingPriceAll: priceMissing ? null : round(sellingPriceAll),
       priceRangeMin: priceRangeMin != null ? round(priceRangeMin) : null,
       priceRangeMax: priceRangeMax != null ? round(priceRangeMax) : null,
       effectivePricePerSqm: effectivePricePerSqm != null ? round(effectivePricePerSqm) : null,
       profitPerUnit: round(profitPerUnit),
       profitMarginPct: round(profitMarginPct),
-      priceWithVat: round(priceWithVat),
+      priceWithVat: priceMissing ? null : round(priceWithVat),
       isSticker: false,
       isKapa: false,
       productFamily: 'perspexBoard',
@@ -878,6 +901,7 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
     (t) => t.product_type === productType && String(t.thickness_mm) === String(thicknessMm)
   );
   let sellingPricePerUnit;
+  let priceMissing = false;
   let paintSellingSurcharge = 0;
   let paintSurchargeCalc = '';
   if (extras.includes('paint_single') || extras.includes('paint_double')) {
@@ -914,7 +938,11 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
     if (enforceMinimumPrice && tier.min_price && priceFromTier < tier.min_price) priceFromTier = tier.min_price;
     sellingPricePerUnit = priceFromTier + paintSellingSurcharge + spacersSellingSurcharge;
   } else {
+    // No matching price tier for this product/thickness — do NOT silently
+    // sell at raw cost. Surface this as an explicit pricing error instead;
+    // the UI shows it and blocks the quote until an admin sets a price.
     sellingPricePerUnit = baseCost + paintSellingSurcharge + spacersSellingSurcharge;
+    priceMissing = true;
   }
   const salesAgentCommissionCost = sellingPricePerUnit * (parseFloat(config.sales_agent_commission_percent) || 0) / 100;
   const marketingCommissionCost = sellingPricePerUnit * (parseFloat(config.marketing_commission_percent) || 0) / 100;
@@ -940,11 +968,13 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
     baseCost: round(baseCost),
     totalCostPerUnit: round(totalCostPerUnit),
     totalCostAll: round(totalCostAll + shippingCost),
-    sellingPricePerUnit: round(sellingPricePerUnit),
-    sellingPriceAll: round(sellingPriceAll),
+    priceMissing,
+    errorMessage: priceMissing ? 'לא הוגדר מחיר מכירה למוצר/עובי זה. יש להגדיר מחיר באדמין לפני יצירת הצעת מחיר.' : null,
+    sellingPricePerUnit: priceMissing ? null : round(sellingPricePerUnit),
+    sellingPriceAll: priceMissing ? null : round(sellingPriceAll),
     profitPerUnit: round(profitPerUnit),
     profitMarginPct: round(profitMarginPct),
-    priceWithVat: round(priceWithVat),
+    priceWithVat: priceMissing ? null : round(priceWithVat),
     extrasBreakdown,
     productFamily: 'logo',
     breakdown: {

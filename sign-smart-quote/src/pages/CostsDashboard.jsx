@@ -167,7 +167,7 @@ export default function CostsDashboard() {
   }
 
   const TABS = [
-    { key: "logo", icon: BarChart3, label: "לוגו בחיתוך צורני", code: "001", form: LOGO_FORM, allowedProducts: ["pvc_white", "pvc_black", "perspex_print", "perspex_black", "perspex_white", "perspex_milky", "perspex_mirror", "perspex_metallic"] },
+    { key: "logo", icon: BarChart3, label: "לוגו בחיתוך צורני", code: "001", form: LOGO_FORM, allowedProducts: ["pvc_white", "pvc_black", "perspex_print", "perspex_print_back", "perspex_black", "perspex_white", "perspex_milky", "perspex_mirror", "perspex_metallic"] },
     { key: "sticker", icon: Tag, label: "מדבקות קיר", code: "002", form: STICKER_FORM, allowedProducts: ["vinyl_sticker", "texture_sticker"] },
     { key: "kapa", icon: Layers, label: "קאפה", code: "004", form: KAPA_FORM, allowedProducts: ["kapa"] },
     { key: "lokobond", icon: Lightbulb, label: "שילוט לוקובונד", code: "005", form: LOKOBOND_FORM, allowedProducts: ["lokobond_diecut", "lokobond_plain"] },

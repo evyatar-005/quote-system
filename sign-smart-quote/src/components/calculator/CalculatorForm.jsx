@@ -39,9 +39,11 @@ export const PRODUCT_CODES = {
   perspex_board_black_glossy: "003-3",
   perspex_board_white: "003-4",
   perspex_board_milky: "003-5",
+  perspex_board_back_print: "003-6",
   pvc_white: "005-1",
   pvc_black: "005-2",
   perspex_print: "005-3",
+  perspex_print_back: "005-9",
   perspex_black: "005-4",
   perspex_white: "005-5",
   perspex_milky: "005-6",
@@ -67,6 +69,7 @@ export const PRODUCT_NAMES = {
   pvc_white: "לוגו בחיתוך צורני PVC לבן",
   pvc_black: "לוגו בחיתוך צורני PVC שחור",
   perspex_print: "לוגו בחיתוך צורני פרספקס שקוף כולל הדפסה",
+  perspex_print_back: "לוגו בחיתוך צורני פרספקס בהדפסה אחורית",
   perspex_black: "לוגו בחיתוך צורני פרספקס שחור",
   perspex_white: "לוגו בחיתוך צורני פרספקס לבן",
   perspex_milky: "לוגו בחיתוך צורני פרספקס חלבי",
@@ -87,6 +90,7 @@ export const PRODUCT_NAMES = {
   perspex_board_black_glossy: "פרספקס שחור מבריק",
   perspex_board_white: "פרספקס לבן",
   perspex_board_milky: "פרספקס חלבי",
+  perspex_board_back_print: "פרספקס שקוף הדפסה אחורית",
 };
 
 const STICKER_TYPES = ["vinyl_sticker", "texture_sticker"];
@@ -95,7 +99,7 @@ const ROLLUP_TYPES = ["rollup_magnetic", "rollup_regular"];
 const LOKOBOND_TYPES = ["lokobond_plain", "lokobond_diecut"];
 const FOAMEX_TYPES = ["foamex_white", "foamex_black"];
 const GLASS_TYPES = ["glass_extra_clear"];
-const PERSPEX_BOARD_TYPES = ["perspex_board_clear_print", "perspex_board_black_matte", "perspex_board_black_glossy", "perspex_board_white", "perspex_board_milky"];
+const PERSPEX_BOARD_TYPES = ["perspex_board_clear_print", "perspex_board_black_matte", "perspex_board_black_glossy", "perspex_board_white", "perspex_board_milky", "perspex_board_back_print"];
 const REGIONS = ["מרכז", "דרום"];
 const THICKNESS_OPTIONS = ["3", "5", "10", "19"];
 const THICKNESS_OPTIONS_BY_CATEGORY = {
@@ -113,7 +117,7 @@ const EXTRAS_OPTIONS = [
 
 const LOGO_PRODUCTS = {
   pvc_white: 'לוגו PVC לבן', pvc_black: 'לוגו PVC שחור',
-  perspex_print: 'לוגו פרספקס שקוף כולל הדפסה', perspex_black: 'לוגו פרספקס שחור',
+  perspex_print: 'לוגו פרספקס שקוף כולל הדפסה', perspex_print_back: 'לוגו פרספקס בהדפסה אחורית', perspex_black: 'לוגו פרספקס שחור',
   perspex_white: 'לוגו פרספקס לבן', perspex_milky: 'לוגו פרספקס חלבי',
   perspex_mirror: 'לוגו צבעי מראה', perspex_metallic: 'לוגו צבעי זהב/כסף מטאלי',
 };
@@ -135,7 +139,7 @@ const CATALOG = [
   { parent: "001", label: "שילוט לוקובונד", subs: ["lokobond_plain", "lokobond_diecut"] },
   { parent: "002", label: "שילוט פיויסי", subs: ["foamex_white", "foamex_black"] },
   { parent: "003", label: "שילוט פרספקס", subs: PERSPEX_BOARD_TYPES },
-  { parent: "005", label: "לוגו בחיתוך צורני", subs: ["pvc_white", "pvc_black", "perspex_print", "perspex_black", "perspex_white", "perspex_milky", "perspex_mirror", "perspex_metallic"] },
+  { parent: "005", label: "לוגו בחיתוך צורני", subs: ["pvc_white", "pvc_black", "perspex_print", "perspex_print_back", "perspex_black", "perspex_white", "perspex_milky", "perspex_mirror", "perspex_metallic"] },
   { parent: "006", label: "מדבקות קיר", subs: ["vinyl_sticker", "texture_sticker"] },
   { parent: "008", label: "קאפה", subs: ["kapa"] },
   { parent: "009", label: "רול אפ", subs: ["rollup_magnetic", "rollup_regular"] },
@@ -212,7 +216,7 @@ export function Field({ label, width = "w-24", required = false, children }) {
   );
 }
 
-export default function CalculatorForm({ values, onChange, allowedProducts, extrasInfo, basePrice, unitPriceExVat, priceRangeMin, priceRangeMax, paymentKey = 'full', installmentCount = 2, config, kapaPriceTiers = [], rollupPriceTiers = [], glassPriceTiers = [] }) {
+export default function CalculatorForm({ values, onChange, allowedProducts, extrasInfo, basePrice, unitPriceExVat, priceRangeMin, priceRangeMax, paymentKey = 'full', installmentCount = 2, config, kapaPriceTiers = [], rollupPriceTiers = [], glassPriceTiers = [], priceMissing = false, priceErrorMessage = null }) {
   // Restrict the catalog to the products this instance is allowed to offer —
   // e.g. the קאפה test section should only ever show the קאפה category.
   const filteredCatalog = allowedProducts && allowedProducts.length
@@ -406,8 +410,8 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
   if (!values.productType) {
     return (
       <div className="flex flex-col gap-3" ref={pickerRef}>
-        <div className="flex flex-wrap items-start gap-x-4 gap-y-5">
-          <Field label='מק"ט' width="w-72">
+        <div className="flex flex-wrap items-start gap-x-3 gap-y-5">
+          <Field label='מק"ט' width="w-64">
             <div className="relative">
               <button
                 type="button"
@@ -632,13 +636,13 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
           <Field label="גובה (מ')" width="w-24">
             <div className={`${READONLY} text-slate-300`}>—</div>
           </Field>
-          <Field label="כמות" width="w-20">
+          <Field label="כמות" width="w-16">
             <div className={`${READONLY} text-slate-300`}>1</div>
           </Field>
-          <Field label="מחיר יחידה (ללא מע״מ)" width="w-28">
+          <Field label="מחיר יח' (ללא מע״מ)" width="w-24">
             <div className={`${READONLY} text-slate-300`}>—</div>
           </Field>
-          <Field label="סה״כ (ללא מע״מ)" width="w-32">
+          <Field label="סה״כ (ללא מע״מ)" width="w-28">
             <div className={`${READONLY} text-slate-300`}>—</div>
           </Field>
         </div>
@@ -733,9 +737,9 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
 
   return (
     <div className="flex flex-col gap-3" ref={formRowsRef} onKeyDown={handleEnterAdvances}>
-      {/* Main Morning-style row: מק"ט + מידות + עובי + כמות + מחיר יחידה + סה"כ, all in one row */}
-      <div className="flex flex-wrap items-start gap-x-4 gap-y-5">
-        <Field label='מק"ט' width="w-72">
+      {/* Main Morning-style row: מק"ט + מידות + עובי + כמות + מחיר יחידה + סה"כ, all in one row on wide screens; wraps instead of clipping on narrow ones (overflow-x-auto here would clip the מק"ט dropdown popover) */}
+      <div className="flex flex-wrap items-start gap-x-3 gap-y-5">
+        <Field label='מק"ט' width="w-64">
           <button
             type="button"
             onClick={() => {
@@ -796,7 +800,7 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
           </Field>
         )}
 
-        <Field label="כמות" width="w-20">
+        <Field label="כמות" width="w-16">
           <Input
             type="number" min="1"
             value={values.quantity || "1"}
@@ -806,18 +810,27 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
           />
         </Field>
 
-        <Field label="מחיר יחידה (ללא מע״מ)" width="w-28">
-          <div className={`${READONLY} font-semibold text-slate-800`}>
-            {fmt(displayUnitPriceExVat)}
+        <Field label="מחיר יח' (ללא מע״מ)" width="w-24">
+          <div className={`${READONLY} font-semibold ${priceMissing ? "border-red-400 text-red-500" : "text-slate-800"}`}>
+            {priceMissing ? "שגיאה" : fmt(displayUnitPriceExVat)}
           </div>
         </Field>
 
-        <Field label={`סה״כ${q > 1 ? ` (×${q})` : ""} (ללא מע״מ)`} width="w-32">
-          <div className={`${READONLY} border-amber-400 font-bold text-amber-700`}>
-            {fmt(totalExVat)}
+        <Field label={`סה״כ${q > 1 ? ` (×${q})` : ""} (ללא מע״מ)`} width="w-28">
+          <div className={`${READONLY} font-bold ${priceMissing ? "border-red-400 text-red-500" : "border-amber-400 text-amber-700"}`}>
+            {priceMissing ? "שגיאה" : fmt(totalExVat)}
           </div>
         </Field>
       </div>
+
+      {/* Blocking pricing error — no admin-configured price/cost for this SKU +
+          thickness combination. Never silently fall back to a raw-cost estimate. */}
+      {priceMissing && (
+        <div className="flex items-center gap-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+          <span className="font-bold">⚠ שגיאה:</span>
+          <span>{priceErrorMessage || 'לא הוגדר מחיר מכירה למוצר/עובי זה. יש להגדיר מחיר באדמין לפני יצירת הצעת מחיר.'}</span>
+        </div>
+      )}
 
       {/* Calculated area — unit (אורך×גובה) and total (× כמות) */}
       {!isFixedPrice && parseFloat(values.widthM) > 0 && parseFloat(values.heightM) > 0 && (

@@ -39,6 +39,7 @@ const PRODUCT_TYPES = [
   { key: "pvc_white", sku: "005-1", prefix: "לוגו בחיתוך צורני PVC", variant: "לבן" },
   { key: "pvc_black", sku: "005-2", prefix: "לוגו בחיתוך צורני PVC", variant: "שחור" },
   { key: "perspex_print", sku: "005-3", prefix: "לוגו בחיתוך צורני פרספקס", variant: "שקוף כולל הדפסה" },
+  { key: "perspex_print_back", sku: "005-9", prefix: "לוגו בחיתוך צורני פרספקס", variant: "בהדפסה אחורית" },
   { key: "perspex_black", sku: "005-4", prefix: "לוגו בחיתוך צורני פרספקס", variant: "שחור" },
   { key: "perspex_white", sku: "005-5", prefix: "לוגו בחיתוך צורני פרספקס", variant: "לבן" },
   { key: "perspex_milky", sku: "005-6", prefix: "לוגו בחיתוך צורני פרספקס", variant: "חלבי" },
@@ -86,6 +87,7 @@ const PERSPEX_BOARD_PRODUCT_TYPES = [
   { key: "perspex_board_black_glossy", sku: "003-3", prefix: "שילוט פרספקס", variant: "שחור מבריק" },
   { key: "perspex_board_white", sku: "003-4", prefix: "שילוט פרספקס", variant: "לבן" },
   { key: "perspex_board_milky", sku: "003-5", prefix: "שילוט פרספקס", variant: "חלבי" },
+  { key: "perspex_board_back_print", sku: "003-6", prefix: "שילוט פרספקס", variant: "שקוף הדפסה אחורית" },
 ];
 const PERSPEX_BOARD_THICKNESSES = ["3", "5", "10"];
 

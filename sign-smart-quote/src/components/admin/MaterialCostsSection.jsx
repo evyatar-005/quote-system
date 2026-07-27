@@ -40,6 +40,7 @@ const GROUPS = [
       { key: "perspex_board_black_glossy_cost_per_mm", label: 'פרספקס שחור מבריק (₪/מ"מ/מ"ר)', suffix: "₪" },
       { key: "perspex_board_white_cost_per_mm", label: 'פרספקס לבן (₪/מ"מ/מ"ר)', suffix: "₪" },
       { key: "perspex_board_milky_cost_per_mm", label: 'פרספקס חלבי (₪/מ"מ/מ"ר)', suffix: "₪" },
+      { key: "perspex_board_back_print_cost_per_mm", label: 'פרספקס שקוף הדפסה אחורית (₪/מ"מ/מ"ר)', suffix: "₪" },
     ],
   },
   {
