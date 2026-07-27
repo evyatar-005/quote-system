@@ -12,6 +12,9 @@ dist/
 backups/
 VERSION.txt
 
+# Agent-uploaded quote reference files (images/PDFs) — user content, not source.
+uploads/
+
 # Unrelated sibling projects that happen to live in this same workspace
 # folder — not part of the quote system, must never enter this repo's history.
 _archive/

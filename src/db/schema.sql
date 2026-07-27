@@ -190,6 +190,22 @@ CREATE TABLE IF NOT EXISTS signshop_quotes (
   agent_note       TEXT   -- free-text background from the agent when sending for review; manager-only, never shown on the client-facing document
 );
 
+-- Reference images/PDFs an agent attaches when saving/sending a quote (e.g. a
+-- photo of the client's wall, a PDF spec sheet) so the manager reviewing a
+-- discount request can see what the quote is actually for. The file bytes
+-- live on disk under uploads/quote-attachments/ (see src/routes/attachments.js) —
+-- only metadata is stored here.
+CREATE TABLE IF NOT EXISTS signshop_quote_attachments (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  quote_id      INTEGER NOT NULL REFERENCES signshop_quotes(id) ON DELETE CASCADE,
+  filename      TEXT NOT NULL,   -- random on-disk filename — never trust the original name as a path
+  original_name TEXT NOT NULL,
+  mime_type     TEXT NOT NULL,
+  size          INTEGER NOT NULL DEFAULT 0,
+  uploaded_by   TEXT,
+  created_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 -- In-app notifications for sales agents — e.g. "your quote was approved by the
 -- manager and is ready to issue" or "your quote was rejected". recipient_username
 -- ties back to users.username (not email — several accounts have no email set).
@@ -292,6 +308,7 @@ CREATE INDEX IF NOT EXISTS idx_notifications_recipient  ON notifications(recipie
 CREATE INDEX IF NOT EXISTS idx_sub_products_product      ON sub_products(product_id);
 CREATE INDEX IF NOT EXISTS idx_product_variants_sub      ON product_variants(sub_product_id);
 CREATE INDEX IF NOT EXISTS idx_signshop_quotes_created_by ON signshop_quotes(created_by);
+CREATE INDEX IF NOT EXISTS idx_quote_attachments_quote     ON signshop_quote_attachments(quote_id);
 CREATE INDEX IF NOT EXISTS idx_morning_documents_map_quote ON morning_documents_map(quote_id);
 CREATE INDEX IF NOT EXISTS idx_morning_sync_log_quote      ON morning_sync_log(quote_id);
 CREATE INDEX IF NOT EXISTS idx_whatsapp_send_log_quote     ON whatsapp_send_log(quote_id);

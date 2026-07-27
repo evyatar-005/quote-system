@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { X, Loader2, CheckCircle2, Save, FileText, Receipt } from "lucide-react";
+import { X, Loader2, CheckCircle2, Save, FileText, Receipt, Paperclip, Image as ImageIcon } from "lucide-react";
 import { PRODUCT_NAMES } from "@/components/calculator/CalculatorForm";
 import { base44 } from "@/api/base44Client";
 import { convertMorningDocument, getMorningHistory } from "@/api/morningClient";
@@ -48,6 +48,86 @@ const Row = ({ label, value, className = "" }) => (
     <span className="font-semibold text-white">{value}</span>
   </div>
 );
+
+// Reference images/PDFs the agent attached when saving/sending this quote —
+// e.g. a photo of the client's wall — so the manager can see what it's
+// actually for. Images are fetched as thumbnails right away (this list is
+// only ever a handful of files); PDFs stay a click-to-open row since there's
+// no cheap inline preview for them.
+function QuoteAttachments({ quoteId }) {
+  const [attachments, setAttachments] = useState([]);
+  const [thumbUrls, setThumbUrls] = useState({});
+
+  useEffect(() => {
+    if (!quoteId) return;
+    let cancelled = false;
+    base44.quotes.listAttachments(quoteId).then((rows) => {
+      if (!cancelled) setAttachments(rows);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [quoteId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const urls = [];
+    attachments.filter((a) => a.mime_type.startsWith("image/")).forEach((a) => {
+      base44.quotes.fetchAttachmentBlob(quoteId, a.id).then((blob) => {
+        if (cancelled) return;
+        const url = URL.createObjectURL(blob);
+        urls.push(url);
+        setThumbUrls((prev) => ({ ...prev, [a.id]: url }));
+      }).catch(() => {});
+    });
+    // Blob URLs are only valid for this component's lifetime — release them
+    // once the modal moves to a different quote / unmounts.
+    return () => { cancelled = true; urls.forEach((u) => URL.revokeObjectURL(u)); };
+  }, [attachments, quoteId]);
+
+  const openAttachment = async (att) => {
+    try {
+      const url = thumbUrls[att.id] || URL.createObjectURL(await base44.quotes.fetchAttachmentBlob(quoteId, att.id));
+      window.open(url, "_blank");
+    } catch {
+      toast.error("שגיאה בפתיחת הקובץ");
+    }
+  };
+
+  if (!attachments.length) return null;
+
+  return (
+    <div className="mt-1.5 space-y-1.5">
+      <p className="text-[11px] text-zinc-500 flex items-center gap-1">
+        <Paperclip className="w-3 h-3" /> קבצים מצורפים ({attachments.length})
+      </p>
+      <div className="flex flex-wrap gap-1.5">
+        {attachments.map((att) => (
+          att.mime_type.startsWith("image/") ? (
+            <button
+              key={att.id}
+              onClick={() => openAttachment(att)}
+              title={att.original_name}
+              className="w-14 h-14 rounded-md overflow-hidden border border-white/15 hover:border-[#C9A84C]/60 bg-[#16161F] shrink-0"
+            >
+              {thumbUrls[att.id]
+                ? <img src={thumbUrls[att.id]} alt={att.original_name} className="w-full h-full object-cover" />
+                : <div className="w-full h-full flex items-center justify-center"><ImageIcon className="w-4 h-4 text-zinc-600" /></div>}
+            </button>
+          ) : (
+            <button
+              key={att.id}
+              onClick={() => openAttachment(att)}
+              title={att.original_name}
+              className="flex items-center gap-1 px-2 py-1.5 rounded-md border border-white/15 hover:border-[#C9A84C]/60 bg-[#16161F] text-[11px] text-zinc-300 max-w-[9rem]"
+            >
+              <FileText className="w-3.5 h-3.5 shrink-0 text-zinc-500" />
+              <span className="truncate">{att.original_name}</span>
+            </button>
+          )
+        ))}
+      </div>
+    </div>
+  );
+}
 
 // A few product families (kapa/rollup/glass) already return rawMaterialCost as
 // a whole-line total; the rest (logo/sticker/lokobond/foamex/lightbox) return
@@ -555,6 +635,7 @@ export default function QuoteDetailsModal({ quote, onClose, onSaved }) {
                   <span className="font-semibold">הערת סוכן: </span>{quote.agent_note}
                 </p>
               )}
+              <QuoteAttachments quoteId={quote.id} />
             </div>
             <h3 className="text-[11px] font-semibold text-zinc-400 mb-1 uppercase tracking-wider px-1">פריטים</h3>
             {items.map((it, i) => {

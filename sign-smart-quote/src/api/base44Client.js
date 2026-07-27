@@ -217,6 +217,44 @@ const quotes = {
   decide(id, decision, quoteNumber) {
     return request(`/api/quotes/${id}/decision`, { method: 'POST', body: { decision, quoteNumber } });
   },
+  // Reference images/PDFs an agent attaches to a quote (e.g. a photo of the
+  // client's wall) so the manager reviewing it can see what it's actually for.
+  listAttachments(quoteId) {
+    return request(`/api/quotes/${quoteId}/attachments`);
+  },
+  // multipart upload — bypasses the shared JSON `request()` helper (needs
+  // FormData, not a JSON body), but still attaches the same Bearer token.
+  async uploadAttachments(quoteId, files) {
+    const formData = new FormData();
+    for (const f of files) formData.append('files', f);
+    const token = getToken();
+    const res = await fetch(`/api/quotes/${quoteId}/attachments`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+    if (!res.ok) {
+      let message = `Upload failed with status ${res.status}`;
+      try { const data = await res.json(); if (data?.error) message = data.error; } catch {}
+      const err = new Error(message);
+      err.status = res.status;
+      throw err;
+    }
+    return res.json();
+  },
+  deleteAttachment(quoteId, attachmentId) {
+    return request(`/api/quotes/${quoteId}/attachments/${attachmentId}`, { method: 'DELETE' });
+  },
+  // Fetched (not a plain <a href>/<img src>) because the file route needs the
+  // Bearer token, which only an authenticated fetch() call can attach.
+  async fetchAttachmentBlob(quoteId, attachmentId) {
+    const token = getToken();
+    const res = await fetch(`/api/quotes/${quoteId}/attachments/${attachmentId}/file`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new Error(`Request failed with status ${res.status}`);
+    return res.blob();
+  },
 };
 
 export const base44 = { entities, auth, adminUsers, notifications, quotes };

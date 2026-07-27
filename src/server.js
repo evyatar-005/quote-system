@@ -11,6 +11,7 @@ const registerMorning  = require('./routes/morning');
 const registerUpdate   = require('./routes/update');
 const registerGreenApi = require('./routes/greenapi');
 const registerMonday   = require('./routes/monday');
+const registerAttachments = require('./routes/attachments');
 
 const PORT    = process.env.PORT || 3000;
 const DB_PATH = path.join(__dirname, '../database.sqlite');
@@ -107,6 +108,7 @@ registerMorning(app, db, { requireAuth, requireAdmin });
 registerUpdate(app, db, { requireAuth, requireAdmin });
 registerGreenApi(app, db, { requireAuth, requireAdmin });
 registerMonday(app, db, { requireAuth, requireAdmin });
+registerAttachments(app, db, { requireAuth });
 
 // ─── Version info — read by deploy/UPDATE.ps1's post-deploy smoke check and
 // by anyone wanting to confirm which release is live without RDP access ─────
@@ -174,6 +176,7 @@ app.listen(PORT, () => {
   console.log('  GET    /api/admin/users              POST/PUT/DELETE /api/admin/users/:id');
   console.log('  GET    /api/notifications            PUT  /api/notifications/:id/read');
   console.log('  POST   /api/quotes/:id/decision      (manager approve/reject)');
+  console.log('  GET/POST /api/quotes/:id/attachments  DELETE /api/quotes/:id/attachments/:attId  (agent reference files)');
   console.log('  GET    /api/version                  (running version/commit/deployedAt)');
   console.log('  GET/PUT /api/morning/config           POST /api/morning/quotes/:id/document|convert  GET /api/morning/quotes/:id/history');
   console.log('  GET    /api/morning/clients/search    (client-search autocomplete for the quote form)');

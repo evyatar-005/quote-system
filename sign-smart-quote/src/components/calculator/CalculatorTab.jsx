@@ -121,6 +121,7 @@ export default function CalculatorTab({ config, priceTiers, stickerPriceTiers, p
             if (onFormDataChange) onFormDataChange(newForm);
           }}
           allowedProducts={allowedProducts}
+          priceTiers={priceTiers}
           kapaPriceTiers={kapaPriceTiers}
           rollupPriceTiers={rollupPriceTiers}
           glassPriceTiers={glassPriceTiers}

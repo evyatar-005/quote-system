@@ -32,6 +32,10 @@ $env:PATH   = $env:PATH + ";$nodePath;C:\Program Files\Git\cmd"
 # `Remove-Item -Recurse C:\quote-system` (like a clean reinstall) must not be
 # able to wipe this out along with the app.
 $externalBackupDir = Join-Path (Split-Path -Parent $repoRoot) "quote-system-backups"
+# Same reasoning as $externalBackupDir, for the agent-uploaded quote reference
+# files (uploads/quote-attachments/) — those are user content, gitignored, and
+# live nowhere else, so a clean reinstall must not be able to lose them either.
+$externalUploadsDir = Join-Path (Split-Path -Parent $repoRoot) "quote-system-uploads-backup"
 
 function Write-Step($msg) {
     Write-Host ""
@@ -148,6 +152,29 @@ if (-not (Test-Path $dbPath)) {
     } else {
         Write-Host "No prior backup found either - starting from a fresh, freshly-seeded database (first deploy ever?)." -ForegroundColor Yellow
     }
+}
+
+# --- 2c. Mirror agent-uploaded quote attachments (images/PDFs) to the same
+# external, outside-the-repo location — these are user content (a photo of a
+# client's wall, a spec PDF), gitignored, and exist nowhere else. Mirrored
+# BEFORE checkout (so anything uploaded since the last deploy is captured),
+# then restored back if this turns out to be a fresh clone with no uploads
+# folder of its own yet. robocopy /MIR keeps this cheap on repeat deploys —
+# only new/changed files actually get copied. ---
+Write-Step "Backing up quote attachments (uploads/quote-attachments)..."
+$uploadsDir = Join-Path $repoRoot "uploads\quote-attachments"
+New-Item -ItemType Directory -Force -Path $externalUploadsDir | Out-Null
+if (Test-Path $uploadsDir) {
+    robocopy $uploadsDir $externalUploadsDir /MIR /NFL /NDL /NJH /NJS | Out-Null
+    Write-Host "Mirrored uploads\quote-attachments to $externalUploadsDir"
+} else {
+    Write-Host "No uploads\quote-attachments folder found yet."
+}
+if (-not (Test-Path $uploadsDir) -and (Get-ChildItem $externalUploadsDir -ErrorAction SilentlyContinue)) {
+    Write-Step "No uploads folder here - restoring attachments from the external backup..."
+    New-Item -ItemType Directory -Force -Path $uploadsDir | Out-Null
+    robocopy $externalUploadsDir $uploadsDir /MIR /NFL /NDL /NJH /NJS | Out-Null
+    Write-Host "Restored uploads\quote-attachments from $externalUploadsDir"
 }
 
 # --- 3. Record the currently-running tag (for rollback) ---

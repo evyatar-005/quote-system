@@ -212,7 +212,25 @@ export function Field({ label, width = "w-24", required = false, children }) {
   );
 }
 
-export default function CalculatorForm({ values, onChange, allowedProducts, extrasInfo, basePrice, unitPriceExVat, priceRangeMin, priceRangeMax, paymentKey = 'full', installmentCount = 2, config, kapaPriceTiers = [], rollupPriceTiers = [], glassPriceTiers = [] }) {
+// Thickness options an admin never priced (no signshop_price_tiers row, or one
+// with price_per_sqm = 0) must never reach the agent — a hidden "5 מ״מ" that
+// silently prices off a raw-cost fallback would show a false, unenforced price.
+// Falls back to the full category list when priceTiers hasn't loaded yet
+// (empty array) so the dropdown isn't blanked out before data arrives.
+function availableThicknesses(category, productType, priceTiers) {
+  const all = THICKNESS_OPTIONS_BY_CATEGORY[category] || THICKNESS_OPTIONS;
+  if (!priceTiers || !priceTiers.length) return all;
+  const priced = all.filter((t) => priceTiers.some((tier) =>
+    tier.product_type === productType && String(tier.thickness_mm) === String(t) && (parseFloat(tier.price_per_sqm) || 0) > 0
+  ));
+  // A product with NO priced thickness at all (never configured in the admin
+  // price table) falls back to the full list rather than rendering an empty,
+  // broken dropdown — that's a "this SKU needs pricing" admin gap, not
+  // something a hidden option list can fix.
+  return priced.length ? priced : all;
+}
+
+export default function CalculatorForm({ values, onChange, allowedProducts, extrasInfo, basePrice, unitPriceExVat, priceRangeMin, priceRangeMax, paymentKey = 'full', installmentCount = 2, config, priceTiers = [], kapaPriceTiers = [], rollupPriceTiers = [], glassPriceTiers = [] }) {
   // Restrict the catalog to the products this instance is allowed to offer —
   // e.g. the קאפה test section should only ever show the קאפה category.
   const filteredCatalog = allowedProducts && allowedProducts.length
@@ -273,7 +291,15 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
   // dry calculator params — the description line is preserved across the change.
   const selectSub = (pt) => {
     const cat = categoryOf(pt);
-    onChange({ ...CATEGORY_DEFAULTS[cat], productType: pt, lineLabel: values.lineLabel || "" });
+    const defaults = CATEGORY_DEFAULTS[cat];
+    // If the category default thickness (e.g. logo's "5") was never priced for
+    // THIS product type, land on the first thickness that actually has a price
+    // instead of silently opening on an unpriced/hidden one.
+    const priced = availableThicknesses(cat, pt, priceTiers);
+    const thicknessMm = defaults.thicknessMm && priced.includes(defaults.thicknessMm)
+      ? defaults.thicknessMm
+      : (priced[0] ?? defaults.thicknessMm);
+    onChange({ ...defaults, thicknessMm, productType: pt, lineLabel: values.lineLabel || "" });
     setExpandedParent(null);
     setPickerOpen(false);
     setPickerSearch("");
@@ -359,6 +385,19 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
   // that isn't a sticker, lokobond, or a fixed-price kapa/rollup/glass row.
   const showElementsField = !isSticker && !isFixedPrice && category !== "lokobond";
   const showThicknessField = !isSticker && !isFixedPrice && category !== "lokobond";
+
+  // If the selected thickness stops being priced out from under the agent —
+  // priceTiers loading in after the row was already on "5", or an admin
+  // zeroing a price out mid-session — silently reselecting an unpriced
+  // thickness is never acceptable. Snap to the first priced option instead.
+  useEffect(() => {
+    if (!showThicknessField) return;
+    const priced = availableThicknesses(category, values.productType, priceTiers);
+    if (priced.length && !priced.includes(values.thicknessMm)) {
+      set('thicknessMm', priced[0]);
+    }
+  }, [showThicknessField, category, values.productType, values.thicknessMm, priceTiers]);
+
   // Agent-adjustable price range — only lokobond/foamex tiers can define an
   // agent_min_price_per_sqm floor below the starting price_per_sqm; other families
   // never populate priceRangeMin/Max, so the slider only ever renders for these two.
@@ -788,7 +827,7 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {(THICKNESS_OPTIONS_BY_CATEGORY[category] || THICKNESS_OPTIONS).map((t) => (
+                {availableThicknesses(category, values.productType, priceTiers).map((t) => (
                   <SelectItem key={t} value={t}>{t} מ"מ</SelectItem>
                 ))}
               </SelectContent>

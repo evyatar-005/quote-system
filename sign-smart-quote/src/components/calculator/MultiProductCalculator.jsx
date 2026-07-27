@@ -1,11 +1,70 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import CalculatorTab from "./CalculatorTab";
 import { PRODUCT_NAMES, PRODUCT_CODES, categoryOf, productImage } from "./CalculatorForm";
 import { base44 } from "@/api/base44Client";
 import { issueQuoteToMorning } from "@/api/morningClient";
 import ClientSearchField from "./ClientSearchField";
-import { Plus, Trash2, ShoppingCart, BarChart3, Tag, Lightbulb, Shapes, Layers, Save, Send, FileOutput, Loader2, CheckCircle2 } from "lucide-react";
+import { Plus, Trash2, ShoppingCart, BarChart3, Tag, Lightbulb, Shapes, Layers, Save, Send, FileOutput, Loader2, CheckCircle2, Paperclip, FileText, Image as ImageIcon, X } from "lucide-react";
 import { toast } from "sonner";
+
+// Reference material only (a photo of the wall, a spec PDF) — not a general
+// file drop, so kept to the types a manager can actually open at a glance.
+const ACCEPTED_ATTACHMENT_MIME = new Set([
+  "application/pdf", "image/jpeg", "image/png", "image/webp", "image/gif", "image/heic", "image/heif",
+]);
+const MAX_ATTACHMENTS = 10;
+
+// Drag-and-drop / click-to-browse picker for the "reference files" attached to
+// a quote when it's saved/sent — several files at once, held client-side as
+// plain File objects until the quote itself is created (see
+// uploadPendingAttachments in MultiProductCalculator).
+function AttachmentDropZone({ files, onFilesAdded, onRemove }) {
+  const [dragOver, setDragOver] = useState(false);
+  const inputRef = useRef(null);
+
+  return (
+    <div className="space-y-1.5">
+      <label className="text-sm font-semibold text-slate-600">קבצים מצורפים (תמונה / PDF — רקע להצעה, לא מוצג ללקוח)</label>
+      <div
+        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => { e.preventDefault(); setDragOver(false); onFilesAdded(e.dataTransfer.files); }}
+        onClick={() => inputRef.current?.click()}
+        className={`cursor-pointer rounded-lg border-2 border-dashed px-3 py-3 text-center text-xs transition-colors ${
+          dragOver ? "border-amber-400 bg-amber-50 text-amber-600" : "border-slate-300 text-slate-400 hover:border-slate-400"
+        }`}
+      >
+        <Paperclip className="w-4 h-4 mx-auto mb-1" />
+        גרור לכאן קבצים, או לחץ לבחירה (אפשר כמה יחד)
+        <input
+          ref={inputRef}
+          type="file"
+          multiple
+          accept="image/*,application/pdf"
+          className="hidden"
+          onChange={(e) => { onFilesAdded(e.target.files); e.target.value = ""; }}
+        />
+      </div>
+      {files.length > 0 && (
+        <ul className="space-y-1">
+          {files.map((f, i) => (
+            <li key={`${f.name}-${i}`} className="flex items-center justify-between gap-2 bg-slate-50 border border-slate-200 rounded-md px-2 py-1 text-xs">
+              <span className="flex items-center gap-1.5 min-w-0">
+                {f.type === "application/pdf"
+                  ? <FileText className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+                  : <ImageIcon className="w-3.5 h-3.5 shrink-0 text-slate-400" />}
+                <span className="truncate text-slate-600">{f.name}</span>
+              </span>
+              <button type="button" onClick={(e) => { e.stopPropagation(); onRemove(i); }} className="shrink-0 text-slate-400 hover:text-red-500">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 const TAB_ICONS = { logo: Shapes, sticker: Tag, lightbox: Lightbulb, kapa: Layers };
 
@@ -91,6 +150,10 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
   // Free-text background for the sales manager — visible only in the review
   // screen (QuotesHistory/QuoteDetailsModal), never on the client-facing document.
   const [agentNote, setAgentNote] = useState("");
+  // Reference images/PDFs (e.g. a photo of the client's wall) picked before the
+  // quote itself exists — held as plain File objects and only actually
+  // uploaded once save/send returns a real quote id (see uploadPendingAttachments).
+  const [attachedFiles, setAttachedFiles] = useState([]);
   // Shipping (pre-VAT) — default comes from the admin config (shipping_cost), editable per quote.
   const [shipping, setShipping] = useState(config?.shipping_cost != null ? String(config.shipping_cost) : "");
   const [delivery, setDelivery] = useState("pickup"); // אספקה — order-level: משלוח / איסוף עצמי
@@ -347,12 +410,40 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
     return () => window.removeEventListener("beforeunload", handler);
   }, [clientName, clientPhone, grandTotal, savedQuoteNumber]);
 
+  const addAttachedFiles = (fileList) => {
+    const incoming = Array.from(fileList || []).filter((f) => ACCEPTED_ATTACHMENT_MIME.has(f.type));
+    if (!incoming.length) return;
+    setAttachedFiles((prev) => {
+      const merged = [...prev, ...incoming];
+      if (merged.length > MAX_ATTACHMENTS) {
+        toast.error(`ניתן לצרף עד ${MAX_ATTACHMENTS} קבצים`);
+        return merged.slice(0, MAX_ATTACHMENTS);
+      }
+      return merged;
+    });
+  };
+  const removeAttachedFile = (index) => setAttachedFiles((prev) => prev.filter((_, i) => i !== index));
+
+  // Best-effort — a failed attachment upload must never make the agent think
+  // the whole quote (draft/send) failed, since it already saved successfully
+  // by this point. Reported as its own toast instead.
+  const uploadPendingAttachments = async (quoteId) => {
+    if (!attachedFiles.length) return;
+    try {
+      await base44.quotes.uploadAttachments(quoteId, attachedFiles);
+      setAttachedFiles([]);
+    } catch {
+      toast.error("ההצעה נשמרה, אך העלאת הקבצים המצורפים נכשלה");
+    }
+  };
+
   const handleSave = async () => {
     if (!isQuoteValid) return;
     setSaving(true);
     try {
       const created = await base44.entities.Quote.create(buildQuotePayload("draft"));
       setSavedQuoteNumber(created.quote_number);
+      await uploadPendingAttachments(created.id);
       setSaved(true);
       toast.success(`הטיוטה נשמרה בהצלחה — מס׳ ${created.quote_number}`);
       setTimeout(() => setSaved(false), 3000);
@@ -371,6 +462,7 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
     try {
       const created = await base44.entities.Quote.create(buildQuotePayload("sent"));
       setSavedQuoteNumber(created.quote_number);
+      await uploadPendingAttachments(created.id);
       setSent(true);
       toast.success(`ההצעה שוגרה לבדיקה — מס׳ ${created.quote_number}`);
       setTimeout(() => setSent(false), 3000);
@@ -783,6 +875,8 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
               className="w-full rounded-lg border border-black bg-white px-3 py-2 text-sm placeholder:text-slate-300 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-none"
             />
           </div>
+
+          <AttachmentDropZone files={attachedFiles} onFilesAdded={addAttachedFiles} onRemove={removeAttachedFile} />
 
           <button
             onClick={handleSave}
