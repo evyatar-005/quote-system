@@ -1,0 +1,28 @@
+{
+  "name": "quote-system",
+  "version": "1.0.10",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "concurrently --names \"SERVER,TUNNEL\" --prefix-colors \"cyan,yellow\" \"node src/server.js\" \"cloudflared tunnel --url http://localhost:3000\"",
+    "start:local": "node src/server.js",
+    "db:init": "node src/db/init-db.js",
+    "db:seed-signshop": "node src/db/seed-signshop.js",
+    "build-ui": "cd sign-smart-quote && npm install && npm run build",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "better-sqlite3": "^12.11.1",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "multer": "^2.1.1",
+    "pdf-parse": "^2.4.5"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.3"
+  }
+}

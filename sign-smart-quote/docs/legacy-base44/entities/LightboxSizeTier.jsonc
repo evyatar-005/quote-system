@@ -1,0 +1,43 @@
+{
+  "name": "LightboxSizeTier",
+  "type": "object",
+  "properties": {
+    "size_label": {
+      "type": "string",
+      "title": "\u05ea\u05d5\u05d5\u05d9\u05ea \u05de\u05d9\u05d3\u05d4 (\u05dc\u05de\u05e9\u05dc 40\u00d760)"
+    },
+    "width_cm": {
+      "type": "number",
+      "title": "\u05e8\u05d5\u05d7\u05d1 (\u05e1\"\u05de)"
+    },
+    "height_cm": {
+      "type": "number",
+      "title": "\u05d2\u05d5\u05d1\u05d4 (\u05e1\"\u05de)"
+    },
+    "frame_cost": {
+      "type": "number",
+      "title": "\u05e2\u05dc\u05d5\u05ea \u05de\u05e1\u05d2\u05e8\u05ea (\u20aa)"
+    },
+    "led_cost": {
+      "type": "number",
+      "title": "\u05e2\u05dc\u05d5\u05ea \u05dc\u05d3\u05d9\u05dd (\u20aa/\u05de\"\u05e8)"
+    },
+    "transformer_cost": {
+      "type": "number",
+      "title": "\u05e2\u05dc\u05d5\u05ea \u05e9\u05e0\u05d0\u05d9 (\u20aa)"
+    },
+    "selling_base_price": {
+      "type": "number",
+      "title": "\u05de\u05d7\u05d9\u05e8 \u05d1\u05e1\u05d9\u05e1 \u05de\u05db\u05d9\u05e8\u05d4 (\u20aa)"
+    },
+    "selling_price_per_sqm": {
+      "type": "number",
+      "title": "\u05ea\u05d5\u05e1\u05e4\u05ea \u05de\u05db\u05d9\u05e8\u05d4 \u05dc\u05de\"\u05e8 (\u20aa)"
+    }
+  },
+  "required": [
+    "size_label",
+    "width_cm",
+    "height_cm"
+  ]
+}
