@@ -20,6 +20,7 @@ const MIN_PRICE_FAMILY_BY_PRODUCT_TYPE = {
   foamex_white: "foamex", foamex_black: "foamex",
   perspex_board_clear_print: "perspexBoard", perspex_board_black_matte: "perspexBoard",
   perspex_board_black_glossy: "perspexBoard", perspex_board_white: "perspexBoard", perspex_board_milky: "perspexBoard",
+  perspex_board_back_print: "perspexBoard",
 };
 
 // Whether this line item's own minimum price should still be enforced now that

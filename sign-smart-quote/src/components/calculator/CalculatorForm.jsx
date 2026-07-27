@@ -39,6 +39,7 @@ export const PRODUCT_CODES = {
   perspex_board_black_glossy: "003-3",
   perspex_board_white: "003-4",
   perspex_board_milky: "003-5",
+  perspex_board_back_print: "003-6",
   pvc_white: "005-1",
   pvc_black: "005-2",
   perspex_print: "005-3",
@@ -87,6 +88,7 @@ export const PRODUCT_NAMES = {
   perspex_board_black_glossy: "פרספקס שחור מבריק",
   perspex_board_white: "פרספקס לבן",
   perspex_board_milky: "פרספקס חלבי",
+  perspex_board_back_print: "פרספקס שקוף הדפסה אחורית",
 };
 
 const STICKER_TYPES = ["vinyl_sticker", "texture_sticker"];
@@ -95,7 +97,7 @@ const ROLLUP_TYPES = ["rollup_magnetic", "rollup_regular"];
 const LOKOBOND_TYPES = ["lokobond_plain", "lokobond_diecut"];
 const FOAMEX_TYPES = ["foamex_white", "foamex_black"];
 const GLASS_TYPES = ["glass_extra_clear"];
-const PERSPEX_BOARD_TYPES = ["perspex_board_clear_print", "perspex_board_black_matte", "perspex_board_black_glossy", "perspex_board_white", "perspex_board_milky"];
+const PERSPEX_BOARD_TYPES = ["perspex_board_clear_print", "perspex_board_black_matte", "perspex_board_black_glossy", "perspex_board_white", "perspex_board_milky", "perspex_board_back_print"];
 const REGIONS = ["מרכז", "דרום"];
 const THICKNESS_OPTIONS = ["3", "5", "10", "19"];
 const THICKNESS_OPTIONS_BY_CATEGORY = {

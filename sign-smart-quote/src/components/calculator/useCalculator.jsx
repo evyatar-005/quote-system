@@ -79,6 +79,7 @@ const PERSPEX_BOARD_MATERIAL_COST_KEY_BY_PRODUCT_TYPE = {
   perspex_board_black_glossy: "perspex_board_black_glossy_cost_per_mm",
   perspex_board_white: "perspex_board_white_cost_per_mm",
   perspex_board_milky: "perspex_board_milky_cost_per_mm",
+  perspex_board_back_print: "perspex_board_back_print_cost_per_mm",
 };
 function perspexBoardMaterialCostPerSqm(config, productType, thicknessMm) {
   const T = parseFloat(thicknessMm) || 0;

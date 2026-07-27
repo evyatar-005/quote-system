@@ -86,6 +86,7 @@ const PERSPEX_BOARD_PRODUCT_TYPES = [
   { key: "perspex_board_black_glossy", sku: "003-3", prefix: "שילוט פרספקס", variant: "שחור מבריק" },
   { key: "perspex_board_white", sku: "003-4", prefix: "שילוט פרספקס", variant: "לבן" },
   { key: "perspex_board_milky", sku: "003-5", prefix: "שילוט פרספקס", variant: "חלבי" },
+  { key: "perspex_board_back_print", sku: "003-6", prefix: "שילוט פרספקס", variant: "שקוף הדפסה אחורית" },
 ];
 const PERSPEX_BOARD_THICKNESSES = ["3", "5", "10"];
 
