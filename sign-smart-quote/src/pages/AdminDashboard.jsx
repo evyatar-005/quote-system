@@ -65,6 +65,7 @@ const DEFAULT_CONFIG = {
   perspex_board_black_glossy_cost_per_mm: null,
   perspex_board_white_cost_per_mm: null,
   perspex_board_milky_cost_per_mm: null,
+  perspex_board_back_print_cost_per_mm: null,
   perspex_board_pre_print_time_minutes: null,
   perspex_board_print_time_per_sqm_minutes: null,
   perspex_board_pre_cut_time_minutes: null,
