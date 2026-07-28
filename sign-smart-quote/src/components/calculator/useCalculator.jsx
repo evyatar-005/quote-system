@@ -103,12 +103,16 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
   const isFoamex = productType === 'foamex_white' || productType === 'foamex_black';
   const isPerspexBoard = Object.prototype.hasOwnProperty.call(PERSPEX_BOARD_MATERIAL_COST_KEY_BY_PRODUCT_TYPE, productType);
   const isGlass = productType === 'glass_extra_clear';
+  // PVC carpet (013) — sold by roll width, not by thickness; the form always
+  // sends a fixed placeholder thicknessMm (just a price-tier lookup key, same
+  // as lokobond's fixed "3"), same reasoning as the lokobond exclusion below.
+  const isPvcCarpet = productType === 'pvc_carpet';
   if (!config) return null;
   // Kapa / roll-up / glass are fixed-price catalog items chosen directly (מחיר קבוע × כמות) —
   // no dimensions needed. Everything else still needs width/height (+ thickness for logo/foamex).
   // Lokobond has a fixed 3mm thickness — the form always sends it, but don't require it here.
   if (!isKapa && !isRollup && !isGlass && (!hasWidth || !hasHeight)) return null;
-  if (!isSticker && !isKapa && !isRollup && !isLokobond && !isGlass && !thicknessMm) return null;
+  if (!isSticker && !isKapa && !isRollup && !isLokobond && !isGlass && !isPvcCarpet && !thicknessMm) return null;
 
   const Q = parseInt(quantity) || 1;
   const area = (W || 0) * (H || 0);
@@ -822,6 +826,135 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
         inkCost: round(inkCost),
         materialCostPerMmPerSqm: round(materialCostPerMmPerSqm),
         thickness_mm: T,
+        totalLinearMeters: round(totalLinearMeters),
+        areaTierUnits,
+        printLaborCost: round(printLaborCost),
+        preCutLaborCost: round(preCutLaborCost),
+        cutLaborCost: round(cutLaborCost),
+        cleanLaborCost: round(cleanLaborCost),
+        packagingLaborCost: round(packagingLaborCost),
+        salesAgentCommissionCost: round(salesAgentCommissionCost),
+        marketingCommissionCost: round(marketingCommissionCost),
+      },
+    };
+  }
+
+  // --- PVC CARPET PATH (013) — sold off a fixed-width roll. An order whose
+  // width isn't an exact multiple of the roll width still needs full roll-widths
+  // laid side by side, so the material actually consumed (and its cost) is
+  // rounded up to the tiled width, not the ordered width. The customer pays the
+  // normal ₪/m² tier price for the area they ordered, PLUS a separate charge for
+  // the wasted strip — billed at cost, not retail, times an admin-configurable
+  // multiplier (so the shop isn't just eating the offcut, but isn't marking it
+  // up at full margin either).
+  if (isPvcCarpet) {
+    const materialCostPerSqm = parseFloat(config.pvc_carpet_cost_per_sqm) || 0;
+    const rollWidthM = parseFloat(config.pvc_carpet_roll_width_m) || 0;
+    const wasteMultiplier = parseFloat(config.pvc_carpet_waste_multiplier) || 1;
+
+    const rollWidthsNeeded = rollWidthM > 0 ? Math.ceil((W || 0) / rollWidthM) : 1;
+    const tiledWidthM = rollWidthM > 0 ? rollWidthsNeeded * rollWidthM : (W || 0);
+    const wasteWidthM = Math.max(0, tiledWidthM - (W || 0));
+    const wasteAreaSqm = wasteWidthM * (H || 0);
+
+    const rawMaterialBeforeWaste = materialCostPerSqm * area;
+    const wasteAmount = materialCostPerSqm * wasteAreaSqm;
+    const rawMaterialCost = rawMaterialBeforeWaste + wasteAmount;
+
+    // Labor — same shape as foamex/lokobond (prep+processing per m², pre-cut once
+    // per unit, cut+clean per linear meter, packaging per area-tier), just without
+    // a thickness split (this product has one fixed thickness) or a per-element
+    // perimeter (a carpet order is always one rectangle, not several cut shapes).
+    const printHourCost = parseFloat(config.print_hour_cost) || 0;
+    const workerHourCost = parseFloat(config.general_worker_hour_cost) || 0;
+    const areaTierUnits = Math.max(1, Math.ceil(area / 3));
+    const prePrintMinutes = (parseFloat(config.pvc_carpet_pre_print_time_minutes) || 0) * areaTierUnits;
+    const printMinutesPerSqm = parseFloat(config.pvc_carpet_print_time_per_sqm_minutes) || 0;
+    const printLaborCost = ((prePrintMinutes + printMinutesPerSqm * area) / 60) * printHourCost;
+    const packagingMinutes = (parseFloat(config.pvc_carpet_packaging_time_minutes) || 0) * areaTierUnits;
+    const packagingLaborCost = (packagingMinutes / 60) * workerHourCost;
+
+    const totalLinearMeters = 2 * ((W || 0) + (H || 0));
+    const preCutMinutes = parseFloat(config.pvc_carpet_pre_cut_time_minutes) || 0;
+    const preCutLaborCost = (preCutMinutes / 60) * printHourCost;
+    const cutMinutesPerMeter = parseFloat(config.pvc_carpet_cut_time_per_linear_meter_minutes) || 0;
+    const cutLaborCost = (cutMinutesPerMeter * totalLinearMeters / 60) * printHourCost;
+    const cleanMinutesPerMeter = parseFloat(config.pvc_carpet_clean_time_per_linear_meter_minutes) || 0;
+    const cleanLaborCost = (cleanMinutesPerMeter * totalLinearMeters / 60) * printHourCost;
+
+    const laborCost = printLaborCost + preCutLaborCost + cutLaborCost + cleanLaborCost + packagingLaborCost;
+
+    const overheadCost = (rawMaterialCost + laborCost) * overheadPct;
+    const baseCost = rawMaterialCost + laborCost + overheadCost;
+
+    const tier = priceTiers.find(t => t.product_type === productType && String(t.thickness_mm) === String(thicknessMm));
+    let sellingPricePerUnit;
+    let priceMissing = false;
+    let priceRangeMin = null, priceRangeMax = null, effectivePricePerSqm = null;
+    let wasteCharge = 0;
+    if (tier && tier.price_per_sqm) {
+      const startingPrice = tier.price_per_sqm;
+      effectivePricePerSqm = clampAgentPricePerSqm(startingPrice, tier.agent_min_price_per_sqm, customPricePerSqm);
+      priceRangeMax = startingPrice;
+      priceRangeMin = (parseFloat(tier.agent_min_price_per_sqm) || 0) > 0 ? parseFloat(tier.agent_min_price_per_sqm) : startingPrice;
+      let priceFromTier = effectivePricePerSqm * area;
+      if (enforceMinimumPrice && tier.min_price && priceFromTier < tier.min_price) priceFromTier = tier.min_price;
+      wasteCharge = wasteAmount * wasteMultiplier;
+      sellingPricePerUnit = priceFromTier + wasteCharge;
+    } else {
+      // No matching price tier for this product/thickness — do NOT silently
+      // sell at raw cost. Surface this as an explicit pricing error instead;
+      // the UI shows it and blocks the quote until an admin sets a price.
+      sellingPricePerUnit = baseCost;
+      priceMissing = true;
+    }
+
+    const salesAgentCommissionCost = sellingPricePerUnit * (parseFloat(config.sales_agent_commission_percent) || 0) / 100;
+    const marketingCommissionCost = sellingPricePerUnit * (parseFloat(config.marketing_commission_percent) || 0) / 100;
+    const totalCostPerUnit = baseCost + salesAgentCommissionCost + marketingCommissionCost;
+    const totalCostAll = totalCostPerUnit * Q;
+    const shippingCost = delivery === 'pickup' ? 0 : (parseFloat(config.shipping_cost) || 0);
+    const sellingPriceAll = sellingPricePerUnit * Q + shippingCost;
+    const profitPerUnit = sellingPricePerUnit - totalCostPerUnit;
+    const profitMarginPct = sellingPricePerUnit > 0 ? (profitPerUnit / sellingPricePerUnit) * 100 : 0;
+    const priceWithVat = sellingPriceAll * (1 + (parseFloat(config.vat_percent) || 18) / 100);
+
+    const extrasBreakdown = [];
+    if (shippingCost > 0) extrasBreakdown.push({ key: 'shipping', label: 'משלוח', cost: round(shippingCost), sellingCost: round(shippingCost), calc: `${round(shippingCost)} ₪ קבוע`, type: 'material' });
+
+    return {
+      area: round(area),
+      totalArea: round(area * Q),
+      rawMaterialCost: round(rawMaterialCost),
+      rawMaterialBeforeWaste: round(rawMaterialBeforeWaste),
+      wasteAmount: round(wasteAmount),
+      laborCost: round(laborCost),
+      overheadCost: round(overheadCost),
+      baseCost: round(baseCost),
+      totalCostPerUnit: round(totalCostPerUnit),
+      totalCostAll: round(totalCostAll + shippingCost),
+      priceMissing,
+      errorMessage: priceMissing ? 'לא הוגדר מחיר מכירה למוצר זה. יש להגדיר מחיר באדמין לפני יצירת הצעת מחיר.' : null,
+      sellingPricePerUnit: priceMissing ? null : round(sellingPricePerUnit),
+      sellingPriceAll: priceMissing ? null : round(sellingPriceAll),
+      priceRangeMin: priceRangeMin != null ? round(priceRangeMin) : null,
+      priceRangeMax: priceRangeMax != null ? round(priceRangeMax) : null,
+      effectivePricePerSqm: effectivePricePerSqm != null ? round(effectivePricePerSqm) : null,
+      profitPerUnit: round(profitPerUnit),
+      profitMarginPct: round(profitMarginPct),
+      priceWithVat: priceMissing ? null : round(priceWithVat),
+      isSticker: false,
+      isKapa: false,
+      productFamily: 'pvcCarpet',
+      extrasBreakdown,
+      breakdown: {
+        rollWidthM,
+        rollWidthsNeeded,
+        tiledWidthM: round(tiledWidthM),
+        wasteWidthM: round(wasteWidthM),
+        wasteAreaSqm: round(wasteAreaSqm),
+        wasteCharge: round(wasteCharge),
+        materialCostPerSqm,
         totalLinearMeters: round(totalLinearMeters),
         areaTierUnits,
         printLaborCost: round(printLaborCost),
