@@ -66,7 +66,7 @@ let nextId = 1;
 // sub-product is picked.
 const EMPTY_ITEM_FORM = { productType: "", widthM: "", heightM: "", quantity: "1", extras: [], lineLabel: "" };
 
-export default function MultiProductCalculator({ config, priceTiers, stickerPriceTiers, paintSurchargeTiers, kapaPriceTiers, rollupPriceTiers, lokobondAreaTiers, glassPriceTiers, defaultForm, allowedProducts, allTabs }) {
+export default function MultiProductCalculator({ config, priceTiers, stickerPriceTiers, paintSurchargeTiers, kapaPriceTiers, rollupPriceTiers, lokobondAreaTiers, glassPriceTiers, numberPriceTiers, defaultForm, allowedProducts, allTabs }) {
   const firstTabKey = allTabs?.[0]?.key;
   const [items, setItems] = useState([{ id: nextId++, tabKey: null, formData: {} }]);
   const [prices, setPrices] = useState({});
@@ -604,6 +604,7 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
                       rollupPriceTiers={rollupPriceTiers}
                       lokobondAreaTiers={lokobondAreaTiers}
                       glassPriceTiers={glassPriceTiers}
+                      numberPriceTiers={numberPriceTiers}
                       defaultForm={EMPTY_ITEM_FORM}
                       initialFormData={formDataMap[item.id]}
                       enforceMinimumPrice={getEnforceMinimumPrice(config, formDataMap[item.id], items.length)}

@@ -13,7 +13,9 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/api': 'http://localhost:3000',
+      // 3000 is taken by another project on this machine (tenderos) — the
+      // quote-system backend runs on 3010 instead, see `npm run start:local`.
+      '/api': 'http://localhost:3010',
     },
   },
 })

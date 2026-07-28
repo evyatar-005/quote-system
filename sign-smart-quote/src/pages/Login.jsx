@@ -3,6 +3,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
+import ForgotPassword from './ForgotPassword.jsx';
 
 export default function Login() {
   const { login } = useAuth();
@@ -10,6 +11,11 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+
+  if (showForgotPassword) {
+    return <ForgotPassword onBack={() => setShowForgotPassword(false)} />;
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -88,6 +94,14 @@ export default function Login() {
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'התחברות'}
           </Button>
+
+          <button
+            type="button"
+            onClick={() => setShowForgotPassword(true)}
+            className="w-full text-sm text-slate-400 hover:text-slate-600 transition-colors"
+          >
+            שכחתי סיסמה
+          </button>
         </form>
         </div>
       </div>

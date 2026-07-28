@@ -9,6 +9,7 @@ import KapaPriceTable from "./KapaPriceTable";
 import RollupPriceTable from "./RollupPriceTable";
 import LokobondAreaPriceTable from "./LokobondAreaPriceTable";
 import GlassPriceTable from "./GlassPriceTable";
+import NumberPriceTable from "./NumberPriceTable";
 import AdminCalculatorTest from "./AdminCalculatorTest";
 import LightboxCalculator from "../calculator/LightboxCalculator";
 import CollapsibleSection from "./CollapsibleSection";
@@ -68,7 +69,18 @@ const ITEMS = [
 ];
 
 // מוצרים חדשים שטרם הוגדרו — מק"ט שמור, מסכי ניהול קיימים אבל ריקים.
-const EMPTY_PRODUCT_KEYS = new Set(["004", "007", "012"]);
+const EMPTY_PRODUCT_KEYS = new Set(["004", "007"]);
+
+// מספרים בחיתוך לייזר (012) — אותם גימורי פרספקס כמו בלוגו (005), אבל
+// מתומחר לפי יחידה (ספרה) × גובה, לא לפי מ"ר — ר' NumberPriceTable.
+const NUMBER_PRODUCT_TYPES = [
+  "numbers_perspex_clear",
+  "numbers_perspex_black",
+  "numbers_perspex_white",
+  "numbers_perspex_milky",
+  "numbers_perspex_mirror",
+  "numbers_perspex_metallic",
+];
 
 const LOKOBOND_PRODUCT_TYPES = [
   { key: "lokobond_plain", sku: "001-1", prefix: "שילוט לוקובונד", variant: "ללא חיתוך צורני" },
@@ -369,6 +381,17 @@ export default function SalesPriceTable({ config, onConfigChange }) {
 
           <CollapsibleSection title="בדיקת מחשבון" defaultOpen={false}>
             <AdminCalculatorTest config={config} allowedProducts={["glass_extra_clear"]} />
+          </CollapsibleSection>
+          </div>
+        )}
+
+        {selected === "012" && (
+          <div className="mt-5 flex flex-wrap gap-3 items-start">
+          <CollapsibleSection title="טבלת מחירי מספרים בחיתוך לייזר">
+            <NumberPriceTable />
+          </CollapsibleSection>
+          <CollapsibleSection title="בדיקת מחשבון" defaultOpen={false}>
+            <AdminCalculatorTest config={config} allowedProducts={NUMBER_PRODUCT_TYPES} />
           </CollapsibleSection>
           </div>
         )}

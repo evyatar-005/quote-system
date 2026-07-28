@@ -148,6 +148,8 @@ export default function CostResults({ result, quantity, config }) {
             <Row label={`פחת (${wastePct}%)`} value={fmt(result.wasteAmount)} muted calc={`${n(result.rawMaterialBeforeWaste)} * ${wastePct}%`} />
             <Row label="סה״כ גלם כולל פחת" value={fmt(result.rawMaterialCost)} bold calc={`${n(result.rawMaterialBeforeWaste)} + ${n(result.wasteAmount)}`} />
           </>
+        ) : result.productFamily === 'numbers' ? (
+          <Row label="סה״כ גלם" value={fmt(0)} bold calc="מוצר קטלוגי במחיר קבוע לספרה — ללא מודל עלות חומר נפרד" />
         ) : (
           <>
             <Row label="לוח חומר" value={fmt(result.breakdown.boardCost)} muted calc={`${materialRate} ₪/מ"מ/מ"ר * ${result.breakdown.thickness_mm} מ"מ * ${result.area} מ"ר`} />
@@ -251,6 +253,8 @@ export default function CostResults({ result, quantity, config }) {
             <Row label="קדם דפוס + הדפסה" value={fmt(result.breakdown.printLaborCost)} muted calc={`(${n(c.glass_pre_print_time_minutes)} + ${n(c.glass_print_time_minutes)}) דק / 60 * ${printHourCost} ₪/שעה`} />
             <Row label="סה״כ עבודה" value={fmt(result.laborCost)} bold calc="קדם דפוס + הדפסה — אין חיתוך (זכוכית מגיעה חתוכה למידה)" />
           </>
+        ) : result.productFamily === 'numbers' ? (
+          <Row label="סה״כ עבודה" value={fmt(0)} bold calc="מוצר קטלוגי במחיר קבוע לספרה — ללא מודל עלות עבודה נפרד" />
         ) : (
           <>
             <Row label="הדפסה" value={fmt(result.breakdown.printLaborCost)} muted calc={`(${prePrint} + ${printPerSqm} * ${result.area} מ"ר) / 60 * ${printHourCost} ₪/שעה`} />

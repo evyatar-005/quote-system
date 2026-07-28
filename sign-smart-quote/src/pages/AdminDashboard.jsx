@@ -3,7 +3,7 @@ import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
 import { Save, Settings2, Loader2, Check } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Database, Calculator } from "lucide-react";
+import { Database, Calculator, Mail } from "lucide-react";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import { BarChart3, Menu } from "lucide-react";
@@ -30,11 +30,12 @@ import MinimumPricesSection from "../components/admin/MinimumPricesSection";
 import MorningSettingsSection from "../components/admin/MorningSettingsSection";
 import GreenApiSettingsSection from "../components/admin/GreenApiSettingsSection";
 import MondaySettingsSection from "../components/admin/MondaySettingsSection";
+import SmtpSettingsSection from "../components/admin/SmtpSettingsSection";
 import AboutSection from "../components/admin/AboutSection";
 import LogoutButton from "@/components/LogoutButton";
 import CollapsibleSection from "../components/admin/CollapsibleSection";
 import UsersManagementSection from "../components/admin/UsersManagementSection";
-import { ShieldAlert, Users, Receipt, Info, MessageCircle, LayoutGrid } from "lucide-react";
+import { ShieldAlert, Users, Receipt, Info, MessageCircle, LayoutGrid, Scissors } from "lucide-react";
 
 
 const DEFAULT_CONFIG = {
@@ -210,6 +211,12 @@ export default function AdminDashboard() {
                 היסטוריית הצעות
               </Button>
             </Link>
+            <Link to="/cutting">
+              <Button variant="outline" className="gap-2 h-10 px-4 rounded-xl">
+                <Scissors className="w-4 h-4" />
+                ניצולת לוחות
+              </Button>
+            </Link>
             <Link to="/costs">
               <Button variant="outline" className="gap-2 h-10 px-4 rounded-xl">
                 <BarChart3 className="w-4 h-4" />
@@ -241,7 +248,7 @@ export default function AdminDashboard() {
           {/* Each tab gets its own muted brand hue (from the Printela palette)
               so the four domains — pricing / costs / minimums / users — read
               as visually distinct areas, not just interchangeable tabs. */}
-          <TabsList className="grid w-full grid-cols-4 sm:grid-cols-8 max-w-6xl mb-6">
+          <TabsList className="grid w-full grid-cols-4 sm:grid-cols-9 max-w-6xl mb-6">
             <TabsTrigger value="selling-prices" className="gap-2 data-[state=active]:text-brand-gold">
               <Calculator className="w-4 h-4" /> קביעת מחירי מכירה
             </TabsTrigger>
@@ -262,6 +269,9 @@ export default function AdminDashboard() {
             </TabsTrigger>
             <TabsTrigger value="monday" className="gap-2 data-[state=active]:text-orange-600">
               <LayoutGrid className="w-4 h-4" /> Monday
+            </TabsTrigger>
+            <TabsTrigger value="smtp" className="gap-2 data-[state=active]:text-sky-600">
+              <Mail className="w-4 h-4" /> SMTP
             </TabsTrigger>
             <TabsTrigger value="about" className="gap-2 data-[state=active]:text-slate-600">
               <Info className="w-4 h-4" /> אודות
@@ -290,6 +300,10 @@ export default function AdminDashboard() {
 
           <TabsContent value="monday" className="space-y-6 mt-0">
             <MondaySettingsSection />
+          </TabsContent>
+
+          <TabsContent value="smtp" className="space-y-6 mt-0">
+            <SmtpSettingsSection />
           </TabsContent>
 
           <TabsContent value="about" className="space-y-6 mt-0">

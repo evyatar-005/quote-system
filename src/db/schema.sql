@@ -145,6 +145,18 @@ CREATE TABLE IF NOT EXISTS signshop_kapa_tiers (
   price         REAL NOT NULL DEFAULT 0
 );
 
+-- Laser-cut number/digit tiers: priced per single digit by height + perspex
+-- thickness (not per m² like the logo family) — admin adds new height/thickness
+-- rows freely from the UI, there's no fixed hardcoded list like other families.
+CREATE TABLE IF NOT EXISTS signshop_number_tiers (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  product_type   TEXT NOT NULL,   -- numbers_perspex_clear | _black | _white | _milky | _mirror | _metallic
+  height_cm      REAL NOT NULL DEFAULT 0,
+  thickness_mm   TEXT NOT NULL,
+  price_per_unit REAL NOT NULL DEFAULT 0,
+  min_price      REAL NOT NULL DEFAULT 0
+);
+
 -- Roll-up banner tiers: magnetic + regular, fixed size, quantity-discount pricing
 -- (unit 1 / unit 2 / unit 3-and-up each has its own price, no formula — set directly).
 CREATE TABLE IF NOT EXISTS signshop_rollup_tiers (
@@ -285,6 +297,34 @@ CREATE TABLE IF NOT EXISTS whatsapp_send_log (
   success             INTEGER NOT NULL,
   error_message       TEXT,
   created_at          TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Password reset tokens — only the sha256 hash of the raw token is stored, so
+-- a leaked DB file alone can't be used to forge a reset. Raw token lives only
+-- in the emailed link.
+CREATE TABLE IF NOT EXISTS password_resets (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id    INTEGER NOT NULL,
+  token_hash TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  used_at    TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_password_resets_token ON password_resets(token_hash);
+
+-- SMTP credentials for outgoing mail (password-reset links, etc.) — one row,
+-- admin-only, same shape as morning_credentials/greenapi_credentials.
+CREATE TABLE IF NOT EXISTS smtp_credentials (
+  id           INTEGER PRIMARY KEY CHECK (id = 1),
+  host         TEXT,
+  port         INTEGER DEFAULT 587,
+  secure       INTEGER DEFAULT 0,
+  username     TEXT,
+  password     TEXT,
+  from_email   TEXT,
+  from_name    TEXT,
+  app_base_url TEXT,
+  updated_at   TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
 -- SQLite doesn't auto-index FK-like columns — these are all looked up by value.

@@ -168,3 +168,49 @@ html {
     @apply bg-background text-foreground font-heebo font-semibold;
   }
 }
+
+/* Cut-list print/PDF mode. Everything here is gated behind `body.print-cutlist`
+   (added only by usePrintMode.js) so QuoteDocument.jsx's existing bare
+   window.print() call is completely unaffected. */
+@media print {
+  body.print-cutlist * {
+    visibility: hidden !important;
+  }
+  body.print-cutlist .cutlist-print-root,
+  body.print-cutlist .cutlist-print-root * {
+    visibility: visible !important;
+  }
+  body.print-cutlist .cutlist-no-print,
+  body.print-cutlist .cutlist-no-print * {
+    visibility: hidden !important;
+  }
+
+  body.print-cutlist .cutlist-print-root {
+    position: absolute;
+    top: 0;
+    inset-inline-start: 0;
+    width: 100%;
+  }
+
+  body.print-cutlist .cutlist-sheet-card {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    break-after: page;
+    page-break-after: always;
+  }
+  body.print-cutlist .cutlist-sheet-card:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+
+  body.print-cutlist,
+  body.print-cutlist * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
+
+@page {
+  size: A4 landscape;
+  margin: 10mm;
+}

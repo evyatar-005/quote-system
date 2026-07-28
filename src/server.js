@@ -11,6 +11,7 @@ const registerMorning  = require('./routes/morning');
 const registerUpdate   = require('./routes/update');
 const registerGreenApi = require('./routes/greenapi');
 const registerMonday   = require('./routes/monday');
+const registerSmtp     = require('./routes/smtp');
 
 const PORT    = process.env.PORT || 3000;
 const DB_PATH = path.join(__dirname, '../database.sqlite');
@@ -107,6 +108,7 @@ registerMorning(app, db, { requireAuth, requireAdmin });
 registerUpdate(app, db, { requireAuth, requireAdmin });
 registerGreenApi(app, db, { requireAuth, requireAdmin });
 registerMonday(app, db, { requireAuth, requireAdmin });
+registerSmtp(app, db, { requireAuth, requireAdmin });
 
 // ─── Version info — read by deploy/UPDATE.ps1's post-deploy smoke check and
 // by anyone wanting to confirm which release is live without RDP access ─────
@@ -170,7 +172,7 @@ app.listen(PORT, () => {
   console.log('  POST   /api/auth/logout              PUT  /api/auth/change-password');
   console.log('  GET/POST/PUT/DELETE /api/entities/:name   (Quote, PriceTier, StickerPriceTier, PaintSurchargeTier,');
   console.log('                                              LightboxSizeTier, LightboxSellingPrice, KapaPriceTier,');
-  console.log('                                              RollupPriceTier, LokobondAreaTier, GlassPriceTier, PricingConfig, User)');
+  console.log('                                              RollupPriceTier, LokobondAreaTier, GlassPriceTier, NumberPriceTier, PricingConfig, User)');
   console.log('  GET    /api/admin/users              POST/PUT/DELETE /api/admin/users/:id');
   console.log('  GET    /api/notifications            PUT  /api/notifications/:id/read');
   console.log('  POST   /api/quotes/:id/decision      (manager approve/reject)');
@@ -180,6 +182,8 @@ app.listen(PORT, () => {
   console.log('  GET    /api/admin/check-update        POST /api/admin/update');
   console.log('  GET/PUT /api/greenapi/config          (WhatsApp auto-send credentials)');
   console.log('  GET/PUT /api/monday/config            GET /api/monday/boards|boards/:id/groups');
+  console.log('  POST   /api/auth/forgot-password      POST /api/auth/reset-password');
+  console.log('  GET/PUT /api/smtp/config               POST /api/smtp/test');
 });
 
 // ─── Removed (2026-07-07 pre-launch cleanup) ─────────────────────────────────
