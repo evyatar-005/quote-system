@@ -305,13 +305,24 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
   const selectSub = (pt) => {
     const cat = categoryOf(pt);
     const defaults = CATEGORY_DEFAULTS[cat];
-    // If the category default thickness (e.g. logo's "5") was never priced for
-    // THIS product type, land on the first thickness that actually has a price
-    // instead of silently opening on an unpriced/hidden one.
-    const priced = availableThicknesses(cat, pt, priceTiers);
-    const thicknessMm = defaults.thicknessMm && priced.includes(defaults.thicknessMm)
-      ? defaults.thicknessMm
-      : (priced[0] ?? defaults.thicknessMm);
+    // "Smart" thickness re-selection only applies to families that actually
+    // HAVE a thickness dropdown (logo/foamex/perspexBoard — see
+    // THICKNESS_OPTIONS_BY_CATEGORY). Everything else (lokobond, pvcCarpet,
+    // kapa...) has a fixed thicknessMm that's just an internal price-tier
+    // lookup key, never shown/changed by the agent — availableThicknesses()
+    // has no real option list for those and would fall back to the generic
+    // logo list (3/5/10/19), silently overwriting a fixed default like
+    // pvcCarpet's "2" with an unrelated, unpriced thickness.
+    let thicknessMm = defaults.thicknessMm;
+    if (THICKNESS_OPTIONS_BY_CATEGORY[cat]) {
+      // If the category default thickness (e.g. logo's "5") was never priced
+      // for THIS product type, land on the first thickness that actually has
+      // a price instead of silently opening on an unpriced/hidden one.
+      const priced = availableThicknesses(cat, pt, priceTiers);
+      thicknessMm = defaults.thicknessMm && priced.includes(defaults.thicknessMm)
+        ? defaults.thicknessMm
+        : (priced[0] ?? defaults.thicknessMm);
+    }
     onChange({ ...defaults, thicknessMm, productType: pt, lineLabel: values.lineLabel || "" });
     setExpandedParent(null);
     setPickerOpen(false);
@@ -421,7 +432,7 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
   // of popping in only once dimensions are typed (which read as a cheap,
   // jumpy UI). `hasPriceRange` is the "real numbers are in" version used to
   // decide whether to render the live slider vs. a same-height placeholder.
-  const isPriceRangeFamily = category === "lokobond" || category === "foamex" || category === "perspexBoard";
+  const isPriceRangeFamily = category === "lokobond" || category === "foamex" || category === "perspexBoard" || category === "pvcCarpet";
   const hasPriceRange = isPriceRangeFamily && priceRangeMin != null && priceRangeMax != null && priceRangeMin < priceRangeMax;
 
   const q = parseInt(values.quantity) || 1;

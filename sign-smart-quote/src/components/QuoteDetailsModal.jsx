@@ -326,6 +326,10 @@ function CostBreakdown({ result, livePrice, liveCost }) {
         {result.breakdown?.stickerWasteAmount != null && <MiniRow label="פחת מדבקה" value={fmt(result.breakdown.stickerWasteAmount)} />}
         {result.rawMaterialBeforeWaste != null && <MiniRow label="לפני פחת" value={fmt(result.rawMaterialBeforeWaste)} />}
         {result.wasteAmount != null && <MiniRow label="פחת (חומר)" value={fmt(result.wasteAmount)} />}
+        {/* שטיח פיויסי בלבד — פחת הגליל מתורגם לחיוב נפרד ללקוח (עלות פחת ×
+            מכפיל שהוגדר באדמין), לא רק נספג כעלות פנימית. חשוב שהמנהל יראה
+            את הסכום הזה בנפרד — הוא חלק מהמחיר שהלקוח משלם, לא רק עלות. */}
+        {result.breakdown?.wasteCharge > 0 && <MiniRow label="חיוב פחת מהלקוח" value={fmt(result.breakdown.wasteCharge)} />}
         {result.rawMaterialCost != null && <CardTotalRow label="סה״כ חומרים" value={fmt(result.rawMaterialCost)} />}
       </CostCard>
 

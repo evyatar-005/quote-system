@@ -34,7 +34,7 @@ import AboutSection from "../components/admin/AboutSection";
 import LogoutButton from "@/components/LogoutButton";
 import CollapsibleSection from "../components/admin/CollapsibleSection";
 import UsersManagementSection from "../components/admin/UsersManagementSection";
-import { ShieldAlert, Users, Receipt, Info, MessageCircle, LayoutGrid } from "lucide-react";
+import { ShieldAlert, Users, Receipt, Info, MessageCircle, LayoutGrid, Scissors } from "lucide-react";
 
 
 const DEFAULT_CONFIG = {
@@ -208,6 +208,12 @@ export default function AdminDashboard() {
             <Link to="/quotes">
               <Button variant="outline" className="gap-2 h-10 px-4 rounded-xl">
                 היסטוריית הצעות
+              </Button>
+            </Link>
+            <Link to="/cutting">
+              <Button variant="outline" className="gap-2 h-10 px-4 rounded-xl">
+                <Scissors className="w-4 h-4" />
+                ניצולת לוחות
               </Button>
             </Link>
             <Link to="/costs">

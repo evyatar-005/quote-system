@@ -117,7 +117,8 @@ export default function CostResults({ result, quantity, config }) {
           </>
         ) : result.productFamily === 'pvcCarpet' ? (
           <>
-            <Row label="חומר גלם (שטח שהוזמן)" value={fmt(result.rawMaterialBeforeWaste)} muted calc={`${n(result.breakdown.materialCostPerSqm)} ₪/מ"ר * ${n(result.area)} מ"ר`} />
+            <Row label="חומר גלם (שטח שהוזמן)" value={fmt(result.breakdown.materialCostPerSqm * result.area)} muted calc={`${n(result.breakdown.materialCostPerSqm)} ₪/מ"ר * ${n(result.area)} מ"ר`} />
+            <Row label="דיו" value={fmt(result.breakdown.inkCost)} muted calc={`${n(c.ink_cost)} ₪/מ"ר * ${n(result.area)} מ"ר`} />
             <Row
               label={`פחת גליל (${result.breakdown.rollWidthsNeeded} × ${n(result.breakdown.rollWidthM)} מ' = ${n(result.breakdown.tiledWidthM)} מ' רוחב בפועל)`}
               value={fmt(result.wasteAmount)}

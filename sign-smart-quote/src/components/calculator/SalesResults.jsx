@@ -117,7 +117,17 @@ export default function SalesResults({ result, quantity, config }) {
           bold
           calc={q > 1 ? `₪${fmtN(baseSellingPrice)} ליחידה × ${q} = ${fmtN(baseSellingPrice * q)}` : baseSellingPriceCalc}
         />
-        <Row label="מחיר תוספות" value={fmt(addonsPrice * subMult)} muted={!addonsPrice} yellow={addonsPrice > 0} calc={activeAddons.length ? activeAddons.join(' + ') : 'ללא תוספות'} />
+        {/* Label names the actual addon(s) instead of a generic "תוספות" whenever
+            there's exactly one kind active — e.g. pvc carpet's waste charge
+            should read "חיוב פחת", not an unlabeled catch-all, so it's obvious
+            at a glance why the price is above the plain מ"ר rate. */}
+        <Row
+          label={activeAddons.length === 1 ? activeAddons[0] : "מחיר תוספות"}
+          value={fmt(addonsPrice * subMult)}
+          muted={!addonsPrice}
+          yellow={addonsPrice > 0}
+          calc={activeAddons.length ? activeAddons.join(' + ') : 'ללא תוספות'}
+        />
         <Row label="מחיר כללי" value={fmt(baseSellingPrice * q + addonsPrice * subMult)} highlight bold calc={q > 1 ? `₪${fmtN(totalSellingPrice)} ליחידה × ${q}` : "מחיר מכירה + מחיר תוספות"} />
         <Row label="רווח" value={fmt(result.profitPerUnit * q)} muted calc={q > 1 ? `₪${fmtN(result.profitPerUnit)} ליחידה × ${q}` : "מחיר מכירה - עלות כוללת"} />
         <Row label="אחוז רווח גולמי" value={fmtN(grossMarginPct, "%")} bold calc="(מחיר כללי - עלות גלם) ÷ מחיר כללי — חומרי גלם בלבד" />

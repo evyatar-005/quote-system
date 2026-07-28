@@ -889,7 +889,12 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
     const wasteWidthM = Math.max(0, tiledWidthM - (W || 0));
     const wasteAreaSqm = wasteWidthM * (H || 0);
 
-    const rawMaterialBeforeWaste = materialCostPerSqm * area;
+    // Ink is a flat ₪/m² cost shared by every printed family (config.ink_cost) —
+    // pvc carpet is printed too (see printLaborCost below), so it needs the
+    // same material line every other printed family has. Charged on the
+    // ordered area only, not the wasted roll offcut — nothing is printed there.
+    const inkCost = (parseFloat(config.ink_cost) || 0) * area;
+    const rawMaterialBeforeWaste = materialCostPerSqm * area + inkCost;
     const wasteAmount = materialCostPerSqm * wasteAreaSqm;
     const rawMaterialCost = rawMaterialBeforeWaste + wasteAmount;
 
@@ -986,6 +991,7 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
         wasteWidthM: round(wasteWidthM),
         wasteAreaSqm: round(wasteAreaSqm),
         wasteCharge: round(wasteCharge),
+        inkCost: round(inkCost),
         materialCostPerSqm,
         totalLinearMeters: round(totalLinearMeters),
         areaTierUnits,
