@@ -53,13 +53,18 @@ export default function SalesResults({ result, quantity, config }) {
   // addons total so "מחיר כללי" never double-counts what's already inside sellingPricePerUnit.
   const bakedInAddons = (result.paintSellingSurcharge || 0) + (result.spacersSellingSurcharge || 0);
   const shelvesSellingPrice = result.isKapa ? ((result.extrasBreakdown || []).find(ex => ex.key === 'shelves')?.sellingCost || 0) : 0;
-  const baseSellingPrice = result.sellingPricePerUnit - bakedInAddons;
-  const addonsPrice = bakedInAddons + shelvesSellingPrice;
+  // PVC carpet folds a waste charge (cost of the offcut × admin multiplier) into
+  // sellingPricePerUnit — pulled back out here so it shows as its own addon line
+  // instead of silently disappearing into "מחיר מכירה", same treatment as kapa's shelves.
+  const pvcCarpetWasteCharge = result.productFamily === 'pvcCarpet' ? (result.breakdown?.wasteCharge || 0) : 0;
+  const baseSellingPrice = result.sellingPricePerUnit - bakedInAddons - pvcCarpetWasteCharge;
+  const addonsPrice = bakedInAddons + shelvesSellingPrice + pvcCarpetWasteCharge;
   const totalSellingPrice = baseSellingPrice + addonsPrice;
   const activeAddons = [
     result.paintSellingSurcharge > 0 && 'צביעה',
     result.spacersSellingSurcharge > 0 && 'ספייסרים',
     shelvesSellingPrice > 0 && 'מדפים',
+    pvcCarpetWasteCharge > 0 && 'חיוב פחת',
   ].filter(Boolean);
 
   // Gross profit/margin — material cost only, vs. the full price incl. addons
@@ -79,6 +84,8 @@ export default function SalesResults({ result, quantity, config }) {
     ? (result.breakdown.matchedAreaTierPricePerSqm != null
         ? `מדרגת שטח (מ-${result.breakdown.matchedAreaTierAreaFrom} מ"ר): ${result.breakdown.matchedAreaTierPricePerSqm} ₪/מ"ר × ${result.area} מ"ר`
         : `${result.breakdown.flatTierPricePerSqm ?? "?"} ₪/מ"ר × ${result.area} מ"ר (מינימום ${result.breakdown.flatTierMinPrice ?? 0} ₪)`)
+    : result.productFamily === 'pvcCarpet'
+    ? `${result.effectivePricePerSqm ?? "?"} ₪/מ"ר × ${result.area} מ"ר (מחיר גליל בפועל, ללא חיוב פחת)`
     : "מחיר בסיס, ללא תוספות";
 
   return (

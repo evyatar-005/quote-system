@@ -55,6 +55,7 @@ export const PRODUCT_CODES = {
   rollup_magnetic: "009-1",
   rollup_regular: "009-2",
   glass_extra_clear: "010",
+  pvc_carpet: "013",
 };
 
 // Product image for a given productType, resolved via its מק"ט's parent code
@@ -91,6 +92,7 @@ export const PRODUCT_NAMES = {
   perspex_board_white: "פרספקס לבן",
   perspex_board_milky: "פרספקס חלבי",
   perspex_board_back_print: "פרספקס שקוף הדפסה אחורית",
+  pvc_carpet: "שטיח פיויסי",
 };
 
 const STICKER_TYPES = ["vinyl_sticker", "texture_sticker"];
@@ -99,6 +101,7 @@ const ROLLUP_TYPES = ["rollup_magnetic", "rollup_regular"];
 const LOKOBOND_TYPES = ["lokobond_plain", "lokobond_diecut"];
 const FOAMEX_TYPES = ["foamex_white", "foamex_black"];
 const GLASS_TYPES = ["glass_extra_clear"];
+const PVC_CARPET_TYPES = ["pvc_carpet"];
 const PERSPEX_BOARD_TYPES = ["perspex_board_clear_print", "perspex_board_black_matte", "perspex_board_black_glossy", "perspex_board_white", "perspex_board_milky", "perspex_board_back_print"];
 const REGIONS = ["מרכז", "דרום"];
 const THICKNESS_OPTIONS = ["3", "5", "10", "19"];
@@ -144,6 +147,7 @@ const CATALOG = [
   { parent: "008", label: "קאפה", subs: ["kapa"] },
   { parent: "009", label: "רול אפ", subs: ["rollup_magnetic", "rollup_regular"] },
   { parent: "010", label: "זכוכית אקסטרה קליר", subs: ["glass_extra_clear"] },
+  { parent: "013", label: "שטיח פיויסי", subs: ["pvc_carpet"] },
 ];
 
 // One muted brand hue per product family (Printela palette) — every category
@@ -180,6 +184,10 @@ const CATEGORY_DEFAULTS = {
   // Glass is a fixed-price catalog row (like kapa/rollup) — no thickness/dimensions.
   glass:    { quantity: "1", extras: [] },
   perspexBoard: { widthM: "", heightM: "", thicknessMm: "3", quantity: "1", elements: "", extras: [] },
+  // PVC carpet is sold off a fixed-width roll, not by thickness — the fixed
+  // thicknessMm below is just a price-tier lookup key (same reasoning as
+  // lokobond's fixed "3"), never shown as a dropdown, never used in the cost math.
+  pvcCarpet: { widthM: "", heightM: "", thicknessMm: "2", quantity: "1", extras: [] },
 };
 
 export function categoryOf(pt) {
@@ -190,6 +198,7 @@ export function categoryOf(pt) {
   if (LOKOBOND_TYPES.includes(pt)) return "lokobond";
   if (FOAMEX_TYPES.includes(pt)) return "foamex";
   if (GLASS_TYPES.includes(pt)) return "glass";
+  if (PVC_CARPET_TYPES.includes(pt)) return "pvcCarpet";
   return "logo";
 }
 
@@ -360,9 +369,11 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
   const isLogo = category === "logo";
   const isSticker = STICKER_TYPES.includes(values.productType);
   // Elements (for מ"א calc) apply to logo + foamex — anything with real dimensions
-  // that isn't a sticker, lokobond, or a fixed-price kapa/rollup/glass row.
-  const showElementsField = !isSticker && !isFixedPrice && category !== "lokobond";
-  const showThicknessField = !isSticker && !isFixedPrice && category !== "lokobond";
+  // that isn't a sticker, lokobond, PVC carpet, or a fixed-price kapa/rollup/glass row.
+  const showElementsField = !isSticker && !isFixedPrice && category !== "lokobond" && category !== "pvcCarpet";
+  // PVC carpet has one fixed thickness (like lokobond) — no dropdown, the
+  // engine only uses thicknessMm as an internal price-tier lookup key.
+  const showThicknessField = !isSticker && !isFixedPrice && category !== "lokobond" && category !== "pvcCarpet";
   // Agent-adjustable price range — only lokobond/foamex tiers can define an
   // agent_min_price_per_sqm floor below the starting price_per_sqm; other families
   // never populate priceRangeMin/Max, so the slider only ever renders for these two.

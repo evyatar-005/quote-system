@@ -114,6 +114,17 @@ export default function CostResults({ result, quantity, config }) {
             <Row label={`פחת (${wastePct}%)`} value={fmt(result.wasteAmount)} muted calc={`${n(result.rawMaterialBeforeWaste)} * ${wastePct}%`} />
             <Row label="סה״כ גלם כולל פחת" value={fmt(result.rawMaterialCost)} bold calc={`${n(result.rawMaterialBeforeWaste)} + ${n(result.wasteAmount)}`} />
           </>
+        ) : result.productFamily === 'pvcCarpet' ? (
+          <>
+            <Row label="חומר גלם (שטח שהוזמן)" value={fmt(result.rawMaterialBeforeWaste)} muted calc={`${n(result.breakdown.materialCostPerSqm)} ₪/מ"ר * ${n(result.area)} מ"ר`} />
+            <Row
+              label={`פחת גליל (${result.breakdown.rollWidthsNeeded} × ${n(result.breakdown.rollWidthM)} מ' = ${n(result.breakdown.tiledWidthM)} מ' רוחב בפועל)`}
+              value={fmt(result.wasteAmount)}
+              muted
+              calc={`רוחב פחת ${n(result.breakdown.wasteWidthM)} מ' * גובה * ${n(result.breakdown.materialCostPerSqm)} ₪/מ"ר = ${n(result.breakdown.wasteAreaSqm)} מ"ר`}
+            />
+            <Row label="סה״כ גלם כולל פחת" value={fmt(result.rawMaterialCost)} bold calc={`${n(result.rawMaterialBeforeWaste)} + ${n(result.wasteAmount)}`} />
+          </>
         ) : result.productFamily === 'rollup' ? (
           <>
             <Row
@@ -221,6 +232,20 @@ export default function CostResults({ result, quantity, config }) {
           </>
         ) : result.isRollup ? (
           <Row label="סה״כ עבודה" value={fmt(result.laborCost)} bold calc="מוצר קטלוגי במחיר קבוע — ללא עלות עבודה נפרדת" />
+        ) : result.productFamily === 'pvcCarpet' ? (
+          <>
+            <Row label="הכנה ועיבוד" value={fmt(result.breakdown.printLaborCost)} muted calc={`הכנה × ${result.breakdown.areaTierUnits} מדרגות (כל 3 מ"ר) + עיבוד למ"ר`} />
+            <Row label="קדם חיתוך" value={fmt(result.breakdown.preCutLaborCost)} muted calc={`${n(c.pvc_carpet_pre_cut_time_minutes)} דק / 60 * ${printHourCost} ₪/שעה`} />
+            <Row
+              label={`חיתוך (${n(result.breakdown.totalLinearMeters)} מ"א)`}
+              value={fmt(result.breakdown.cutLaborCost)}
+              muted
+              calc={`${n(c.pvc_carpet_cut_time_per_linear_meter_minutes)} דק/מ"א * ${n(result.breakdown.totalLinearMeters)} מ"א / 60 * ${printHourCost} ₪/שעה`}
+            />
+            <Row label="ניקוי" value={fmt(result.breakdown.cleanLaborCost)} muted />
+            <Row label="אריזה" value={fmt(result.breakdown.packagingLaborCost)} muted calc={`× ${result.breakdown.areaTierUnits} מדרגות (כל 3 מ"ר)`} />
+            <Row label="סה״כ עבודה" value={fmt(result.laborCost)} bold calc="הכנה ועיבוד + קדם חיתוך + חיתוך + ניקוי + אריזה" />
+          </>
         ) : result.productFamily === 'glass' ? (
           <>
             <Row label="קדם דפוס + הדפסה" value={fmt(result.breakdown.printLaborCost)} muted calc={`(${n(c.glass_pre_print_time_minutes)} + ${n(c.glass_print_time_minutes)}) דק / 60 * ${printHourCost} ₪/שעה`} />

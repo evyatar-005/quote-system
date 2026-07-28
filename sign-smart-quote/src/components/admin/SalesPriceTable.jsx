@@ -64,6 +64,7 @@ const ITEMS = [
   { key: "010", sku: "010", label: "זכוכית אקסטרה קליר", badgeClass: "bg-sky-100 text-sky-700", ringClass: "border-sky-400/60 bg-sky-50 shadow-sky-100", image: glass009 },
   { key: "011", sku: "011", label: "ארגז מואר", badgeClass: "bg-amber-100 text-amber-700", ringClass: "border-amber-400/60 bg-amber-50 shadow-amber-100", image: lightbox003 },
   { key: "012", sku: "012", label: "חיתוך מספרים בלייזר", badgeClass: "bg-orange-100 text-orange-700", ringClass: "border-orange-400/60 bg-orange-50 shadow-orange-100", image: null },
+  { key: "013", sku: "013", label: "שטיח פיויסי", badgeClass: "bg-fuchsia-100 text-fuchsia-700", ringClass: "border-fuchsia-400/60 bg-fuchsia-50 shadow-fuchsia-100", image: null },
 ];
 
 // מוצרים חדשים שטרם הוגדרו — מק"ט שמור, מסכי ניהול קיימים אבל ריקים.
@@ -90,6 +91,11 @@ const PERSPEX_BOARD_PRODUCT_TYPES = [
   { key: "perspex_board_back_print", sku: "003-6", prefix: "שילוט פרספקס", variant: "שקוף הדפסה אחורית" },
 ];
 const PERSPEX_BOARD_THICKNESSES = ["3", "5", "10"];
+
+const PVC_CARPET_PRODUCT_TYPES = [
+  { key: "pvc_carpet", sku: "013", prefix: "שטיח פיויסי", variant: "" },
+];
+const PVC_CARPET_THICKNESSES = ["2"];
 
 // מסך ריק זמני למוצר שטרם הוגדר — שומר את המקום ברשימה ובממשק, בלי לחבר
 // עדיין למנוע החישוב. יוחלף בלשוניות אמיתיות (זמני ייצור + מחירים) כשיבנה המוצר.
@@ -218,6 +224,24 @@ export default function SalesPriceTable({ config, onConfigChange }) {
           </CollapsibleSection>
           <CollapsibleSection title="בדיקת מחשבון" defaultOpen={false}>
             <AdminCalculatorTest config={config} allowedProducts={["perspex_board_clear_print", "perspex_board_black_matte", "perspex_board_black_glossy", "perspex_board_white", "perspex_board_milky"]} />
+          </CollapsibleSection>
+          </div>
+        )}
+
+        {selected === "013" && (
+          <div className="mt-5 flex flex-wrap gap-3 items-start">
+          <CollapsibleSection title="טבלת מחירי שטיח פיויסי">
+            <PriceTierGrid
+              productTypes={PVC_CARPET_PRODUCT_TYPES}
+              thicknesses={PVC_CARPET_THICKNESSES}
+              baseCostFn={engineBaseCostFn}
+              config={config}
+              saveLabel="שמור מחירי שטיח פיויסי"
+              enablePriceRange
+            />
+          </CollapsibleSection>
+          <CollapsibleSection title="בדיקת מחשבון" defaultOpen={false}>
+            <AdminCalculatorTest config={config} allowedProducts={["pvc_carpet"]} />
           </CollapsibleSection>
           </div>
         )}

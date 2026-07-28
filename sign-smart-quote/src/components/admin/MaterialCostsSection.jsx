@@ -80,6 +80,14 @@ const GROUPS = [
     ],
   },
   {
+    title: "שטיח פיויסי",
+    fields: [
+      { key: "pvc_carpet_cost_per_sqm", label: 'עלות חומר (₪/מ"ר)', suffix: "₪" },
+      { key: "pvc_carpet_roll_width_m", label: "רוחב גליל (מ׳)", suffix: 'מ׳' },
+      { key: "pvc_carpet_waste_multiplier", label: "מכפיל חיוב פחת ללקוח", suffix: "×" },
+    ],
+  },
+  {
     title: "קאפה",
     fields: [
       { key: "kapa_sheet_cost_122x244", label: 'עלות קאפה 1.22/2.44 (₪/יריעה)', suffix: "₪" },

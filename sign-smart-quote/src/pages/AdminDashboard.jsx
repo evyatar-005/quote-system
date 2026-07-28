@@ -18,6 +18,7 @@ import KapaTimeCostsSection from "../components/admin/KapaTimeCostsSection";
 import LokobondTimeCostsSection from "../components/admin/LokobondTimeCostsSection";
 import FoamexTimeCostsSection from "../components/admin/FoamexTimeCostsSection";
 import PerspexBoardTimeCostsSection from "../components/admin/PerspexBoardTimeCostsSection";
+import PvcCarpetTimeCostsSection from "../components/admin/PvcCarpetTimeCostsSection";
 import RollupTimeCostsSection from "../components/admin/RollupTimeCostsSection";
 import GlassTimeCostsSection from "../components/admin/GlassTimeCostsSection";
 import OverheadSection from "../components/admin/OverheadSection";
@@ -312,6 +313,7 @@ export default function AdminDashboard() {
             <LokobondTimeCostsSection config={config} onChange={handleFieldChange} />
             <FoamexTimeCostsSection config={config} onChange={handleFieldChange} />
             <PerspexBoardTimeCostsSection config={config} onChange={handleFieldChange} />
+            <PvcCarpetTimeCostsSection config={config} onChange={handleFieldChange} />
             <RollupTimeCostsSection config={config} onChange={handleFieldChange} />
             <GlassTimeCostsSection config={config} onChange={handleFieldChange} />
             <hr className="border-t-2 border-slate-900" />
