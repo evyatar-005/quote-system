@@ -13,7 +13,10 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/api': 'http://localhost:3000',
+      // Points at the LOCAL DEV backend (see deploy notes) — the production
+      // server on this same machine already occupies :3000, so local dev
+      // always runs the backend on :3001 instead.
+      '/api': 'http://localhost:3001',
     },
   },
 })

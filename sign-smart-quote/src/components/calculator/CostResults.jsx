@@ -76,6 +76,7 @@ export default function CostResults({ result, quantity, config }) {
         {result.isKapa ? (
           <>
             <Row label="לוח קאפה" value={fmt(result.breakdown.kapaSheetCost)} muted calc={`${kapaSheetRate} ₪ ליחידה (מידה ${result.breakdown.kapaSheetIsSmall ? "קטנה 122×244" : "גדולה 150×300"})`} />
+            <Row label="דיו" value={fmt(result.breakdown.inkCost)} muted calc={`${n(c.ink_cost)} ₪/מ"ר * ${n(result.breakdown.kapaSheetIsSmall ? 1.22 * 2.44 : 1.5 * 3.0)} מ"ר (גיליון) * ${quantity} יח'`} />
             <Row label={`פחת (${wastePct}%)`} value={fmt(result.wasteAmount)} muted />
             {(() => {
               const shelvesEx = (result.extrasBreakdown || []).find(ex => ex.key === 'shelves');
@@ -125,7 +126,8 @@ export default function CostResults({ result, quantity, config }) {
                 : `${n(result.breakdown.paperCostPerSqm)} ₪/מ"ר * ${n(result.totalArea)} מ"ר`}
             />
             <Row label="מתקן" value={fmt(result.breakdown.standCost)} muted />
-            <Row label="לפני פחת" value={fmt(result.rawMaterialBeforeWaste)} muted calc="נייר + מתקן" />
+            <Row label="דיו" value={fmt(result.breakdown.inkCost)} muted calc={`${n(c.ink_cost)} ₪/מ"ר * ${n(result.totalArea)} מ"ר`} />
+            <Row label="לפני פחת" value={fmt(result.rawMaterialBeforeWaste)} muted calc="נייר + מתקן + דיו" />
             <Row label={`פחת (${wastePct}%)`} value={fmt(result.wasteAmount)} muted calc={`${n(result.rawMaterialBeforeWaste)} * ${wastePct}%`} />
             <Row label="סה״כ גלם כולל פחת" value={fmt(result.rawMaterialCost)} bold calc={`${n(result.rawMaterialBeforeWaste)} + ${n(result.wasteAmount)}`} />
           </>
@@ -133,7 +135,8 @@ export default function CostResults({ result, quantity, config }) {
           <>
             <Row label="גיליון זכוכית" value={fmt(result.breakdown.sheetCost)} muted />
             <Row label="ספייסרים" value={fmt(result.breakdown.spacersCost)} muted calc={`4 × ${n(c.spacers_cost)} ₪/יחידה`} />
-            <Row label="לפני פחת" value={fmt(result.rawMaterialBeforeWaste)} muted calc="גיליון + ספייסרים" />
+            <Row label="דיו" value={fmt(result.breakdown.inkCost)} muted calc={`${n(c.ink_cost)} ₪/מ"ר * ${n(result.totalArea)} מ"ר`} />
+            <Row label="לפני פחת" value={fmt(result.rawMaterialBeforeWaste)} muted calc="גיליון + ספייסרים + דיו" />
             <Row label={`פחת (${wastePct}%)`} value={fmt(result.wasteAmount)} muted calc={`${n(result.rawMaterialBeforeWaste)} * ${wastePct}%`} />
             <Row label="סה״כ גלם כולל פחת" value={fmt(result.rawMaterialCost)} bold calc={`${n(result.rawMaterialBeforeWaste)} + ${n(result.wasteAmount)}`} />
           </>

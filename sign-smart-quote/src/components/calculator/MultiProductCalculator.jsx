@@ -381,6 +381,7 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
         widthM: formDataMap[item.id]?.widthM,
         heightM: formDataMap[item.id]?.heightM,
         thicknessMm: formDataMap[item.id]?.thicknessMm,
+        quantity: formDataMap[item.id]?.quantity,
         result: formDataMap[item.id]?.result,
         extraRows: formDataMap[item.id]?.extraRows,
       })),

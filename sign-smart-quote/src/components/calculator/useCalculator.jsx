@@ -124,10 +124,24 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
     }
     if (!tier) return null;
 
+    // Kapa is a fixed-size catalog row (chosen by tier, not by width/height
+    // entry) — the generic `area`/`totalArea` fields are always 0 for it
+    // otherwise, which breaks any per-m² metric (cost/m², price/m²) a manager
+    // wants to see. The tier's own nominal size is the real physical size of
+    // the product being sold, so it's used here for that purpose.
+    const kapaArea = (parseFloat(tier.max_width_m) || 0) * (parseFloat(tier.max_height_m) || 0);
     const sheetIsSmall = Number(tier.max_width_m) <= 1.22 + 0.01 && Number(tier.max_height_m) <= 2.44 + 0.01;
     const sheetCost = sheetIsSmall ? (parseFloat(config.kapa_sheet_cost_122x244) || 0) : (parseFloat(config.kapa_sheet_cost_150x300) || 0);
+    // Kapa is a fixed-size catalog row (chosen by tier, not by width/height
+    // entry) — the generic `area` above is always 0 here. Ink is charged per
+    // the actual raw sheet used to cut it from (same sheet that sheetCost is
+    // priced on), not the cut piece's final size.
+    const kapaSheetArea = sheetIsSmall ? 1.22 * 2.44 : 1.5 * 3.0;
+    // Ink is a flat ₪/m² cost shared by every printed family (config.ink_cost) —
+    // kapa is printed too, so it needs the same line every other family has.
+    const inkCost = (parseFloat(config.ink_cost) || 0) * kapaSheetArea * Q;
     const wastePct = (parseFloat(config.raw_material_waste_percent) || 0) / 100;
-    const rawMaterialBeforeWaste = sheetCost * Q;
+    const rawMaterialBeforeWaste = sheetCost * Q + inkCost;
     const wasteAmount = rawMaterialBeforeWaste * wastePct;
     const rawMaterialCost = rawMaterialBeforeWaste + wasteAmount;
 
@@ -173,8 +187,8 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
     if (shelvesCostReal > 0 || shelvesSellingPrice > 0) extrasBreakdown.push({ key: 'shelves', label: 'מדפים', cost: round(shelvesCostReal), sellingCost: round(shelvesSellingPrice), calc: `${standardShelves || 0} סטנדרטים + ${customShelves || 0} בעיצוב אישי`, type: 'material' });
 
     return {
-      area: round(area),
-      totalArea: round(area * Q),
+      area: round(kapaArea),
+      totalArea: round(kapaArea * Q),
       kapaSku: tier.sku,
       kapaDescription: tier.description,
       rawMaterialCost: round(rawMaterialCost),
@@ -196,6 +210,13 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
       productFamily: 'kapa',
       breakdown: {
         kapaSheetCost: round(sheetCost * Q),
+        inkCost: round(inkCost),
+        // The tier's own nominal size — kapa has no agent-entered width/height
+        // (it's chosen by tier, not measured), so this is the only place the
+        // product's physical size is recorded at all. It's an upper bound
+        // ("up to" the tier's max size), not an exact cut measurement.
+        kapaWidthM: parseFloat(tier.max_width_m) || 0,
+        kapaHeightM: parseFloat(tier.max_height_m) || 0,
         kapaSheetIsSmall: sheetIsSmall,
         kapaPrePrintLaborCost: round(prePrintLaborCost),
         kapaPrintLaborCost: round(printLaborCost),
@@ -229,7 +250,11 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
     // strip surface) by default, so the paper area is doubled for this family only.
     const paperAreaMultiplier = isMagnetic ? 2 : 1;
     const standCost = parseFloat(tier.stand_cost) || 0;
-    const rawMaterialBeforeWaste = (paperCostPerSqm * rollupArea * paperAreaMultiplier + standCost) * Q;
+    // Ink is a flat ₪/m² cost shared by every printed family (config.ink_cost) —
+    // printed once (the front face), so unlike paper it never doubles for the
+    // magnetic backing.
+    const inkCost = (parseFloat(config.ink_cost) || 0) * rollupArea * Q;
+    const rawMaterialBeforeWaste = (paperCostPerSqm * rollupArea * paperAreaMultiplier + standCost) * Q + inkCost;
     const wastePct = (parseFloat(config.raw_material_waste_percent) || 0) / 100;
     const wasteAmount = rawMaterialBeforeWaste * wastePct;
     const rawMaterialCost = rawMaterialBeforeWaste + wasteAmount;
@@ -278,6 +303,7 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
       breakdown: {
         paperCostPerSqm: round(paperCostPerSqm),
         paperCost: round(paperCostPerSqm * rollupArea * paperAreaMultiplier * Q),
+        inkCost: round(inkCost),
         paperAreaMultiplier,
         standCost: round(standCost * Q),
         salesAgentCommissionCost: round(salesAgentCommissionCost),
@@ -297,7 +323,12 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
 
     const sheetCost = parseFloat(tier.cost_price) || 0;
     const spacersCost = 4 * (parseFloat(config.spacers_cost) || 0);
-    const rawMaterialBeforeWaste = (sheetCost + spacersCost) * Q;
+    const glassArea = (parseFloat(tier.width_cm) || 0) * (parseFloat(tier.height_cm) || 0) / 10000;
+    // Ink is a flat ₪/m² cost shared by every printed family (config.ink_cost) —
+    // glass is printed too (see printLaborCost below), so it needs the same
+    // material line every other printed family has.
+    const inkCost = (parseFloat(config.ink_cost) || 0) * glassArea * Q;
+    const rawMaterialBeforeWaste = (sheetCost + spacersCost) * Q + inkCost;
     const wastePct = (parseFloat(config.raw_material_waste_percent) || 0) / 100;
     const wasteAmount = rawMaterialBeforeWaste * wastePct;
     const rawMaterialCost = rawMaterialBeforeWaste + wasteAmount;
@@ -346,6 +377,7 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
       breakdown: {
         sheetCost: round(sheetCost * Q),
         spacersCost: round(spacersCost * Q),
+        inkCost: round(inkCost),
         printLaborCost: round(printLaborCost),
         salesAgentCommissionCost: round(salesAgentCommissionCost),
         marketingCommissionCost: round(marketingCommissionCost),

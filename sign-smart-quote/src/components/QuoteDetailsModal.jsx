@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { X, Loader2, CheckCircle2, Save, FileText, Receipt, Paperclip, Image as ImageIcon } from "lucide-react";
 import { PRODUCT_NAMES } from "@/components/calculator/CalculatorForm";
 import { base44 } from "@/api/base44Client";
@@ -11,10 +11,17 @@ const fmt = (val) =>
     ? `₪ ${Number(val).toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
     : "—";
 
-// "200×100 מ׳" (or null for fixed-price catalog rows — kapa/rollup/glass never
-// have widthM/heightM, only a chosen tier) — saved on the item at quote time.
+// "200×100 מ׳" for agent-measured products, or "עד 1.2×2.4 מ׳" for kapa (a
+// fixed-tier catalog row with no agent-entered width/height — the tier's own
+// nominal size is the only physical size on record, and it's an upper bound,
+// not an exact cut measurement, hence "עד"). null if neither is available
+// (rollup/glass — no dims shown for those yet).
 function dimsLabel(it) {
-  return it?.widthM && it?.heightM ? `${it.widthM}×${it.heightM} מ׳` : null;
+  if (it?.widthM && it?.heightM) return `${it.widthM}×${it.heightM} מ׳`;
+  const kw = it?.result?.breakdown?.kapaWidthM;
+  const kh = it?.result?.breakdown?.kapaHeightM;
+  if (kw && kh) return `עד ${kw}×${kh} מ׳`;
+  return null;
 }
 
 const PAYMENT_LABELS = {
@@ -233,10 +240,37 @@ const PRICING_MODE_LABELS = {
 // Compact label/value pair — a fraction of <Row>'s footprint, so a whole
 // section's numbers fit in one narrow grid column instead of spanning the
 // full width of the (now much wider) detail panel for a single line.
+// Sized a step up from the original (text-xs → text-sm, more row padding) —
+// the cost/commission/summary cards are now the main content of this area
+// (the old עלות/רווח/% tiles above them were removed), so they get the space.
 const MiniRow = ({ label, value }) => (
-  <div className="flex justify-between items-baseline gap-2 py-0.5 text-xs">
+  <div className="flex justify-between items-baseline gap-2 py-1 text-sm">
     <span className="text-zinc-400 truncate">{label}</span>
     <span className="font-semibold text-zinc-100 shrink-0">{value}</span>
+  </div>
+);
+
+// Same shape as MiniRow but visually emphasized — used for the headline
+// numbers inside the "סיכום" card (סך הכל עלות / רווח / רווח באחוזים) so they
+// read at a glance instead of blending into the rest of the summary's rows.
+const EmphasizedRow = ({ label, value, color = "gold" }) => {
+  const textClass = color === "green" ? "text-emerald-400" : "text-[#C9A84C]";
+  const labelOpacity = color === "green" ? "" : "/80";
+  return (
+    <div className="flex justify-between items-baseline gap-2 py-1.5 text-base">
+      <span className={`${textClass}${labelOpacity} font-semibold truncate`}>{label}</span>
+      <span className={`font-bold ${textClass} text-lg shrink-0`}>{value}</span>
+    </div>
+  );
+};
+
+// The "total" row inside a חומרי גלם / עלויות עבודה ותקורה / עמלות card —
+// boxed as its own small gold sub-card instead of just another list row, so
+// the one number that summarizes the whole card stands out immediately.
+const CardTotalRow = ({ label, value }) => (
+  <div className="flex justify-between items-baseline gap-2 mt-1.5 px-2.5 py-1.5 rounded-md bg-[#C9A84C]/15 border border-[#C9A84C]/30">
+    <span className="text-xs font-semibold text-[#C9A84C]">{label}</span>
+    <span className="text-sm font-bold text-[#C9A84C] shrink-0">{value}</span>
   </div>
 );
 
@@ -247,8 +281,8 @@ function CostCard({ title, children, highlight = false }) {
   const rows = Array.isArray(children) ? children.filter(Boolean) : [children].filter(Boolean);
   if (rows.length === 0) return null;
   return (
-    <div className={highlight ? "bg-gradient-to-br from-[#C9A84C]/15 to-transparent border border-[#C9A84C]/30 rounded-lg p-3" : "bg-[#0C0C12] border border-white/10 rounded-lg p-3"}>
-      <h5 className={`text-[11px] font-semibold mb-1.5 uppercase tracking-wider ${highlight ? "text-[#C9A84C]" : "text-zinc-400"}`}>{title}</h5>
+    <div className={highlight ? "bg-gradient-to-br from-[#C9A84C]/15 to-transparent border border-[#C9A84C]/30 rounded-lg p-4" : "bg-[#0C0C12] border border-white/10 rounded-lg p-4"}>
+      <h5 className={`text-xs font-semibold mb-2 uppercase tracking-wider ${highlight ? "text-[#C9A84C]" : "text-zinc-400"}`}>{title}</h5>
       <div className="divide-y divide-white/5">{rows}</div>
     </div>
   );
@@ -259,7 +293,13 @@ function CostCard({ title, children, highlight = false }) {
 // ותקורה / עמלות) instead of one long single-column list, so the much wider
 // detail panel is actually used instead of leaving most of it empty.
 // Purely presentational; the money math above never reads from here.
-function CostBreakdown({ result }) {
+// livePrice/liveCost override the saved result's own totals for the "עלות
+// למ״ר"/"מחיר ללקוח למ״ר" split below — pass the manager's LIVE, discount-
+// adjusted price/cost (selectedPricing) for the item currently open so those
+// two numbers react immediately to a discount instead of showing the
+// as-saved price forever. Omit (extra-size rows, which have no discount of
+// their own) to fall back to the result's own as-saved totals.
+function CostBreakdown({ result, livePrice, liveCost }) {
   if (!result) return null;
   return (
     <>
@@ -278,9 +318,15 @@ function CostBreakdown({ result }) {
         {result.ledCost != null && <MiniRow label="לדים" value={fmt(result.ledCost)} />}
         {result.transformerCost != null && <MiniRow label="שנאי" value={fmt(result.transformerCost)} />}
         {result.perspexFrontCost != null && <MiniRow label="פרספקס חזית" value={fmt(result.perspexFrontCost)} />}
+        {/* קאפה/מדבקה — הועברו לכאן מהכרטיסים הנפרדים "פירוט קאפה"/"פירוט
+            מדבקה" שהיו קודם: אלה עלויות חומר גלם לכל דבר, לא קטגוריה משלהן. */}
+        {result.breakdown?.kapaSheetCost != null && <MiniRow label="לוח קאפה" value={fmt(result.breakdown.kapaSheetCost)} />}
+        {result.breakdown?.stickerMaterialCost != null && <MiniRow label="חומר מדבקה" value={fmt(result.breakdown.stickerMaterialCost)} />}
+        {result.breakdown?.stickerInkCost != null && <MiniRow label="דיו מדבקה" value={fmt(result.breakdown.stickerInkCost)} />}
+        {result.breakdown?.stickerWasteAmount != null && <MiniRow label="פחת מדבקה" value={fmt(result.breakdown.stickerWasteAmount)} />}
         {result.rawMaterialBeforeWaste != null && <MiniRow label="לפני פחת" value={fmt(result.rawMaterialBeforeWaste)} />}
         {result.wasteAmount != null && <MiniRow label="פחת (חומר)" value={fmt(result.wasteAmount)} />}
-        {result.rawMaterialCost != null && <MiniRow label="סה״כ חומרים" value={fmt(result.rawMaterialCost)} />}
+        {result.rawMaterialCost != null && <CardTotalRow label="סה״כ חומרים" value={fmt(result.rawMaterialCost)} />}
       </CostCard>
 
       <CostCard title="עלויות עבודה ותקורה">
@@ -292,37 +338,64 @@ function CostBreakdown({ result }) {
         {result.breakdown?.cleanLaborCost != null && <MiniRow label="ניקוי" value={fmt(result.breakdown.cleanLaborCost)} />}
         {result.breakdown?.packagingLaborCost != null && <MiniRow label="אריזה" value={fmt(result.breakdown.packagingLaborCost)} />}
         {result.breakdown?.paintRoomCost != null && <MiniRow label="חדר צביעה" value={fmt(result.breakdown.paintRoomCost)} />}
+        {/* קאפה/מדבקה — ראו הערה מקבילה למעלה; אלה עלויות עבודה/התקנה. */}
+        {result.breakdown?.kapaPrePrintLaborCost != null && <MiniRow label="קדם דפוס (קאפה)" value={fmt(result.breakdown.kapaPrePrintLaborCost)} />}
+        {result.breakdown?.kapaPrintLaborCost != null && <MiniRow label="הדפסה (קאפה)" value={fmt(result.breakdown.kapaPrintLaborCost)} />}
+        {result.breakdown?.kapaPreCutLaborCost != null && <MiniRow label="קדם חיתוך (קאפה)" value={fmt(result.breakdown.kapaPreCutLaborCost)} />}
+        {result.breakdown?.kapaCncCutLaborCost != null && <MiniRow label="חיתוך CNC (סומא)" value={fmt(result.breakdown.kapaCncCutLaborCost)} />}
+        {result.breakdown?.kapaPackagingLaborCost != null && <MiniRow label="אריזה (קאפה)" value={fmt(result.breakdown.kapaPackagingLaborCost)} />}
+        {result.breakdown?.stickerPrintLaborCost != null && <MiniRow label="הדפסה (מדבקה)" value={fmt(result.breakdown.stickerPrintLaborCost)} />}
+        {result.breakdown?.stickerCutLaborCost != null && <MiniRow label="חיתוך (מדבקה)" value={fmt(result.breakdown.stickerCutLaborCost)} />}
+        {result.breakdown?.stickerInstallCost != null && <MiniRow label="עלות התקנה (בפועל)" value={fmt(result.breakdown.stickerInstallCost)} />}
+        {result.breakdown?.installationCost != null && <MiniRow label="מחיר התקנה (ללקוח)" value={fmt(result.breakdown.installationCost)} />}
         {result.laborCost != null && <MiniRow label="סה״כ עבודה" value={fmt(result.laborCost)} />}
         {result.overheadCost != null && <MiniRow label="תקורה תפעולית" value={fmt(result.overheadCost)} />}
+        {(result.laborCost != null || result.overheadCost != null) && (
+          <CardTotalRow label="סה״כ עבודה לאחר תקורה" value={fmt((result.laborCost || 0) + (result.overheadCost || 0))} />
+        )}
       </CostCard>
 
-      <CostCard title="עמלות">
-        {result.breakdown?.salesAgentCommissionCost != null && <MiniRow label="עמלת סוכן מכירות" value={fmt(result.breakdown.salesAgentCommissionCost)} />}
-        {result.breakdown?.marketingCommissionCost != null && <MiniRow label="עמלת שיווק" value={fmt(result.breakdown.marketingCommissionCost)} />}
-      </CostCard>
-
-      {result.isSticker && (
-        <CostCard title="פירוט מדבקה">
-          {result.breakdown?.stickerMaterialCost != null && <MiniRow label="חומר מדבקה" value={fmt(result.breakdown.stickerMaterialCost)} />}
-          {result.breakdown?.stickerInkCost != null && <MiniRow label="דיו מדבקה" value={fmt(result.breakdown.stickerInkCost)} />}
-          {result.breakdown?.stickerWasteAmount != null && <MiniRow label="פחת מדבקה" value={fmt(result.breakdown.stickerWasteAmount)} />}
-          {result.breakdown?.stickerPrintLaborCost != null && <MiniRow label="הדפסה מדבקה" value={fmt(result.breakdown.stickerPrintLaborCost)} />}
-          {result.breakdown?.stickerCutLaborCost != null && <MiniRow label="חיתוך מדבקה" value={fmt(result.breakdown.stickerCutLaborCost)} />}
-          {result.breakdown?.stickerInstallCost != null && <MiniRow label="עלות התקנה (בפועל)" value={fmt(result.breakdown.stickerInstallCost)} />}
-          {result.breakdown?.installationCost != null && <MiniRow label="מחיר התקנה (ללקוח)" value={fmt(result.breakdown.installationCost)} />}
-        </CostCard>
-      )}
-
-      {result.isKapa && (
-        <CostCard title="פירוט קאפה">
-          {result.breakdown?.kapaSheetCost != null && <MiniRow label="לוח קאפה" value={fmt(result.breakdown.kapaSheetCost)} />}
-          {result.breakdown?.kapaPrePrintLaborCost != null && <MiniRow label="קדם דפוס" value={fmt(result.breakdown.kapaPrePrintLaborCost)} />}
-          {result.breakdown?.kapaPrintLaborCost != null && <MiniRow label="הדפסה" value={fmt(result.breakdown.kapaPrintLaborCost)} />}
-          {result.breakdown?.kapaPreCutLaborCost != null && <MiniRow label="קדם חיתוך" value={fmt(result.breakdown.kapaPreCutLaborCost)} />}
-          {result.breakdown?.kapaCncCutLaborCost != null && <MiniRow label="חיתוך CNC (סומא)" value={fmt(result.breakdown.kapaCncCutLaborCost)} />}
-          {result.breakdown?.kapaPackagingLaborCost != null && <MiniRow label="אריזה" value={fmt(result.breakdown.kapaPackagingLaborCost)} />}
-        </CostCard>
-      )}
+      {(() => {
+        // Every family now carries a real totalArea (kapa uses its tier's
+        // nominal size — see useCalculator.jsx) — this only stays null for a
+        // family that genuinely has no physical size concept at all.
+        const area = result.totalArea;
+        const hasArea = area != null && area > 0;
+        // liveCost/livePrice (the manager's current, discount/pricing-mode-
+        // adjusted numbers) win when provided; otherwise fall back to this
+        // item's own as-saved totals (e.g. for extra-size rows, which aren't
+        // individually discountable).
+        const costAll = liveCost ?? result.totalCostAll ?? result.totalCostPerUnit ?? 0;
+        const priceAll = livePrice ?? result.sellingPriceAll ?? 0;
+        const costPerSqm = hasArea ? costAll / area : null;
+        const pricePerSqm = hasArea ? priceAll / area : null;
+        const commissionTotal = (result.breakdown?.salesAgentCommissionCost || 0) + (result.breakdown?.marketingCommissionCost || 0);
+        const commissionRows = [
+          result.breakdown?.salesAgentCommissionCost != null && <MiniRow key="agent" label="עמלת סוכן מכירות" value={fmt(result.breakdown.salesAgentCommissionCost)} />,
+          result.breakdown?.marketingCommissionCost != null && <MiniRow key="marketing" label="עמלת שיווק" value={fmt(result.breakdown.marketingCommissionCost)} />,
+        ].filter(Boolean);
+        if (!commissionRows.length && !hasArea) return null;
+        return (
+          <CostCard title="עמלות">
+            <div className="divide-y divide-white/5">
+              <div className="space-y-0.5 pb-1.5">
+                {commissionRows}
+                {commissionRows.length > 0 && <CardTotalRow label="סך הכל עמלות" value={fmt(commissionTotal)} />}
+              </div>
+              <div className="space-y-0.5 pt-1.5">
+                {hasArea ? (
+                  <>
+                    <MiniRow label='עלות למ״ר' value={fmt(costPerSqm)} />
+                    <MiniRow label='מחיר ללקוח למ״ר' value={fmt(pricePerSqm)} />
+                  </>
+                ) : (
+                  <p className="text-xs text-zinc-500">מוצר קטלוגי — ללא מ״ר</p>
+                )}
+              </div>
+            </div>
+          </CostCard>
+        );
+      })()}
 
       {result.extrasBreakdown?.length > 0 && (
         <CostCard title="תוספות">
@@ -447,6 +520,112 @@ const DiscountInput = ({ discount, onChange }) => (
     />
   </div>
 );
+
+const CompactField = ({ label, value, onChange, suffix, max }) => (
+  <div>
+    <label className="text-[10px] text-zinc-500 block mb-0.5 truncate">{label}</label>
+    <div className="relative">
+      <input
+        type="number"
+        min="0"
+        max={max}
+        step="0.01"
+        dir="ltr"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="0"
+        className="h-8 w-full rounded-md border border-white/25 bg-[#16161F] pr-2 pl-6 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none"
+      />
+      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-zinc-500 pointer-events-none">{suffix}</span>
+    </div>
+  </div>
+);
+
+const round2 = (n) => Math.round(n * 100) / 100;
+
+// The ₪/מ״ר field needs its own local text buffer — it's DERIVED from
+// `discount` (converted back to a price on every render), and without a
+// buffer the input value gets recomputed out from under the user on every
+// keystroke (rounding making "45" render back as "44.99", or a price ABOVE
+// the original snapping to "" and back to the original number — see below).
+// `itemKey` (pass the item's index) forces a fresh buffer when the agent
+// switches to a different item, so stale text never leaks across items.
+function PricePerSqmField({ discount, onChange, area, originalPrice, itemKey }) {
+  const derivedPrice = discount.type === "amount" && discount.value
+    ? (originalPrice - (parseFloat(discount.value) || 0)) / area
+    : discount.type === "percent" && discount.value
+    ? (originalPrice * (1 - (parseFloat(discount.value) || 0) / 100)) / area
+    : originalPrice / area;
+
+  const [text, setText] = useState(() => String(round2(derivedPrice)));
+  const lastKey = useRef(itemKey);
+  const lastPushed = useRef(text);
+
+  // Re-sync the buffer from the derived price only when it changed for a
+  // reason OTHER than this field's own last edit — switching items, or the
+  // ₪/% discount fields being edited instead. Comparing against lastPushed
+  // (not just "did derivedPrice change") is what stops our OWN edit from
+  // immediately overwriting itself once the parent re-renders.
+  useEffect(() => {
+    const switchedItem = lastKey.current !== itemKey;
+    const derivedStr = String(round2(derivedPrice));
+    if (switchedItem || derivedStr !== lastPushed.current) {
+      setText(derivedStr);
+      lastPushed.current = derivedStr;
+      lastKey.current = itemKey;
+    }
+  }, [derivedPrice, itemKey]);
+
+  const handleChange = (v) => {
+    setText(v);
+    if (v === "" || !(area > 0)) {
+      lastPushed.current = v;
+      onChange({ type: "amount", value: "" });
+      return;
+    }
+    const newTotal = (parseFloat(v) || 0) * area;
+    // NOT clamped to ≥0 — applyDiscount treats a NEGATIVE amount-discount as
+    // a markup (amount - (-x) = amount + x), which is exactly how typing a
+    // ₪/מ״ר price ABOVE the original is meant to raise the price instead of
+    // getting silently clamped back down to the original.
+    const discountAmount = round2(originalPrice - newTotal);
+    lastPushed.current = v;
+    onChange({ type: "amount", value: discountAmount ? String(discountAmount) : "" });
+  };
+
+  return <CompactField label='מחיר למ״ר' suffix="₪" value={text} onChange={handleChange} />;
+}
+
+// Three always-visible compact fields for one item, instead of the previous
+// single type-toggle-dropdown + value: a direct ₪/מ״ר price override (only
+// where the item has a real area), a ₪ discount, and a % discount. All three
+// still write into the SAME `discount` object underneath ({type, value}) — a
+// price-per-sqm edit is just converted to the equivalent amount discount —
+// so pricingForItem/applyDiscount elsewhere never need to know this exists.
+function ItemPricingFields({ discount, onChange, area, originalPrice, itemKey }) {
+  const hasArea = area != null && area > 0;
+
+  return (
+    <div className={`grid gap-2 ${hasArea ? "grid-cols-3" : "grid-cols-2"}`}>
+      {hasArea && (
+        <PricePerSqmField discount={discount} onChange={onChange} area={area} originalPrice={originalPrice} itemKey={itemKey} />
+      )}
+      <CompactField
+        label="הנחה בסכום"
+        suffix="₪"
+        value={discount.type === "amount" ? discount.value : ""}
+        onChange={(v) => onChange({ type: "amount", value: v })}
+      />
+      <CompactField
+        label="הנחה באחוזים"
+        suffix="%"
+        max={100}
+        value={discount.type === "percent" ? discount.value : ""}
+        onChange={(v) => onChange({ type: "percent", value: v })}
+      />
+    </div>
+  );
+}
 
 export default function QuoteDetailsModal({ quote, onClose, onSaved }) {
   // Everything needed to render this quote is already in the saved row — no
@@ -603,7 +782,7 @@ export default function QuoteDetailsModal({ quote, onClose, onSaved }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
       <div
-        className="relative bg-[#111118] border border-white/25 rounded-2xl w-full max-w-[1600px] h-[92vh] flex flex-col"
+        className="relative bg-[#111118] border border-white/25 rounded-2xl w-full max-w-[98vw] h-[92vh] flex flex-col"
         dir="rtl"
         onClick={(e) => e.stopPropagation()}
       >
@@ -654,10 +833,11 @@ export default function QuoteDetailsModal({ quote, onClose, onSaved }) {
                   }`}
                 >
                   <div className={`text-xs font-semibold truncate ${isSelected ? "text-[#C9A84C]" : "text-zinc-200"}`}>
-                    {items.length > 1 ? `מוצר ${idx + 1}` : "מוצר"}
+                    {label}{dimsLabel(it) ? ` · ${dimsLabel(it)}` : ""}
                   </div>
                   <div className="text-[11px] text-zinc-500 truncate mt-0.5">
-                    {label}{dimsLabel(it) ? ` · ${dimsLabel(it)}` : ""}
+                    {items.length > 1 ? `מוצר ${idx + 1}` : "מוצר"}
+                    {it.quantity ? ` · כמות ${it.quantity}` : ""}
                   </div>
                   {pricingMode === "discount" && disc?.value ? (
                     <div className="text-[11px] text-emerald-400 mt-1">הנחה: {disc.type === "percent" ? `${disc.value}%` : fmt(disc.value)}</div>
@@ -682,24 +862,20 @@ export default function QuoteDetailsModal({ quote, onClose, onSaved }) {
                     <span className="text-zinc-400 font-normal"> · סה״כ {selectedItem.result.totalArea.toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} מ״ר</span>
                   )}
                 </div>
-
-                {/* Top stat row — עלות סך הכל / רווח תפעולי (₪) / רווח (%), side
-                    by side instead of 3 stacked full-width cards, so the wide
-                    panel is used for breadth instead of height. */}
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="bg-[#16161F] rounded-xl p-3 text-center">
-                    <div className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider mb-1">עלות סך הכל</div>
-                    <div className="text-base font-bold text-white">{fmt(selectedPricing.cost)}</div>
-                  </div>
-                  <div className="bg-gradient-to-br from-[#C9A84C]/15 to-transparent border border-[#C9A84C]/30 rounded-xl p-3 text-center">
-                    <div className="text-[11px] font-semibold text-[#C9A84C] uppercase tracking-wider mb-1">רווח תפעולי אחרי כל ההוצאות</div>
-                    <div className="text-base font-bold text-[#C9A84C]">{fmt(selectedPricing.profit)}</div>
-                  </div>
-                  <div className="bg-gradient-to-br from-[#C9A84C]/15 to-transparent border border-[#C9A84C]/30 rounded-xl p-3 text-center">
-                    <div className="text-[11px] font-semibold text-[#C9A84C] uppercase tracking-wider mb-1">רווח באחוזים</div>
-                    <div className="text-base font-bold text-[#C9A84C]">{selectedPricing.marginPct.toFixed(1)}%</div>
-                  </div>
+                {/* Price/quantity — used to live in the separate "פירוט ההצעה"
+                    card (removed, duplicated the פריטים sidebar); this is the
+                    one place left that shows it, using the LIVE price so it
+                    reacts to a discount immediately like everything else in
+                    this panel. Its own line (not squeezed into the title row
+                    above) so "X יחידות × מחיר ליחידה" reads unambiguously. */}
+                <div className="text-xs text-zinc-400">
+                  {selectedItem.quantity || 1} יחידות × {fmt(selectedPricing.price / (selectedItem.quantity || 1))} ליחידה
                 </div>
+
+                {/* The old עלות סך הכל / רווח תפעולי / רווח (%) tiles that used
+                    to live here were removed — those same three numbers are
+                    now emphasized inside the "סיכום" card below instead, and
+                    this freed-up space goes to the cost/commission cards. */}
                 {pricingMode !== "discount" && Math.abs(selectedPricing.price - selectedPricing.original) > 0.01 && (
                   <div className="text-xs text-zinc-500 -mt-2">מחיר מכירה: {fmt(selectedPricing.price)} (לפני שינוי מצב תמחור: {fmt(selectedPricing.original)})</div>
                 )}
@@ -714,15 +890,16 @@ export default function QuoteDetailsModal({ quote, onClose, onSaved }) {
                     // סדר ה-DOM נשאר "לוגי" (עלויות תחילה, סיכום אחרון) — ברשת RTL
                     // הפריט האחרון ב-DOM נופל לעמודה השמאלית ביותר, ולכן כרטיס
                     // הסיכום מסתיים בצד שמאל בלי להפוך את סדר הקריאה של השאר.
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                      <CostBreakdown result={selectedItem.result} />
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                      <CostBreakdown result={selectedItem.result} livePrice={selectedPricing.price} liveCost={selectedPricing.cost} />
                       <CostCard title="סיכום" highlight>
+                        <EmphasizedRow label="מחיר מכירה" value={fmt(selectedPricing.price)} color="green" />
                         <MiniRow label="עלות גולמית" value={fmt(selectedAgg.materialTotal)} />
                         <MiniRow label="עלות תפעולית" value={fmt(operationalOnly)} />
                         <MiniRow label="עלות עמלות" value={fmt(commissionTotal)} />
-                        <MiniRow label="סך הכל עלות" value={fmt(selectedPricing.cost)} />
-                        <MiniRow label="רווח" value={fmt(selectedPricing.profit)} />
-                        <MiniRow label="רווח באחוזים" value={`${selectedPricing.marginPct.toFixed(1)}%`} />
+                        <EmphasizedRow label="סך הכל עלות" value={fmt(selectedPricing.cost)} />
+                        <EmphasizedRow label="רווח" value={fmt(selectedPricing.profit)} />
+                        <EmphasizedRow label="רווח באחוזים" value={`${selectedPricing.marginPct.toFixed(1)}%`} />
                       </CostCard>
                     </div>
                   );
@@ -732,25 +909,33 @@ export default function QuoteDetailsModal({ quote, onClose, onSaved }) {
                     <div className="text-xs font-semibold text-zinc-500 mb-2">
                       {row.lineLabel || `שורה נוספת ${ri + 2}`}{dimsLabel(row) ? ` · ${dimsLabel(row)}` : ""}
                     </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                       <CostBreakdown result={row.result} />
                     </div>
                   </div>
                 ))}
 
-                <div className="bg-[#16161F] rounded-xl p-4 space-y-3">
-                  <h4 className="text-xs font-semibold text-[#C9A84C] mb-1 uppercase tracking-wider">הנחה לפריט זה</h4>
+                <div className="bg-[#16161F] rounded-xl p-3">
                   {pricingMode !== "discount" ? (
                     <p className="text-xs text-zinc-500">
                       התמחור לפריט זה נקבע כרגע לפי מצב "{PRICING_MODE_LABELS[pricingMode]}" שנבחר למטה — הנחה פרטנית מושבתת כל עוד המצב הזה פעיל.
                     </p>
                   ) : (
                     <>
-                      <DiscountInput discount={selectedDiscount} onChange={setSelectedDiscount} />
+                      {/* All three fields operate on the pre-VAT price (agg.sellingTotal,
+                          the same base VAT is later multiplied onto) — spelled out once
+                          here instead of cramming "(לפני מע״מ)" into every tiny label. */}
+                      <p className="text-[10px] text-zinc-500 mb-1.5">כל הנחה/מחיר כאן — לפני מע״מ</p>
+                      <ItemPricingFields
+                        discount={selectedDiscount}
+                        onChange={setSelectedDiscount}
+                        area={selectedItem.result?.totalArea}
+                        originalPrice={selectedAgg.sellingTotal}
+                        itemKey={selectedIndex}
+                      />
                       {selectedDiscount.value ? (
-                        <div className="pt-2 space-y-1">
-                          <Row label="רווח לפני הנחה" value={fmt(selectedAgg.profitTotal)} />
-                          <Row label="רווח אחרי הנחה" value={fmt(selectedProfitAfterDiscount)} className={selectedProfitAfterDiscount < 0 ? "text-red-400" : ""} />
+                        <div className="pt-2 flex justify-between text-xs">
+                          <span className="text-zinc-500">רווח: {fmt(selectedAgg.profitTotal)} ← <span className={selectedProfitAfterDiscount < 0 ? "text-red-400" : "text-zinc-300"}>{fmt(selectedProfitAfterDiscount)}</span></span>
                         </div>
                       ) : null}
                     </>
@@ -760,13 +945,13 @@ export default function QuoteDetailsModal({ quote, onClose, onSaved }) {
                 <button
                   onClick={handleSave}
                   disabled={saving}
-                  className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold transition-all ${
+                  title="שומר הצעה מתוקנת חדשה (מס׳ חדש), הכוללת את כל ההנחות שהוזנו — הפריט הזה וכל השאר"
+                  className={`w-full flex items-center justify-center gap-2 py-2 rounded-xl text-sm font-semibold transition-all ${
                     saved ? "bg-emerald-500/20 border border-emerald-500/30 text-emerald-400" : "bg-[#C9A84C] text-black hover:bg-[#C9A84C]/90 disabled:opacity-40"
                   }`}
                 >
                   {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : saved ? <><CheckCircle2 className="w-4 h-4" /> נשמר!</> : <><Save className="w-4 h-4" /> שמור הצעה מתוקנת</>}
                 </button>
-                <p className="text-xs text-zinc-500 text-center">שומר הצעה מתוקנת חדשה (מס׳ חדש), הכוללת את כל ההנחות שהוזנו — הפריט הזה וכל השאר.</p>
               </>
             ) : (
               <p className="text-zinc-500 text-sm">אין פריטים עם פירוט עלויות שמור להצעה זו.</p>
@@ -778,36 +963,17 @@ export default function QuoteDetailsModal({ quote, onClose, onSaved }) {
             3-column layout so the item list + item detail above get the full
             width to themselves; this bar just summarizes the numbers. */}
         <div className="shrink-0 border-t border-white/20 bg-[#0C0C12] p-4 sm:p-6 max-h-[42vh] overflow-y-auto">
-          <div className="grid grid-cols-1 lg:grid-cols-[1.6fr_1fr_1fr_1.2fr] gap-4">
-            {/* פירוט ההצעה — line items, own internal scroll so it can't push the row taller than the others */}
-            <div>
-              <h3 className="text-sm font-semibold text-zinc-300 mb-2 uppercase tracking-wider">פירוט ההצעה</h3>
-              <div className="bg-[#16161F] rounded-xl p-3 text-sm max-h-40 overflow-y-auto">
-                {lineItems.length === 0 ? (
-                  <p className="text-zinc-500">אין פירוט שורות שמור להצעה זו.</p>
-                ) : (
-                  <div className="space-y-1">
-                    {lineItems.map((li, idx) => (
-                      <div key={idx} className="flex justify-between items-center py-1.5 border-b border-white/10 last:border-b-0 gap-3">
-                        <div className="min-w-0">
-                          {li.groupLabel && <div className="text-xs text-[#C9A84C] font-semibold mb-0.5">{li.groupLabel}</div>}
-                          <div className="text-zinc-200 truncate">{li.description || "—"}</div>
-                        </div>
-                        <div className="text-left shrink-0">
-                          <div className="text-zinc-300">{li.quantity} × {fmt(li.unitPrice)}</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr_1fr_1.2fr] gap-4">
+            {/* "פירוט ההצעה" (the line-items list) was removed — it duplicated
+                the פריטים sidebar (same product names) and the price/quantity
+                now shown in the item header above. הערות stays — it's the
+                only thing here with nowhere else to live. */}
+            {quote.notes && (
+              <div>
+                <h3 className="text-sm font-semibold text-zinc-300 mb-2 uppercase tracking-wider">הערות</h3>
+                <div className="bg-[#16161F] rounded-xl p-3 text-sm text-zinc-300">{quote.notes}</div>
               </div>
-              {quote.notes && (
-                <div className="mt-3">
-                  <h3 className="text-sm font-semibold text-zinc-300 mb-2 uppercase tracking-wider">הערות</h3>
-                  <div className="bg-[#16161F] rounded-xl p-3 text-sm text-zinc-300">{quote.notes}</div>
-                </div>
-              )}
-            </div>
+            )}
 
             {/* פרטי תשלום + עלות ורווח */}
             <div className="space-y-3">
@@ -879,7 +1045,7 @@ export default function QuoteDetailsModal({ quote, onClose, onSaved }) {
                 {pricingMode === "discount" && (
                   <>
                     <DiscountInput discount={overallDiscount} onChange={setOverallDiscount} />
-                    <p className="text-xs text-zinc-500">מצטברת מעל הנחות הפריטים — מחושבת על הסכום שנשאר אחריהן.</p>
+                    <p className="text-xs text-zinc-500">מצטברת מעל הנחות הפריטים (לפני מע״מ) — מחושבת על הסכום שנשאר אחריהן.</p>
                   </>
                 )}
 
