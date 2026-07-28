@@ -129,6 +129,8 @@ export default function CalculatorTab({ config, priceTiers, stickerPriceTiers, p
           unitPriceExVat={result ? result.sellingPricePerUnit : null}
           priceRangeMin={result ? result.priceRangeMin : null}
           priceRangeMax={result ? result.priceRangeMax : null}
+          priceMissing={!!result?.priceMissing}
+          priceErrorMessage={result?.errorMessage}
           paymentKey={paymentKey}
           installmentCount={installmentCount}
           config={config}

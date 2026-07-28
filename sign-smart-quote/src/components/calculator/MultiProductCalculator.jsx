@@ -4,7 +4,7 @@ import { PRODUCT_NAMES, PRODUCT_CODES, categoryOf, productImage } from "./Calcul
 import { base44 } from "@/api/base44Client";
 import { issueQuoteToMorning } from "@/api/morningClient";
 import ClientSearchField from "./ClientSearchField";
-import { Plus, Trash2, ShoppingCart, BarChart3, Tag, Lightbulb, Shapes, Layers, Save, Send, FileOutput, Loader2, CheckCircle2, Paperclip, FileText, Image as ImageIcon, X } from "lucide-react";
+import { Plus, Trash2, ShoppingCart, BarChart3, Tag, Lightbulb, Shapes, Layers, Save, Send, FileOutput, Loader2, CheckCircle2, Paperclip, FileText, Image as ImageIcon, X, Pencil } from "lucide-react";
 import { toast } from "sonner";
 
 // Reference material only (a photo of the wall, a spec PDF) — not a general
@@ -72,13 +72,14 @@ const TAB_ICONS = { logo: Shapes, sticker: Tag, lightbox: Lightbulb, kapa: Layer
 // mirrors the `productFamily` values returned by useCalculator's calculate().
 const MIN_PRICE_FAMILY_BY_PRODUCT_TYPE = {
   pvc_white: "logo", pvc_black: "logo",
-  perspex_print: "logo", perspex_black: "logo", perspex_white: "logo", perspex_milky: "logo",
+  perspex_print: "logo", perspex_print_back: "logo", perspex_black: "logo", perspex_white: "logo", perspex_milky: "logo",
   perspex_mirror: "logo", perspex_metallic: "logo",
   vinyl_sticker: "sticker", texture_sticker: "sticker",
   lokobond_diecut: "lokobond", lokobond_plain: "lokobond",
   foamex_white: "foamex", foamex_black: "foamex",
   perspex_board_clear_print: "perspexBoard", perspex_board_black_matte: "perspexBoard",
   perspex_board_black_glossy: "perspexBoard", perspex_board_white: "perspexBoard", perspex_board_milky: "perspexBoard",
+  perspex_board_back_print: "perspexBoard",
 };
 
 // Whether this line item's own minimum price should still be enforced now that
@@ -659,13 +660,16 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
                 // divider line), per the "no shared bleed between products" rule.
                 <div key={item.id} className="relative border-2 border-slate-300 rounded-2xl p-4 sm:p-5 bg-slate-50/50">
                   <div className="flex items-center justify-between mb-3 gap-3">
-                    <input
-                      value={itemLabels[item.id] || ""}
-                      onChange={(e) => setItemLabel(item.id, e.target.value)}
-                      placeholder={`מוצר ${index + 1}`}
-                      title="שם מותאם למוצר זה — יופיע בהצעת המחיר במקום 'מוצר N'"
-                      className="min-w-0 flex-1 text-sm font-semibold text-zinc-500 uppercase tracking-wider bg-transparent border-0 border-b border-transparent hover:border-slate-300 focus-visible:outline-none focus-visible:border-amber-400 px-0.5 py-0.5"
-                    />
+                    <div className="relative min-w-0 flex-1 group">
+                      <input
+                        value={itemLabels[item.id] || ""}
+                        onChange={(e) => setItemLabel(item.id, e.target.value)}
+                        placeholder={`מוצר ${index + 1} (לחצו כדי לתת שם משלכם)`}
+                        title="שם מותאם למוצר זה — יופיע בהצעת המחיר במקום 'מוצר N'"
+                        className="w-full text-sm font-semibold text-zinc-600 tracking-wide bg-white border border-dashed border-slate-300 rounded-lg hover:border-amber-400 focus-visible:outline-none focus-visible:border-amber-400 focus-visible:border-solid focus-visible:ring-2 focus-visible:ring-amber-100 pl-8 pr-2 py-1.5 transition-colors"
+                      />
+                      <Pencil className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none group-focus-within:text-amber-500" />
+                    </div>
                     {items.length > 1 && (
                       <button
                         onClick={() => toggleItemLock(item.id, true)}

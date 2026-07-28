@@ -40,6 +40,7 @@ const GROUPS = [
       { key: "perspex_board_black_glossy_cost_per_mm", label: 'פרספקס שחור מבריק (₪/מ"מ/מ"ר)', suffix: "₪" },
       { key: "perspex_board_white_cost_per_mm", label: 'פרספקס לבן (₪/מ"מ/מ"ר)', suffix: "₪" },
       { key: "perspex_board_milky_cost_per_mm", label: 'פרספקס חלבי (₪/מ"מ/מ"ר)', suffix: "₪" },
+      { key: "perspex_board_back_print_cost_per_mm", label: 'פרספקס שקוף הדפסה אחורית (₪/מ"מ/מ"ר)', suffix: "₪" },
     ],
   },
   {
@@ -76,6 +77,14 @@ const GROUPS = [
       { key: "security_sticker_cost_per_sqm", label: 'מדבקה ביטחונית (₪/מ"ר)', suffix: "₪" },
       { key: "lexan_sticker_cost_per_sqm", label: 'מדבקת לקסן (₪/מ"ר)', suffix: "₪" },
       { key: "reflective_sticker_cost_per_sqm", label: 'מדבקה מחזירת אור (₪/מ"ר)', suffix: "₪" },
+    ],
+  },
+  {
+    title: "שטיח פיויסי",
+    fields: [
+      { key: "pvc_carpet_cost_per_sqm", label: 'עלות חומר (₪/מ"ר)', suffix: "₪" },
+      { key: "pvc_carpet_roll_width_m", label: "רוחב גליל (מ׳)", suffix: 'מ׳' },
+      { key: "pvc_carpet_waste_multiplier", label: "מכפיל חיוב פחת ללקוח", suffix: "×" },
     ],
   },
   {

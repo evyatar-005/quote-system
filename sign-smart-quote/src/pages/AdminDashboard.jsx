@@ -18,6 +18,7 @@ import KapaTimeCostsSection from "../components/admin/KapaTimeCostsSection";
 import LokobondTimeCostsSection from "../components/admin/LokobondTimeCostsSection";
 import FoamexTimeCostsSection from "../components/admin/FoamexTimeCostsSection";
 import PerspexBoardTimeCostsSection from "../components/admin/PerspexBoardTimeCostsSection";
+import PvcCarpetTimeCostsSection from "../components/admin/PvcCarpetTimeCostsSection";
 import RollupTimeCostsSection from "../components/admin/RollupTimeCostsSection";
 import GlassTimeCostsSection from "../components/admin/GlassTimeCostsSection";
 import OverheadSection from "../components/admin/OverheadSection";
@@ -65,6 +66,7 @@ const DEFAULT_CONFIG = {
   perspex_board_black_glossy_cost_per_mm: null,
   perspex_board_white_cost_per_mm: null,
   perspex_board_milky_cost_per_mm: null,
+  perspex_board_back_print_cost_per_mm: null,
   perspex_board_pre_print_time_minutes: null,
   perspex_board_print_time_per_sqm_minutes: null,
   perspex_board_pre_cut_time_minutes: null,
@@ -311,6 +313,7 @@ export default function AdminDashboard() {
             <LokobondTimeCostsSection config={config} onChange={handleFieldChange} />
             <FoamexTimeCostsSection config={config} onChange={handleFieldChange} />
             <PerspexBoardTimeCostsSection config={config} onChange={handleFieldChange} />
+            <PvcCarpetTimeCostsSection config={config} onChange={handleFieldChange} />
             <RollupTimeCostsSection config={config} onChange={handleFieldChange} />
             <GlassTimeCostsSection config={config} onChange={handleFieldChange} />
             <hr className="border-t-2 border-slate-900" />
