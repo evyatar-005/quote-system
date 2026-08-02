@@ -63,9 +63,9 @@ export default function AboutSection() {
       await triggerUpdate();
       setPhase("running");
     } catch (err) {
-      // A rejected trigger (dirty tree, update already running, no git) never
-      // touches the server, so this is safe to surface and dismiss.
-      setPhase("failed");
+      // A rejected trigger (update already running, git unreachable) never
+      // touches the server — distinct from a deploy we merely lost track of.
+      setPhase("rejected");
       setUpdateError(err?.message || "שגיאה בהפעלת העדכון");
       setUpdating(false);
       return;
@@ -99,6 +99,8 @@ export default function AboutSection() {
 
   return (
     <>
+    {/* "starting" is skipped when the trigger returns instantly — the overlay
+        only ever shows a phase the user can act on or wait through. */}
     {phase && (
       <UpdateProgressOverlay
         phase={phase}

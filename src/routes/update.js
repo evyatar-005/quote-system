@@ -56,14 +56,20 @@ module.exports = function registerUpdate(app, db, deps) {
       return res.status(409).json({ error: 'עדכון כבר רץ כרגע' });
     }
 
-    let dirty;
+    // A dirty tree used to abort the update, back when UPDATE.ps1 would have
+    // hit "local changes would be overwritten" at checkout. It now resets
+    // --hard first, and `npm install` rewrites package-lock.json on every
+    // deploy — so a dirty tree is the normal steady state here, and refusing on
+    // it blocked every update permanently rather than preventing anything.
+    // Still worth recording what got discarded, so an intentional hand-edit on
+    // the server doesn't vanish without a trace.
     try {
-      dirty = await run('git status --porcelain');
+      const dirty = await run('git status --porcelain');
+      if (dirty) {
+        console.log(`[POST /api/admin/update] discarding local changes:\n${dirty}`);
+      }
     } catch (err) {
       return res.status(400).json({ error: `בדיקת מצב git נכשלה: ${err.message}` });
-    }
-    if (dirty) {
-      return res.status(400).json({ error: 'יש שינויים לא שמורים בעץ העבודה — העדכון בוטל למען הבטיחות' });
     }
 
     const scriptPath = path.join(REPO_ROOT, 'deploy', 'UPDATE.ps1');

@@ -109,14 +109,17 @@ export default function UpdateProgressOverlay({ phase, version, error, onClose }
             </>
           )}
 
-          {phase === "failed" && (
+          {(phase === "failed" || phase === "rejected") && (
             <>
               <AlertTriangle className="w-16 h-16 text-amber-500 mx-auto mb-4" />
-              <h2 className="text-xl font-bold text-slate-900">העדכון לא אושר</h2>
+              <h2 className="text-xl font-bold text-slate-900">
+                {phase === "rejected" ? "העדכון לא הופעל" : "לא הצלחנו לאשר שהעדכון הסתיים"}
+              </h2>
               <p className="text-sm text-slate-600 mt-2">{error}</p>
               <p className="text-xs text-slate-400 mt-3">
-                השרת עשוי עדיין להתעדכן ברקע. אם הוא חוזר מעצמו — הכל תקין.
-                אחרת יש להריץ את <span className="font-mono">deploy\UPDATE.ps1</span> ידנית בשרת.
+                {phase === "rejected"
+                  ? "השרת לא נגע בכלום והמערכת ממשיכה לרוץ כרגיל."
+                  : <>העדכון עשוי עדיין לרוץ ברקע. אם השרת חוזר מעצמו — הכל תקין. אחרת יש להריץ את <span className="font-mono">deploy\UPDATE.ps1</span> ידנית בשרת.</>}
               </p>
               <button
                 onClick={onClose}
