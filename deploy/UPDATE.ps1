@@ -121,10 +121,38 @@ function Ensure-Task-Configured {
     Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
 }
 
+function Stop-Server {
+    # Stop-ScheduledTask only kills what the task itself started. A node.exe
+    # launched by hand once (debugging, a manual `npm start`) keeps holding
+    # :3000, the task's new instance then dies on EADDRINUSE, and the old
+    # process serves on — quietly running stale server code while happily
+    # serving the freshly built dist, so the UI updates and the API doesn't.
+    # The post-deploy check even passes, because the stale process answers 200.
+    # That failure cost a full afternoon; every deploy now clears the port.
+    Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 2
+    $stragglers = Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue
+    foreach ($c in $stragglers) {
+        $p = Get-Process -Id $c.OwningProcess -ErrorAction SilentlyContinue
+        if ($p) {
+            Write-Host "Killing leftover process holding :3000 - PID $($p.Id) ($($p.ProcessName), started $($p.StartTime))" -ForegroundColor Yellow
+            Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+        }
+    }
+    Start-Sleep -Seconds 1
+}
+
 function Start-Server-And-Check {
     Ensure-Task-Configured
     Write-Step "Starting the server..."
     Start-ScheduledTask -TaskName $taskName
+
+    # The version we expect to be answering once this deploy has taken effect.
+    # /api/version reads it from package.json at process start, so it is a
+    # direct statement about which code is running — a plain 200 only proves
+    # something is listening, which is how a stale process was able to report
+    # DEPLOY OK while serving the previous release's API.
+    $expected = (Get-Content (Join-Path $repoRoot "package.json") -Raw | ConvertFrom-Json).version
 
     # DB init/seeding + first request can take a while on a loaded server
     # (especially with real-time antivirus scanning), so poll for up to
@@ -132,12 +160,20 @@ function Start-Server-And-Check {
     for ($i = 1; $i -le 20; $i++) {
         Start-Sleep -Seconds 3
         try {
-            $resp = Invoke-WebRequest -Uri "http://localhost:3000" -UseBasicParsing -TimeoutSec 5
-            if ($resp.StatusCode -eq 200) { return $true }
+            $resp = Invoke-WebRequest -Uri "http://localhost:3000/api/version" -UseBasicParsing -TimeoutSec 5
+            if ($resp.StatusCode -eq 200) {
+                $running = ($resp.Content | ConvertFrom-Json).version
+                if ($running -eq $expected) {
+                    Write-Host "  Server is answering as version $running."
+                    return $true
+                }
+                Write-Host "  ...answering as $running, waiting for $expected (attempt $i/20)" -ForegroundColor Yellow
+            }
         } catch {
             Write-Host "  ...not responding yet (attempt $i/20)"
         }
     }
+    Write-Host "Server never reported version $expected." -ForegroundColor Red
     return $false
 }
 
@@ -239,7 +275,7 @@ Write-Host "Target version: $targetTag (previously running: $previousTag)"
 
 # --- 5. Stop the running server ---
 Write-Step "Stopping the running server..."
-Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+Stop-Server
 
 # --- 6+7. Checkout, install, build, start, verify ---
 # The checkout MUST be inside this try. The server is already stopped by the
@@ -288,7 +324,7 @@ if (-not $previousTag) {
 
 $rollbackOk = $false
 try {
-    Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+    Stop-Server
     Invoke-Checked "git" @("reset", "--hard") $repoRoot
     Invoke-Checked "git" @("checkout", $previousTag) $repoRoot
     Install-And-Build $previousTag
