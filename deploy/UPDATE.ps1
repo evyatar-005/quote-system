@@ -83,7 +83,10 @@ function Install-And-Build($tag) {
         tag        = $tag
         deployedAt = (Get-Date).ToString("o")
     } | ConvertTo-Json
-    Set-Content -Path (Join-Path $repoRoot "VERSION.txt") -Value $versionInfo -Encoding utf8
+    # WriteAllText, not Set-Content -Encoding utf8: in Windows PowerShell 5.1
+    # that switch emits a BOM, which makes JSON.parse throw when /api/version
+    # reads this back.
+    [System.IO.File]::WriteAllText((Join-Path $repoRoot "VERSION.txt"), $versionInfo, (New-Object System.Text.UTF8Encoding $false))
 }
 
 function Ensure-Task-Configured {

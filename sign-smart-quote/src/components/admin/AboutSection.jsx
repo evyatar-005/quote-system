@@ -34,6 +34,11 @@ export default function AboutSection() {
 
   useEffect(() => {
     loadVersion();
+    // Check on open rather than waiting for a click. "Is there an update?" is
+    // the only question this screen exists to answer, and a stale-looking
+    // version number with no indication of whether it's current is worse than
+    // no number at all.
+    handleCheck();
     return () => clearInterval(pollRef.current);
   }, []);
 
@@ -108,10 +113,24 @@ export default function AboutSection() {
       description="גרסת השרת הרצה, בדיקת עדכונים, והפעלת עדכון"
       defaultOpen
     >
-      <div className="space-y-1.5 text-sm">
-        <p><span className="text-slate-500">גרסה: </span><span className="font-semibold">{version?.version || "—"}</span></p>
-        <p><span className="text-slate-500">Commit: </span><span className="font-mono">{version?.commit || "—"}</span></p>
-        <p><span className="text-slate-500">פריסה אחרונה: </span>{version?.deployedAt ? new Date(version.deployedAt).toLocaleString("he-IL") : "—"}</p>
+      <div className="rounded-xl border-2 border-slate-200 bg-slate-50/60 p-4">
+        <p className="text-xs text-slate-500">גרסה רצה כעת</p>
+        <div className="flex items-baseline gap-2 mt-0.5 flex-wrap">
+          <span className="text-2xl font-bold text-slate-900">
+            {version?.tag || (version?.version ? `v${version.version}` : "—")}
+          </span>
+          {checking ? (
+            <Badge variant="secondary" className="gap-1"><Loader2 className="w-3 h-3 animate-spin" /> בודק…</Badge>
+          ) : updateInfo?.updateAvailable ? (
+            <Badge className="bg-amber-500 hover:bg-amber-500">יש עדכון: {updateInfo.latestTag}</Badge>
+          ) : updateInfo ? (
+            <Badge variant="secondary">מעודכן</Badge>
+          ) : null}
+        </div>
+        <div className="mt-3 space-y-1 text-sm">
+          <p><span className="text-slate-500">Commit: </span><span className="font-mono">{version?.commit || "—"}</span></p>
+          <p><span className="text-slate-500">פריסה אחרונה: </span>{version?.deployedAt ? new Date(version.deployedAt).toLocaleString("he-IL") : "—"}</p>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-3 pt-2">
@@ -127,20 +146,14 @@ export default function AboutSection() {
 
       {updateError && <p className="text-sm text-destructive">{updateError}</p>}
 
-      {updateInfo && (
-        <div className="text-sm space-y-1.5 border-t border-border pt-3">
-          {updateInfo.updateAvailable ? (
-            <>
-              <Badge>יש עדכון: {updateInfo.latestTag}</Badge>
-              {updateInfo.commits?.length > 0 && (
-                <ul className="list-disc pr-5 text-slate-600 mt-1">
-                  {updateInfo.commits.map((c) => <li key={c}>{c}</li>)}
-                </ul>
-              )}
-            </>
-          ) : (
-            <Badge variant="secondary">אתה על הגרסה העדכנית ({updateInfo.currentTag || updateInfo.currentCommit})</Badge>
-          )}
+      {/* The badge above already says whether an update exists — all that's left
+          worth showing is what's actually in it. */}
+      {updateInfo?.updateAvailable && updateInfo.commits?.length > 0 && (
+        <div className="text-sm border-t border-border pt-3">
+          <p className="font-semibold text-slate-700 mb-1.5">מה כלול בעדכון:</p>
+          <ul className="list-disc pr-5 text-slate-600 space-y-0.5">
+            {updateInfo.commits.map((c) => <li key={c}>{c}</li>)}
+          </ul>
         </div>
       )}
     </CostSectionCard>

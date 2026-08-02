@@ -120,12 +120,19 @@ const VERSION_FILE = path.join(__dirname, '../VERSION.txt');
 app.get('/api/version', (req, res) => {
   let commit = null;
   let deployedAt = null;
+  let tag = null;
   try {
-    const info = JSON.parse(fs.readFileSync(VERSION_FILE, 'utf8'));
+    // Windows PowerShell 5.1's `Set-Content -Encoding utf8` writes a BOM, and
+    // JSON.parse throws on a leading ﻿. The catch below swallowed it, so
+    // commit/deployedAt silently read as null on every real deploy while
+    // looking fine locally, where no VERSION.txt exists at all.
+    const raw = fs.readFileSync(VERSION_FILE, 'utf8').replace(/^﻿/, '');
+    const info = JSON.parse(raw);
     commit = info.commit || null;
     deployedAt = info.deployedAt || null;
+    tag = info.tag || null;
   } catch (_) {}
-  res.json({ version: PKG_VERSION, commit, deployedAt });
+  res.json({ version: PKG_VERSION, commit, deployedAt, tag });
 });
 
 // ─── Static frontend (sign-smart-quote/dist) ─────────────────────────────────
