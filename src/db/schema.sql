@@ -303,6 +303,33 @@ CREATE TABLE IF NOT EXISTS whatsapp_send_log (
   created_at          TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Password reset tokens — only the sha256 hash of the raw token is stored, so
+-- a leaked DB file alone can't be used to forge a reset. Raw token lives only
+-- in the emailed link.
+CREATE TABLE IF NOT EXISTS password_resets (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id    INTEGER NOT NULL,
+  token_hash TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  used_at    TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- SMTP credentials for outgoing mail (password-reset links, etc.) — one row,
+-- admin-only, same shape as morning_credentials/greenapi_credentials.
+CREATE TABLE IF NOT EXISTS smtp_credentials (
+  id           INTEGER PRIMARY KEY CHECK (id = 1),
+  host         TEXT,
+  port         INTEGER DEFAULT 587,
+  secure       INTEGER DEFAULT 0,
+  username     TEXT,
+  password     TEXT,
+  from_email   TEXT,
+  from_name    TEXT,
+  app_base_url TEXT,
+  updated_at   TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
 -- SQLite doesn't auto-index FK-like columns — these are all looked up by value.
 CREATE INDEX IF NOT EXISTS idx_notifications_recipient  ON notifications(recipient_username);
 CREATE INDEX IF NOT EXISTS idx_sub_products_product      ON sub_products(product_id);
@@ -312,3 +339,4 @@ CREATE INDEX IF NOT EXISTS idx_quote_attachments_quote     ON signshop_quote_att
 CREATE INDEX IF NOT EXISTS idx_morning_documents_map_quote ON morning_documents_map(quote_id);
 CREATE INDEX IF NOT EXISTS idx_morning_sync_log_quote      ON morning_sync_log(quote_id);
 CREATE INDEX IF NOT EXISTS idx_whatsapp_send_log_quote     ON whatsapp_send_log(quote_id);
+CREATE INDEX IF NOT EXISTS idx_password_resets_token       ON password_resets(token_hash);

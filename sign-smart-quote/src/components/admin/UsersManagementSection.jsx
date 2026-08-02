@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Plus, Trash2, KeyRound, Users as UsersIcon } from "lucide-react";
+import { Loader2, Plus, Trash2, KeyRound, Mail, Users as UsersIcon } from "lucide-react";
 import { toast } from "sonner";
 
 const ROLE_LABEL = { admin: "מנהל מכירות", agent: "סוכן מכירות" };
@@ -15,9 +15,11 @@ export default function UsersManagementSection() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
-  const [newUser, setNewUser] = useState({ username: "", password: "", full_name: "", role: "agent" });
+  const [newUser, setNewUser] = useState({ username: "", password: "", full_name: "", email: "", role: "agent" });
   const [resetPasswordFor, setResetPasswordFor] = useState(null);
   const [resetPasswordValue, setResetPasswordValue] = useState("");
+  const [editEmailFor, setEditEmailFor] = useState(null);
+  const [editEmailValue, setEditEmailValue] = useState("");
 
   useEffect(() => {
     loadUsers();
@@ -41,7 +43,7 @@ export default function UsersManagementSection() {
     try {
       await base44.adminUsers.create(newUser);
       toast.success("המשתמש נוצר בהצלחה");
-      setNewUser({ username: "", password: "", full_name: "", role: "agent" });
+      setNewUser({ username: "", password: "", full_name: "", email: "", role: "agent" });
       loadUsers();
     } catch (err) {
       toast.error(err.message === "username already exists" ? "שם המשתמש כבר קיים" : "שגיאה ביצירת המשתמש");
@@ -56,6 +58,22 @@ export default function UsersManagementSection() {
       loadUsers();
     } catch (err) {
       toast.error("שגיאה בעדכון ההרשאה");
+    }
+  };
+
+  // Without this an admin has no way to set a user's email at all, which makes
+  // "שכחתי סיסמה" unusable for them — the reset link is sent to users.email.
+  const handleSaveEmail = async () => {
+    const email = editEmailValue.trim();
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return toast.error("כתובת מייל לא תקינה");
+    try {
+      await base44.adminUsers.update(editEmailFor.id, { email });
+      toast.success(`המייל של "${editEmailFor.username}" עודכן`);
+      setEditEmailFor(null);
+      setEditEmailValue("");
+      loadUsers();
+    } catch (err) {
+      toast.error("שגיאה בעדכון המייל");
     }
   };
 
@@ -99,7 +117,7 @@ export default function UsersManagementSection() {
         {/* Add new user */}
         <div className="border-2 border-black rounded-xl p-4 space-y-3 bg-slate-50/50">
           <p className="text-sm font-semibold text-slate-700">הוספת משתמש חדש</p>
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
             <Input
               placeholder="שם משתמש"
               value={newUser.username}
@@ -119,6 +137,15 @@ export default function UsersManagementSection() {
               placeholder="שם מלא (לא חובה)"
               value={newUser.full_name}
               onChange={(e) => setNewUser((p) => ({ ...p, full_name: e.target.value }))}
+              className="bg-background"
+            />
+            <Input
+              placeholder="כתובת מייל"
+              type="email"
+              dir="ltr"
+              value={newUser.email}
+              onChange={(e) => setNewUser((p) => ({ ...p, email: e.target.value }))}
+              autoComplete="off"
               className="bg-background"
             />
             <Select value={newUser.role} onValueChange={(role) => setNewUser((p) => ({ ...p, role }))}>
@@ -148,7 +175,11 @@ export default function UsersManagementSection() {
               <div key={u.id} className="flex items-center justify-between gap-3 p-3 flex-wrap">
                 <div>
                   <p className="text-sm font-semibold text-slate-800">{u.full_name || u.username}</p>
-                  <p className="text-xs text-muted-foreground">{u.username}{u.email ? ` · ${u.email}` : ""}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {u.username}
+                    {u.email ? ` · ${u.email}` : ""}
+                    {!u.email && <span className="text-amber-600"> · ללא מייל — לא יוכל לאפס סיסמה</span>}
+                  </p>
                 </div>
                 <div className="flex items-center gap-2">
                   <Select value={u.role} onValueChange={(role) => handleRoleChange(u.id, role)}>
@@ -160,6 +191,14 @@ export default function UsersManagementSection() {
                       <SelectItem value="admin">מנהל מכירות</SelectItem>
                     </SelectContent>
                   </Select>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 h-9"
+                    onClick={() => { setEditEmailFor(u); setEditEmailValue(u.email || ""); }}
+                  >
+                    <Mail className="w-4 h-4" /> מייל
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"
@@ -180,6 +219,27 @@ export default function UsersManagementSection() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Edit email inline panel — same shape as the reset-password one below */}
+        {editEmailFor && (
+          <div className="border-2 border-black rounded-xl p-4 space-y-3 bg-slate-50/50">
+            <p className="text-sm font-semibold text-slate-700">כתובת מייל עבור "{editEmailFor.username}"</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Input
+                type="email"
+                dir="ltr"
+                placeholder="name@company.co.il"
+                value={editEmailValue}
+                onChange={(e) => setEditEmailValue(e.target.value)}
+                autoComplete="off"
+                className="bg-background max-w-xs"
+              />
+              <Button onClick={handleSaveEmail}>שמור מייל</Button>
+              <Button variant="ghost" onClick={() => { setEditEmailFor(null); setEditEmailValue(""); }}>ביטול</Button>
+            </div>
+            <p className="text-xs text-muted-foreground">לכתובת הזו יישלח קישור איפוס הסיסמה. השארה ריקה תמחק את הכתובת.</p>
           </div>
         )}
 

@@ -1,6 +1,6 @@
 {
   "name": "quote-system",
-  "version": "1.0.10",
+  "version": "1.0.11",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -20,6 +20,7 @@
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "multer": "^2.1.1",
+    "nodemailer": "^9.0.3",
     "pdf-parse": "^2.4.5"
   },
   "devDependencies": {

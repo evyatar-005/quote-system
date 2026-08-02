@@ -2,11 +2,18 @@
 // Passwords hashed with node builtin crypto.scryptSync as `salt:hash` hex.
 
 const crypto = require('crypto');
+const mail = require('../services/mail');
 
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days — sessions never expired before this
 const LOGIN_MAX_ATTEMPTS = 5;
 const LOGIN_LOCKOUT_MS = 15 * 60 * 1000; // 15 minutes
 const MIN_PASSWORD_LENGTH = 6;
+const RESET_TTL_MS = 30 * 60 * 1000;   // 30 minutes
+const RESET_MAX_PER_HOUR = 3;          // per user — throttles mailbox flooding, not brute force
+
+function hashToken(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
 
 // ── password helpers ─────────────────────────────────────────────────────────
 function hashPassword(password) {
@@ -174,6 +181,80 @@ module.exports = function registerAuth(app, db) {
     db.prepare(`UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?`)
       .run(hashPassword(newPassword), req.user.id);
     console.log(`[PUT /api/auth/change-password] "${req.user.username}" סיסמה עודכנה`);
+    res.json({ ok: true });
+  });
+
+  // ── Password reset (forgot-password) ──────────────────────────────────────────
+  const insResetToken   = db.prepare(`INSERT INTO password_resets (user_id, token_hash, expires_at) VALUES (?, ?, ?)`);
+  const countRecentResets = db.prepare(`SELECT COUNT(*) AS n FROM password_resets WHERE user_id = ? AND created_at > datetime('now', '-1 hour')`);
+  const invalidatePriorResets = db.prepare(`UPDATE password_resets SET used_at = CURRENT_TIMESTAMP WHERE user_id = ? AND used_at IS NULL`);
+  const resetByHash     = db.prepare(`SELECT * FROM password_resets WHERE token_hash = ?`);
+  const markResetUsed   = db.prepare(`UPDATE password_resets SET used_at = CURRENT_TIMESTAMP WHERE id = ?`);
+  const setUserPassword = db.prepare(`UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?`);
+  const delSessionsForUser = db.prepare(`DELETE FROM sessions WHERE user_id = ?`);
+
+  // ── POST /api/auth/forgot-password ─────────────────────────────────────────
+  // Always responds with the same generic { ok: true } regardless of whether
+  // the username exists, has an email, or SMTP send fails — otherwise this
+  // endpoint becomes a username enumeration oracle.
+  app.post('/api/auth/forgot-password', async (req, res) => {
+    const { username } = req.body || {};
+    const GENERIC = { ok: true, message: 'אם קיים משתמש כזה עם כתובת מייל רשומה, נשלח אליו קישור לאיפוס הסיסמה.' };
+    if (!username || !username.trim()) return res.json(GENERIC);
+
+    const user = userByName.get(username.trim());
+    if (!user || !user.email) {
+      console.log(`[POST /api/auth/forgot-password] "${username}" — no matching user/email, generic response`);
+      return res.json(GENERIC);
+    }
+
+    const { n } = countRecentResets.get(user.id);
+    if (n >= RESET_MAX_PER_HOUR) {
+      console.log(`[POST /api/auth/forgot-password] "${username}" — rate limited (${n} in last hour)`);
+      return res.json(GENERIC);
+    }
+
+    try {
+      const token = crypto.randomBytes(32).toString('hex');
+      const expiresAt = new Date(Date.now() + RESET_TTL_MS).toISOString();
+      invalidatePriorResets.run(user.id);
+      insResetToken.run(user.id, hashToken(token), expiresAt);
+
+      const smtp = mail.getSmtpConfig(db);
+      const baseUrl = (smtp && smtp.app_base_url) ? smtp.app_base_url.replace(/\/$/, '') : `${req.protocol}://${req.get('host')}`;
+      const link = `${baseUrl}/reset-password?token=${token}`;
+      const { subject, html, text } = mail.resetPasswordEmail({ fullName: user.full_name, link, minutes: RESET_TTL_MS / 60000 });
+      await mail.sendMail(db, { to: user.email, subject, html, text });
+      console.log(`[POST /api/auth/forgot-password] "${username}" — reset email sent`);
+    } catch (err) {
+      // Swallowed on purpose — response stays generic either way.
+      console.error(`[POST /api/auth/forgot-password] "${username}" — send failed:`, err.message);
+    }
+    res.json(GENERIC);
+  });
+
+  // ── POST /api/auth/reset-password ───────────────────────────────────────────
+  app.post('/api/auth/reset-password', (req, res) => {
+    const { token, newPassword } = req.body || {};
+    const INVALID = { error: 'הקישור אינו תקף או שפג תוקפו' };
+    if (!token || !newPassword) return res.status(400).json(INVALID);
+
+    const record = resetByHash.get(hashToken(token));
+    if (!record || record.used_at || new Date(record.expires_at).getTime() < Date.now()) {
+      return res.status(400).json(INVALID);
+    }
+    if (newPassword.length < MIN_PASSWORD_LENGTH) {
+      return res.status(400).json({ error: `password must be at least ${MIN_PASSWORD_LENGTH} characters` });
+    }
+
+    const user = userById.get(record.user_id);
+    if (!user) return res.status(400).json(INVALID);
+
+    setUserPassword.run(hashPassword(newPassword), user.id);
+    markResetUsed.run(record.id);
+    delSessionsForUser.run(user.id);
+    clearLoginFailures(user.username);
+    console.log(`[POST /api/auth/reset-password] "${user.username}" — password reset, sessions invalidated`);
     res.json({ ok: true });
   });
 

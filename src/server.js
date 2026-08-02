@@ -12,6 +12,7 @@ const registerUpdate   = require('./routes/update');
 const registerGreenApi = require('./routes/greenapi');
 const registerMonday   = require('./routes/monday');
 const registerAttachments = require('./routes/attachments');
+const registerSmtp     = require('./routes/smtp');
 
 const PORT    = process.env.PORT || 3000;
 const DB_PATH = path.join(__dirname, '../database.sqlite');
@@ -109,6 +110,7 @@ registerUpdate(app, db, { requireAuth, requireAdmin });
 registerGreenApi(app, db, { requireAuth, requireAdmin });
 registerMonday(app, db, { requireAuth, requireAdmin });
 registerAttachments(app, db, { requireAuth });
+registerSmtp(app, db, { requireAuth, requireAdmin });
 
 // ─── Version info — read by deploy/UPDATE.ps1's post-deploy smoke check and
 // by anyone wanting to confirm which release is live without RDP access ─────
@@ -183,6 +185,8 @@ app.listen(PORT, () => {
   console.log('  GET    /api/admin/check-update        POST /api/admin/update');
   console.log('  GET/PUT /api/greenapi/config          (WhatsApp auto-send credentials)');
   console.log('  GET/PUT /api/monday/config            GET /api/monday/boards|boards/:id/groups');
+  console.log('  POST   /api/auth/forgot-password      POST /api/auth/reset-password');
+  console.log('  GET/PUT /api/smtp/config               POST /api/smtp/test');
 });
 
 // ─── Removed (2026-07-07 pre-launch cleanup) ─────────────────────────────────

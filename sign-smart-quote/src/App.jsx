@@ -1,4 +1,8 @@
 import { Toaster } from "@/components/ui/toaster"
+// Two independent toast systems live in this app: the Radix one above (driven
+// by use-toast) and sonner. Every settings/admin screen calls sonner's `toast`,
+// but its Toaster was never mounted — so those messages silently went nowhere.
+import { Toaster as SonnerToaster } from "@/components/ui/sonner"
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
@@ -10,6 +14,7 @@ import QuotesHistory from './pages/QuotesHistory.jsx';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import Login from './pages/Login.jsx';
 import ChangePassword from './pages/ChangePassword.jsx';
+import ResetPassword from './pages/ResetPassword.jsx';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { Navigate } from 'react-router-dom';
 // Add page imports here
@@ -22,6 +27,12 @@ const AdminOnly = ({ children }) => {
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, isAuthenticated, user } = useAuth();
+
+  // Reached from the emailed reset link — must render before any auth check
+  // (no session exists yet) and before the auth-loading spinner below.
+  if (window.location.pathname === '/reset-password') {
+    return <ResetPassword />;
+  }
 
   // Show loading spinner while checking auth
   if (isLoadingPublicSettings || isLoadingAuth) {
@@ -66,6 +77,7 @@ function App() {
             <AuthenticatedApp />
           </Router>
           <Toaster />
+          <SonnerToaster />
         </QueryClientProvider>
       </AuthProvider>
     </ErrorBoundary>
