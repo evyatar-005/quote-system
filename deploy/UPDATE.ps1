@@ -313,6 +313,15 @@ try {
     # database.sqlite, uploads/, VERSION.txt — are not touched by reset --hard.
     Write-Step "Discarding local modifications..."
     Invoke-Checked "git" @("reset", "--hard") $repoRoot
+    # reset --hard only restores tracked files. An untracked file sitting where
+    # the target tag wants to place one aborts the checkout outright, which is
+    # how a copied-in deploy/test-stop-server.ps1 blocked the v1.0.19 rollout.
+    #
+    # -fd, never -x. Without -x, git leaves ignored paths alone, and everything
+    # this server must not lose is ignored: database.sqlite, uploads/, backups/,
+    # VERSION.txt, node_modules/. Adding -x here would delete the production
+    # database.
+    Invoke-Checked "git" @("clean", "-fd") $repoRoot
 
     Write-Step "Checking out $targetTag..."
     Invoke-Checked "git" @("checkout", $targetTag) $repoRoot
@@ -350,6 +359,7 @@ try {
     # release. The final safety net below starts the server either way.
     Stop-Server | Out-Null
     Invoke-Checked "git" @("reset", "--hard") $repoRoot
+    Invoke-Checked "git" @("clean", "-fd") $repoRoot
     Invoke-Checked "git" @("checkout", $previousTag) $repoRoot
     Install-And-Build $previousTag
     $rollbackOk = Start-Server-And-Check
