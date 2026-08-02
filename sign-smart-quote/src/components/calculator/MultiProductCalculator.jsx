@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import CalculatorTab from "./CalculatorTab";
-import { PRODUCT_NAMES, PRODUCT_CODES, categoryOf, productImage } from "./CalculatorForm";
+import { PRODUCT_NAMES, PRODUCT_CODES, EXTRAS_OPTIONS, categoryOf, productImage } from "./CalculatorForm";
 import { base44 } from "@/api/base44Client";
 import { issueQuoteToMorning } from "@/api/morningClient";
 import ClientSearchField from "./ClientSearchField";
@@ -221,9 +221,74 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
   // Flattens every line (main product + its extra sticker rows, if any) into
   // the { description, quantity, unitPrice, groupLabel } shape QuoteDetailsModal
   // already knows how to render.
-  // "200×100 ס״מ" (or "" if the line has no real dimensions — fixed-price
-  // catalog rows like kapa/rollup/glass never set widthM/heightM).
-  const dimsSuffix = (fd) => fd?.widthM && fd?.heightM ? ` (${fd.widthM}×${fd.heightM} מ׳)` : "";
+
+  // Everything the agent configured on a line, as the customer-facing spec that
+  // goes into the Morning income row's description. Until this existed, the
+  // document only ever showed the product name + dimensions, so thickness,
+  // elements, extras, installation and the agent's free text were all invisible
+  // to the customer even though they're exactly what they're paying for.
+  // Labels are pulled from the same maps the form renders, so the document says
+  // what the agent saw on screen. Empty fields are skipped entirely — a line
+  // never shows "0 אלמנטים" or a dangling "תוספות:".
+  // `itemLabel` is the agent's custom name for the item (the pencil field). Its
+  // tooltip promises it "יופיע בהצעת המחיר", and agents use it for real
+  // production notes ("לשלב PVC לבן עם צביעה בתנור ראל 705"), so it has to
+  // reach Morning — the auto "מוצר N" default is filtered out by the caller.
+  const buildSpecLines = (formData, itemLabel, title) => {
+    const lines = [];
+
+    // Dimensions · thickness · elements — the compact "measurements" line.
+    const head = [];
+    if (formData?.widthM && formData?.heightM) head.push(`${formData.widthM}×${formData.heightM} מ׳`);
+    if (formData?.thicknessMm) head.push(`עובי ${formData.thicknessMm} מ"מ`);
+    const elements = parseInt(formData?.elements) || 0;
+    if (elements > 0) head.push(elements === 1 ? "אלמנט אחד" : `${elements} אלמנטים`);
+    if (head.length) lines.push(head.join(" · "));
+
+    const extras = (formData?.extras || [])
+      .map((key) => EXTRAS_OPTIONS.find((o) => o.key === key)?.label)
+      .filter(Boolean);
+    if (extras.length) lines.push(`תוספות: ${extras.join(", ")}`);
+
+    // Stickers only — region is meaningless (and not asked for) without installation.
+    if (formData?.includeInstallation === "yes") {
+      lines.push(`כולל התקנה${formData.region ? ` (${formData.region})` : ""}`);
+    } else if (formData?.includeInstallation === "no") {
+      lines.push("ללא התקנה");
+    }
+
+    // Kapa shelves — priced as part of the line, so they belong in its description.
+    const standardShelves = parseInt(formData?.standardShelves) || 0;
+    const customShelves = parseInt(formData?.customShelves) || 0;
+    const shelves = [];
+    if (standardShelves > 0) shelves.push(standardShelves === 1 ? "מדף סטנדרטי אחד" : `${standardShelves} מדפים סטנדרטיים`);
+    if (customShelves > 0) shelves.push(customShelves === 1 ? "מדף אחד בעיצוב אישי" : `${customShelves} מדפים בעיצוב אישי`);
+    if (shelves.length) lines.push(shelves.join(", "));
+
+    // The agent's own notes go last, on one "הערה:" line — the item name first,
+    // then the line's free text. Deduped against each other and against the
+    // title: for free_product the lineLabel IS the product name (the
+    // description's first line), and agents often repeat the same note in both
+    // fields; either way it should only ever print once.
+    //
+    // The "הערה:" prefix isn't decoration. Morning's PDF honours the newlines,
+    // but its web preview (and WhatsApp) collapse them into spaces — without a
+    // marker the note runs straight into the spec and reads as part of it.
+    // Every other line already self-labels ("עובי", "תוספות:"); this one didn't.
+    const notes = [];
+    if (itemLabel?.trim()) notes.push(itemLabel.trim());
+    if (formData?.lineLabel?.trim() && formData?.productType !== "free_product") {
+      notes.push(formData.lineLabel.trim());
+    }
+    const uniqueNotes = [...new Set(notes)].filter((note) => note !== title);
+    if (uniqueNotes.length) lines.push(`הערה: ${uniqueNotes.join(" · ")}`);
+
+    return lines;
+  };
+
+  // Product name on the first line, full spec underneath.
+  const lineDescription = (title, formData, itemLabel) =>
+    [title, ...buildSpecLines(formData, itemLabel, title)].join("\n");
 
   // Fixed-price catalog families (kapa/rollup/glass) carry their own per-row
   // SKU on the calc result; everything else uses its static מק"ט from the
@@ -245,10 +310,19 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
       const formData = formDataMap[item.id];
       if (!formData?.productType) return;
       const groupLabel = items.length > 1 ? itemDisplayName(item.id, index) : null;
+      // Only a name the agent actually typed — `itemDisplayName` falls back to
+      // "מוצר N", which is UI scaffolding and means nothing to the customer.
+      // Unlike groupLabel this applies to single-item quotes too: the agent can
+      // name the one item, and that note is just as real.
+      const itemLabel = itemLabels[item.id]?.trim() || "";
       const isFree = formData.productType === "free_product";
       lines.push({
         groupLabel,
-        description: (isFree ? (formData.lineLabel || "מוצר חופשי") : (PRODUCT_NAMES[formData.productType] || formData.productType)) + dimsSuffix(formData),
+        description: lineDescription(
+          isFree ? (formData.lineLabel || "מוצר חופשי") : (PRODUCT_NAMES[formData.productType] || formData.productType),
+          formData,
+          itemLabel,
+        ),
         freeText: formData.lineLabel || "",
         quantity: parseInt(formData.quantity) || 1,
         unitPrice: formData.result?.sellingPricePerUnit ?? 0,
@@ -258,7 +332,15 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
         if (!row.result) return;
         lines.push({
           groupLabel,
-          description: `${PRODUCT_NAMES[formData.productType] || formData.productType} — מידה נוספת${dimsSuffix(row)}`,
+          // An extra row is the same configured product at a different size, so
+          // it inherits the parent's spec (thickness/extras/installation) and
+          // overrides only what the row itself asks for — exactly the merge
+          // CalculatorTab feeds to calculate() for this row.
+          description: lineDescription(
+            `${PRODUCT_NAMES[formData.productType] || formData.productType} — מידה נוספת`,
+            { ...formData, widthM: row.widthM, heightM: row.heightM, elements: row.elements || "", lineLabel: row.lineLabel },
+            itemLabel,
+          ),
           freeText: row.lineLabel || "",
           quantity: parseInt(row.quantity) || 1,
           unitPrice: row.result.sellingPricePerUnit ?? 0,

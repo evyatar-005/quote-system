@@ -710,7 +710,7 @@ export default function QuoteDetailsModal({ quote, onClose, onSaved }) {
                       <div key={idx} className="flex justify-between items-center py-1.5 border-b border-white/10 last:border-b-0 gap-3">
                         <div className="min-w-0">
                           {li.groupLabel && <div className="text-xs text-[#C9A84C] font-semibold mb-0.5">{li.groupLabel}</div>}
-                          <div className="text-zinc-200 truncate">{li.description || "—"}</div>
+                          <div className="text-zinc-200 whitespace-pre-line break-words">{li.description || "—"}</div>
                         </div>
                         <div className="text-left shrink-0">
                           <div className="text-zinc-300">{li.quantity} × {fmt(li.unitPrice)}</div>

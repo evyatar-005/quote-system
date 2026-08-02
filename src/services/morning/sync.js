@@ -96,7 +96,13 @@ function buildIncomeRows(quote) {
   }
 
   return items.map(item => ({
-    description: item.description,
+    // Quotes saved before the calculator started folding the full spec into
+    // `description` kept the agent's free text in its own `freeText` field,
+    // which never reached Morning. Append it for those; newer quotes already
+    // carry it inside the description, so the check keeps it from doubling up.
+    description: item.freeText && !String(item.description || '').includes(item.freeText)
+      ? `${item.description}\n${item.freeText}`
+      : item.description,
     quantity: item.quantity,
     price: item.unitPrice,
     currency: CURRENCY,

@@ -127,7 +127,7 @@ const THICKNESS_OPTIONS_BY_CATEGORY = {
   perspexBoard: ["3", "5", "10"],
 };
 
-const EXTRAS_OPTIONS = [
+export const EXTRAS_OPTIONS = [
   { key: "spacers", label: "ספייסרים" },
   { key: "hidden_spacers", label: "ספייסרים נסתרים" },
   { key: "paint_single", label: "צביעה בחדר צבע - גוון יחיד" },
