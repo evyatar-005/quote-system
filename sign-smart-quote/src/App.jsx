@@ -16,6 +16,7 @@ import Login from './pages/Login.jsx';
 import ChangePassword from './pages/ChangePassword.jsx';
 import ResetPassword from './pages/ResetPassword.jsx';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import Footer from '@/components/Footer';
 import { Navigate } from 'react-router-dom';
 // Add page imports here
 
@@ -54,15 +55,20 @@ const AuthenticatedApp = () => {
     return <ChangePassword />;
   }
 
-  // Render the main app
+  // Render the main app. The footer lives here rather than around the whole
+  // tree so it stays off the login/reset screens, which are centred
+  // min-h-screen cards that a trailing block would push into scrolling.
   return (
-    <Routes>
-      <Route path="/" element={<AdminOnly><AdminDashboard /></AdminOnly>} />
-      <Route path="/costs" element={<CostsDashboard />} />
-      <Route path="/cutting" element={<CutListOptimizer />} />
-      <Route path="/quotes" element={<AdminOnly><QuotesHistory /></AdminOnly>} />
-      <Route path="*" element={<PageNotFound />} />
-    </Routes>
+    <>
+      <Routes>
+        <Route path="/" element={<AdminOnly><AdminDashboard /></AdminOnly>} />
+        <Route path="/costs" element={<CostsDashboard />} />
+        <Route path="/cutting" element={<CutListOptimizer />} />
+        <Route path="/quotes" element={<AdminOnly><QuotesHistory /></AdminOnly>} />
+        <Route path="*" element={<PageNotFound />} />
+      </Routes>
+      <Footer />
+    </>
   );
 };
 
