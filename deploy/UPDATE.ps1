@@ -139,7 +139,18 @@ function Stop-Server {
             Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
         }
     }
+    # Confirm the port is actually free before anyone acts on that assumption.
+    # If something un-killable is still holding it (permissions, a process wedged
+    # in I/O), the deploy would otherwise run to completion and fail at the very
+    # end with the new server unable to bind — after the checkout, with the old
+    # code already gone. Reported here instead, while nothing has been touched.
     Start-Sleep -Seconds 1
+    $still = Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue
+    if ($still) {
+        Write-Host "Port 3000 is still held by PID $($still.OwningProcess) after stopping the server." -ForegroundColor Red
+        return $false
+    }
+    return $true
 }
 
 function Start-Server-And-Check {
@@ -274,8 +285,18 @@ if (-not $targetTag) {
 Write-Host "Target version: $targetTag (previously running: $previousTag)"
 
 # --- 5. Stop the running server ---
+# Bailing out here is the safe direction: nothing has been checked out yet, so
+# whatever is still holding the port is the previous release, still serving.
+# Better a deploy that refuses to start than one that dismantles a working
+# install and can't put anything back in its place.
 Write-Step "Stopping the running server..."
-Stop-Server
+if (-not (Stop-Server)) {
+    Write-Host ""
+    Write-Host "Aborting: could not free port 3000. Nothing was changed and the current version is still running." -ForegroundColor Red
+    Write-Host "Find the process with: Get-NetTCPConnection -LocalPort 3000 -State Listen" -ForegroundColor Yellow
+    Start-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+    exit 1
+}
 
 # --- 6+7. Checkout, install, build, start, verify ---
 # The checkout MUST be inside this try. The server is already stopped by the
@@ -324,7 +345,10 @@ if (-not $previousTag) {
 
 $rollbackOk = $false
 try {
-    Stop-Server
+    # Return value ignored on purpose: we're already in the failure path, and a
+    # port that won't clear is no reason to skip trying to restore the previous
+    # release. The final safety net below starts the server either way.
+    Stop-Server | Out-Null
     Invoke-Checked "git" @("reset", "--hard") $repoRoot
     Invoke-Checked "git" @("checkout", $previousTag) $repoRoot
     Install-And-Build $previousTag
