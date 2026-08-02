@@ -223,13 +223,25 @@ Write-Host "Target version: $targetTag (previously running: $previousTag)"
 Write-Step "Stopping the running server..."
 Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
 
-# --- 6. Checkout the target tag ---
-Write-Step "Checking out $targetTag..."
-Invoke-Checked "git" @("checkout", $targetTag) $repoRoot
-
-# --- 7. Install, build, start, verify ---
+# --- 6+7. Checkout, install, build, start, verify ---
+# The checkout MUST be inside this try. The server is already stopped by the
+# time we get here, and a checkout that throws on its way out of the script
+# leaves production down with no rollback and nothing restarted — which is
+# exactly what happened on 2026-08-02.
 $deploySucceeded = $false
 try {
+    # Install-And-Build runs `npm install`, which rewrites package-lock.json.
+    # That leaves the tree dirty after every single deploy, so the NEXT deploy's
+    # checkout aborts with "local changes would be overwritten". This checkout
+    # is meant to make the server match the tag exactly, so anything modified
+    # here is by definition disposable. Untracked and ignored files —
+    # database.sqlite, uploads/, VERSION.txt — are not touched by reset --hard.
+    Write-Step "Discarding local modifications..."
+    Invoke-Checked "git" @("reset", "--hard") $repoRoot
+
+    Write-Step "Checking out $targetTag..."
+    Invoke-Checked "git" @("checkout", $targetTag) $repoRoot
+
     Install-And-Build $targetTag
     $deploySucceeded = Start-Server-And-Check
 } catch {
@@ -250,19 +262,32 @@ Write-Host ""
 Write-Host "Post-deploy check FAILED. Rolling back..." -ForegroundColor Red
 
 if (-not $previousTag) {
-    Write-Host "No previous tag recorded - cannot auto-rollback. Manual intervention needed." -ForegroundColor Red
+    Write-Host "No previous tag recorded - cannot auto-rollback." -ForegroundColor Red
+    Write-Host "Starting the server on whatever is checked out, rather than leaving it down." -ForegroundColor Yellow
+    Start-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
     exit 1
 }
 
-Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
-Invoke-Checked "git" @("checkout", $previousTag) $repoRoot
-Install-And-Build $previousTag
-$rollbackOk = Start-Server-And-Check
+$rollbackOk = $false
+try {
+    Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+    Invoke-Checked "git" @("reset", "--hard") $repoRoot
+    Invoke-Checked "git" @("checkout", $previousTag) $repoRoot
+    Install-And-Build $previousTag
+    $rollbackOk = Start-Server-And-Check
+} catch {
+    Write-Host "Rollback step failed: $($_.Exception.Message)" -ForegroundColor Red
+}
 
 if ($rollbackOk) {
     Write-Host "Rolled back successfully to $previousTag." -ForegroundColor Yellow
     exit 1
-} else {
-    Write-Host "Rollback ALSO failed. The server may be down. Manual intervention needed." -ForegroundColor Red
-    exit 1
 }
+
+# Nothing worked. Whatever state the checkout is in, the one thing that must not
+# happen is walking away with production stopped — a stale version answering is
+# strictly better than nothing answering.
+Write-Host "Rollback failed too. Starting the server anyway as a last resort." -ForegroundColor Red
+Start-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+Write-Host "Check $logDir for the full transcript." -ForegroundColor Red
+exit 1
