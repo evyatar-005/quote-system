@@ -5,20 +5,20 @@ import { Loader2 } from 'lucide-react';
 import { forgotPassword } from '@/api/smtpClient';
 
 // Reached from Login.jsx's "שכחתי סיסמה" link. Always shows the same generic
-// success message regardless of whether the username matched anything — the
+// success message regardless of whether the email matched anything — the
 // backend (POST /api/auth/forgot-password) is deliberately silent about that
-// too, so this screen can't be used to enumerate usernames.
+// too, so this screen can't be used to enumerate registered addresses.
 export default function ForgotPassword({ onBack }) {
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!username.trim()) return;
+    if (!email.trim()) return;
     setLoading(true);
     try {
-      await forgotPassword(username.trim());
+      await forgotPassword(email.trim());
     } catch {
       // Ignore — the endpoint itself never signals failure for this reason;
       // a network/500 error still shows the same generic message.
@@ -64,19 +64,21 @@ export default function ForgotPassword({ onBack }) {
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-1.5">
-                <label className="text-base font-semibold text-slate-700">שם משתמש</label>
+                <label className="text-base font-semibold text-slate-700">אימייל</label>
                 <Input
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="שם משתמש"
-                  autoComplete="username"
+                  type="email"
+                  dir="ltr"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="name@company.co.il"
+                  autoComplete="email"
                   className="h-11 bg-slate-50 border-black"
                 />
               </div>
 
               <Button
                 type="submit"
-                disabled={loading || !username.trim()}
+                disabled={loading || !email.trim()}
                 className="w-full h-11 bg-[#C9A84C] text-black hover:bg-[#C9A84C]/90 font-semibold"
               >
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'שליחת קישור לאיפוס'}

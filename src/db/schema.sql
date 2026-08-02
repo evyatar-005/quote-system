@@ -103,6 +103,12 @@ CREATE TABLE IF NOT EXISTS users (
   -- be used past the first real login.
   must_change_password INTEGER NOT NULL DEFAULT 0
 );
+-- The UNIQUE index on email (partial: WHERE email IS NOT NULL, so legacy rows
+-- with no email don't collide with each other) is created in server.js rather
+-- than here. This file is executed as one unguarded db.exec on every boot —
+-- if a production DB somehow already has two users sharing an email, creating
+-- the index here would throw and take the whole server down on startup.
+-- server.js checks for duplicates first and only creates the index when safe.
 
 CREATE TABLE IF NOT EXISTS sessions (
   token      TEXT PRIMARY KEY,

@@ -7,7 +7,7 @@ import ForgotPassword from './ForgotPassword.jsx';
 
 export default function Login() {
   const { login } = useAuth();
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -19,15 +19,15 @@ export default function Login() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!username.trim() || !password.trim()) return;
+    if (!email.trim() || !password.trim()) return;
     setLoading(true);
     setError('');
     try {
-      await login(username.trim(), password);
+      await login(email.trim(), password);
     } catch (err) {
       setError(
         err && err.status === 401
-          ? 'שם משתמש או סיסמה שגויים'
+          ? 'אימייל או סיסמה שגויים'
           : 'ההתחברות נכשלה. נסה שוב מאוחר יותר'
       );
     } finally {
@@ -59,12 +59,14 @@ export default function Login() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">
-            <label className="text-base font-semibold text-slate-700">שם משתמש</label>
+            <label className="text-base font-semibold text-slate-700">אימייל</label>
             <Input
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="שם משתמש"
-              autoComplete="username"
+              type="email"
+              dir="ltr"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="name@company.co.il"
+              autoComplete="email"
               className="h-11 bg-slate-50 border-black"
             />
           </div>
@@ -89,7 +91,7 @@ export default function Login() {
 
           <Button
             type="submit"
-            disabled={loading || !username.trim() || !password.trim()}
+            disabled={loading || !email.trim() || !password.trim()}
             className="w-full h-11 bg-[#C9A84C] text-black hover:bg-[#C9A84C]/90 font-semibold"
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'התחברות'}

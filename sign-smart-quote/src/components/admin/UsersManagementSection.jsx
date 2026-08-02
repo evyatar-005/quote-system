@@ -38,6 +38,9 @@ export default function UsersManagementSection() {
 
   const handleCreate = async () => {
     if (!newUser.username.trim()) return toast.error("יש להזין שם משתמש");
+    // Required client-side too, not just server-side: login is by email now,
+    // so a user created without one would have no way to ever sign in.
+    if (!newUser.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newUser.email.trim())) return toast.error("יש להזין כתובת מייל תקינה — היא משמשת להתחברות");
     if (!newUser.password || newUser.password.length < 6) return toast.error("סיסמה חייבת להכיל לפחות 6 תווים");
     setCreating(true);
     try {
@@ -46,7 +49,8 @@ export default function UsersManagementSection() {
       setNewUser({ username: "", password: "", full_name: "", email: "", role: "agent" });
       loadUsers();
     } catch (err) {
-      toast.error(err.message === "username already exists" ? "שם המשתמש כבר קיים" : "שגיאה ביצירת המשתמש");
+      const known = { "username already exists": "שם המשתמש כבר קיים", "email already exists": "כתובת המייל כבר בשימוש" };
+      toast.error(known[err.message] || "שגיאה ביצירת המשתמש");
     }
     setCreating(false);
   };
@@ -73,7 +77,7 @@ export default function UsersManagementSection() {
       setEditEmailValue("");
       loadUsers();
     } catch (err) {
-      toast.error("שגיאה בעדכון המייל");
+      toast.error(err.message === "email already exists" ? "כתובת המייל כבר בשימוש ע״י משתמש אחר" : "שגיאה בעדכון המייל");
     }
   };
 
@@ -178,7 +182,9 @@ export default function UsersManagementSection() {
                   <p className="text-xs text-muted-foreground">
                     {u.username}
                     {u.email ? ` · ${u.email}` : ""}
-                    {!u.email && <span className="text-amber-600"> · ללא מייל — לא יוכל לאפס סיסמה</span>}
+                    {/* Login is by email now — without one this account cannot sign in at all,
+                        not merely "can't reset its password" as before. */}
+                    {!u.email && <span className="text-amber-600"> · ללא מייל — לא יוכל להתחבר למערכת</span>}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -239,7 +245,7 @@ export default function UsersManagementSection() {
               <Button onClick={handleSaveEmail}>שמור מייל</Button>
               <Button variant="ghost" onClick={() => { setEditEmailFor(null); setEditEmailValue(""); }}>ביטול</Button>
             </div>
-            <p className="text-xs text-muted-foreground">לכתובת הזו יישלח קישור איפוס הסיסמה. השארה ריקה תמחק את הכתובת.</p>
+            <p className="text-xs text-muted-foreground">כתובת זו משמשת להתחברות למערכת ולקבלת קישור איפוס סיסמה. השארה ריקה תמחק אותה — המשתמש לא יוכל להתחבר עד שתוגדר כתובת מחדש.</p>
           </div>
         )}
 

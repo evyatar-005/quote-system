@@ -81,6 +81,28 @@ try { db.exec('ALTER TABLE signshop_lokobond_area_tiers ADD COLUMN agent_min_pri
 // leaked/guessed default password can't be used past the first real login.
 try { db.exec('ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0'); } catch (_) {}
 
+// Login moved from username to email, which means email must be unique.
+// Normalize first (trim + lowercase, matching auth.js on every write from now
+// on) so a case-only difference like Evyatar@x.com / evyatar@x.com doesn't
+// slip past the check below, then only create the UNIQUE index if that leaves
+// no collisions. Skipping instead of throwing on a dirty production DB is the
+// difference between "email login is ambiguous until an admin fixes the data"
+// and "the server never comes back up."
+try {
+  db.exec(`UPDATE users SET email = TRIM(LOWER(email)) WHERE email IS NOT NULL AND email != TRIM(LOWER(email))`);
+  const dupes = db.prepare(
+    `SELECT email, COUNT(*) AS n FROM users WHERE email IS NOT NULL AND email != '' GROUP BY email HAVING n > 1`
+  ).all();
+  if (dupes.length) {
+    console.error('[startup] users.email has duplicates — email login will be ambiguous until fixed by an admin:');
+    for (const d of dupes) console.error(`  "${d.email}" used by ${d.n} accounts`);
+  } else {
+    db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique ON users(email) WHERE email IS NOT NULL AND email != ''`);
+  }
+} catch (err) {
+  console.error('[startup] email-uniqueness migration failed (continuing anyway):', err.message);
+}
+
 // ─── SignCalc Pro config — read by the Base44-compatible PricingConfig entity ─
 // (registerEntities below needs loadConfig/upsertConfig; the tables themselves
 // are seeded by seedSignshop() above and otherwise read/written entirely through

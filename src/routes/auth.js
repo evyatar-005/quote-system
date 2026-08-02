@@ -15,6 +15,14 @@ function hashToken(token) {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
 
+// Login and every write to users.email go through this, so the value in the
+// DB and the value looked up at login always compare equal regardless of how
+// the user capitalized it. Must match the one-time UPDATE in server.js that
+// normalizes existing rows before the UNIQUE index is created.
+function normalizeEmail(email) {
+  return (email || '').trim().toLowerCase();
+}
+
 // ── password helpers ─────────────────────────────────────────────────────────
 function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString('hex');
@@ -49,7 +57,7 @@ function seedUsers(db) {
   ];
   let added = 0;
   for (const [username, pw, full_name, email, role] of seeds) {
-    const { changes } = ins.run(username, hashPassword(pw), full_name, email, role);
+    const { changes } = ins.run(username, hashPassword(pw), full_name, normalizeEmail(email), role);
     added += changes;
   }
   if (added) console.log(`[auth seed] ${added} משתמשים חדשים הוספו`);
@@ -60,6 +68,7 @@ module.exports = function registerAuth(app, db) {
   seedUsers(db);
 
   const userByName    = db.prepare(`SELECT * FROM users WHERE username = ?`);
+  const userByEmail    = db.prepare(`SELECT * FROM users WHERE email = ?`);
   const userById       = db.prepare(`SELECT * FROM users WHERE id = ?`);
   const insSession    = db.prepare(`INSERT INTO sessions (token, user_id) VALUES (?, ?)`);
   const sessionByToken = db.prepare(`SELECT * FROM sessions WHERE token = ?`);
@@ -107,51 +116,56 @@ module.exports = function registerAuth(app, db) {
   // ── Login rate limiting ───────────────────────────────────────────────────────
   // In-memory is fine here — single-process app, and a restart resetting the
   // counters is an acceptable tradeoff for not adding a dependency/table for this.
-  const loginAttempts = new Map(); // username → { count, lockedUntil }
+  // Keyed by (normalized) email now that login no longer uses username.
+  const loginAttempts = new Map(); // email → { count, lockedUntil }
 
-  function checkLoginLock(username) {
-    const entry = loginAttempts.get(username);
+  function checkLoginLock(email) {
+    const entry = loginAttempts.get(email);
     if (!entry) return null;
     if (entry.lockedUntil && entry.lockedUntil > Date.now()) {
       return Math.ceil((entry.lockedUntil - Date.now()) / 1000);
     }
-    if (entry.lockedUntil && entry.lockedUntil <= Date.now()) loginAttempts.delete(username);
+    if (entry.lockedUntil && entry.lockedUntil <= Date.now()) loginAttempts.delete(email);
     return null;
   }
 
-  function recordLoginFailure(username) {
-    const entry = loginAttempts.get(username) || { count: 0, lockedUntil: null };
+  function recordLoginFailure(email) {
+    const entry = loginAttempts.get(email) || { count: 0, lockedUntil: null };
     entry.count += 1;
     if (entry.count >= LOGIN_MAX_ATTEMPTS) {
       entry.lockedUntil = Date.now() + LOGIN_LOCKOUT_MS;
       entry.count = 0;
     }
-    loginAttempts.set(username, entry);
+    loginAttempts.set(email, entry);
   }
 
-  function clearLoginFailures(username) {
-    loginAttempts.delete(username);
+  function clearLoginFailures(email) {
+    loginAttempts.delete(email);
   }
 
   // ── POST /api/auth/login ────────────────────────────────────────────────────
+  // Identifies by email now, not username — username is kept only as an
+  // internal reference (still required/unique in the DB, still shown in the
+  // admin users list) but is no longer how anyone signs in.
   app.post('/api/auth/login', (req, res) => {
-    const { username, password } = req.body || {};
-    if (!username || !password) return res.status(401).json({ error: 'invalid credentials' });
+    const { email, password } = req.body || {};
+    const normalized = normalizeEmail(email);
+    if (!normalized || !password) return res.status(401).json({ error: 'invalid credentials' });
 
-    const lockedForSeconds = checkLoginLock(username);
+    const lockedForSeconds = checkLoginLock(normalized);
     if (lockedForSeconds) {
       return res.status(429).json({ error: `too many failed attempts — try again in ${lockedForSeconds}s` });
     }
 
-    const u = userByName.get(username);
+    const u = userByEmail.get(normalized);
     if (!u || !verifyPassword(password, u.password_hash)) {
-      recordLoginFailure(username);
+      recordLoginFailure(normalized);
       return res.status(401).json({ error: 'invalid credentials' });
     }
-    clearLoginFailures(username);
+    clearLoginFailures(normalized);
     const token = crypto.randomBytes(24).toString('hex');
     insSession.run(token, u.id);
-    console.log(`[POST /api/auth/login] "${username}" (${u.role}) → session`);
+    console.log(`[POST /api/auth/login] "${normalized}" (${u.role}) → session`);
     res.json({ token, user: publicUser(u) });
   });
 
@@ -198,19 +212,22 @@ module.exports = function registerAuth(app, db) {
   // the username exists, has an email, or SMTP send fails — otherwise this
   // endpoint becomes a username enumeration oracle.
   app.post('/api/auth/forgot-password', async (req, res) => {
-    const { username } = req.body || {};
+    const { email } = req.body || {};
+    const normalized = normalizeEmail(email);
     const GENERIC = { ok: true, message: 'אם קיים משתמש כזה עם כתובת מייל רשומה, נשלח אליו קישור לאיפוס הסיסמה.' };
-    if (!username || !username.trim()) return res.json(GENERIC);
+    if (!normalized) return res.json(GENERIC);
 
-    const user = userByName.get(username.trim());
-    if (!user || !user.email) {
-      console.log(`[POST /api/auth/forgot-password] "${username}" — no matching user/email, generic response`);
+    // Looked up by the same normalized email login uses, so "forgot password"
+    // and "sign in" always agree on which account an address refers to.
+    const user = userByEmail.get(normalized);
+    if (!user) {
+      console.log(`[POST /api/auth/forgot-password] "${normalized}" — no matching user, generic response`);
       return res.json(GENERIC);
     }
 
     const { n } = countRecentResets.get(user.id);
     if (n >= RESET_MAX_PER_HOUR) {
-      console.log(`[POST /api/auth/forgot-password] "${username}" — rate limited (${n} in last hour)`);
+      console.log(`[POST /api/auth/forgot-password] "${normalized}" — rate limited (${n} in last hour)`);
       return res.json(GENERIC);
     }
 
@@ -225,10 +242,10 @@ module.exports = function registerAuth(app, db) {
       const link = `${baseUrl}/reset-password?token=${token}`;
       const { subject, html, text } = mail.resetPasswordEmail({ fullName: user.full_name, link, minutes: RESET_TTL_MS / 60000 });
       await mail.sendMail(db, { to: user.email, subject, html, text });
-      console.log(`[POST /api/auth/forgot-password] "${username}" — reset email sent`);
+      console.log(`[POST /api/auth/forgot-password] "${normalized}" — reset email sent`);
     } catch (err) {
       // Swallowed on purpose — response stays generic either way.
-      console.error(`[POST /api/auth/forgot-password] "${username}" — send failed:`, err.message);
+      console.error(`[POST /api/auth/forgot-password] "${normalized}" — send failed:`, err.message);
     }
     res.json(GENERIC);
   });
@@ -253,7 +270,8 @@ module.exports = function registerAuth(app, db) {
     setUserPassword.run(hashPassword(newPassword), user.id);
     markResetUsed.run(record.id);
     delSessionsForUser.run(user.id);
-    clearLoginFailures(user.username);
+    // Login lockouts are now keyed by email (see /api/auth/login), not username.
+    if (user.email) clearLoginFailures(user.email);
     console.log(`[POST /api/auth/reset-password] "${user.username}" — password reset, sessions invalidated`);
     res.json({ ok: true });
   });
@@ -272,17 +290,24 @@ module.exports = function registerAuth(app, db) {
     res.json({ users: allUsers.all() });
   });
 
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
   // POST /api/admin/users
   app.post('/api/admin/users', requireAdmin, (req, res) => {
     const { username, password, full_name = '', email = '', role = 'agent' } = req.body || {};
+    const normalizedEmail = normalizeEmail(email);
     if (!username?.trim())  return res.status(400).json({ error: 'username required' });
+    // Required now, not optional: login is by email, so an account created
+    // without one would be permanently unreachable.
+    if (!normalizedEmail || !EMAIL_RE.test(normalizedEmail)) return res.status(400).json({ error: 'valid email required' });
     if (!password || password.length < MIN_PASSWORD_LENGTH) return res.status(400).json({ error: `password must be at least ${MIN_PASSWORD_LENGTH} characters` });
     if (!ROLES.has(role))   return res.status(400).json({ error: 'role must be admin or agent' });
     if (userByName.get(username.trim())) return res.status(409).json({ error: 'username already exists' });
+    if (userByEmail.get(normalizedEmail)) return res.status(409).json({ error: 'email already exists' });
     // New accounts always start with must_change_password = 1 (see insertUser) —
     // the admin-set password here is only ever meant to get the new user to their
     // first real login.
-    const { lastInsertRowid } = insertUser.run(username.trim(), hashPassword(password), full_name, email, role);
+    const { lastInsertRowid } = insertUser.run(username.trim(), hashPassword(password), full_name, normalizedEmail, role);
     const created = userById.get(lastInsertRowid);
     console.log(`[POST /api/admin/users] id=${created.id} "${created.username}" (${created.role})`);
     res.status(201).json({ user: publicUser(created) });
@@ -295,9 +320,19 @@ module.exports = function registerAuth(app, db) {
     const existing = userById.get(id);
     if (!existing) return res.status(404).json({ error: 'User not found' });
     const full_name = req.body.full_name ?? existing.full_name ?? '';
-    const email     = req.body.email     ?? existing.email     ?? '';
-    const role      = req.body.role      ?? existing.role;
+    const emailProvided = req.body.email !== undefined;
+    const email = emailProvided ? normalizeEmail(req.body.email) : existing.email;
+    const role  = req.body.role ?? existing.role;
     if (!ROLES.has(role)) return res.status(400).json({ error: 'role must be admin or agent' });
+    // Blank is allowed here (unlike creation) so an admin can clear a wrong
+    // address without being forced to supply a replacement in the same request —
+    // the amber "no email" warning in the users list is the guard against
+    // leaving it that way by accident.
+    if (emailProvided && email && !EMAIL_RE.test(email)) return res.status(400).json({ error: 'valid email required' });
+    if (emailProvided && email) {
+      const other = userByEmail.get(email);
+      if (other && other.id !== id) return res.status(409).json({ error: 'email already exists' });
+    }
     updateUser.run(full_name, email, role, id);
     const updated = userById.get(id);
     console.log(`[PUT /api/admin/users/${id}] role="${updated.role}"`);

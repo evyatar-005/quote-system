@@ -70,8 +70,8 @@ export function sendSmtpTest() {
  * Requests a password-reset email. Always resolves with a generic
  * { ok, message } — the backend never reveals whether the username exists.
  */
-export function forgotPassword(username) {
-  return request('/api/auth/forgot-password', { method: 'POST', body: { username } });
+export function forgotPassword(email) {
+  return request('/api/auth/forgot-password', { method: 'POST', body: { email } });
 }
 
 /** Sets a new password from a reset-email token. Throws on failure (invalid/expired token). */

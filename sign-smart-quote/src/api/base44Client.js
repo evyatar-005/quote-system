@@ -135,10 +135,10 @@ const auth = {
   async me() {
     return request('/api/auth/me');
   },
-  async login(username, password) {
+  async login(email, password) {
     const result = await request('/api/auth/login', {
       method: 'POST',
-      body: { username, password },
+      body: { email, password },
     });
     if (result && result.token) {
       try {

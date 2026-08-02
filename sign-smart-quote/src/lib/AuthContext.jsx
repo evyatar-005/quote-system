@@ -53,17 +53,17 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const login = async (username, password) => {
+  const login = async (email, password) => {
     setAuthError(null);
     try {
-      const loggedInUser = await base44.auth.login(username, password);
+      const loggedInUser = await base44.auth.login(email, password);
       setUser(loggedInUser);
       setIsAuthenticated(true);
       return loggedInUser;
     } catch (error) {
       const message =
         error && error.status === 401
-          ? 'שם משתמש או סיסמה שגויים'
+          ? 'אימייל או סיסמה שגויים'
           : error && error.status === 429
           ? error.message // server's own "too many failed attempts — try again in Ns"
           : 'ההתחברות נכשלה. נסה שוב מאוחר יותר';
