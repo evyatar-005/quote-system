@@ -9,10 +9,26 @@
 // isn't reachable — expected until GitHub push + server-side git
 // credentials are set up (see plan notes / CLAUDE.md).
 
+const fs = require('fs');
 const path = require('path');
 const { exec, spawn } = require('child_process');
 
 const REPO_ROOT = path.join(__dirname, '../..');
+const CHANGELOG_PATH = path.join(REPO_ROOT, 'deploy', 'changelog-he.json');
+
+// One short Hebrew line per tag (deploy/changelog-he.json) — the admin UI
+// otherwise showed raw `git log --oneline` subjects, which are written in
+// English and reference file paths/internals no one outside the session that
+// wrote them would recognize. Missing/unparsable file → empty map, so an
+// un-annotated tag just falls back to its own name instead of breaking the
+// update-check endpoint.
+function loadChangelog() {
+  try {
+    return JSON.parse(fs.readFileSync(CHANGELOG_PATH, 'utf8'));
+  } catch (_) {
+    return {};
+  }
+}
 
 // Every git call goes through -c safe.directory=*. In production Node runs as
 // SYSTEM under the QuoteSystemServer task while the checkout is owned by the
@@ -53,9 +69,23 @@ module.exports = function registerUpdate(app, db, deps) {
 
       const latestCommit = await git(`rev-list -n 1 ${latestTag}`).then(c => c.slice(0, 7));
       const updateAvailable = latestTag !== currentTag;
-      const commits = updateAvailable && currentTag
-        ? await git(`log ${currentTag}..${latestTag} --oneline`).then(out => out ? out.split('\n') : [])
-        : [];
+
+      // One line per TAG rather than per commit: a tag is a released version
+      // someone can reason about ("v1.0.21 changes login"), a commit is an
+      // implementation detail. version:refname sorts by semver, not string
+      // order, so v1.0.9 correctly sorts before v1.0.10.
+      let commits = [];
+      if (updateAvailable && currentTag) {
+        const changelog = loadChangelog();
+        const allTags = await git('tag --sort=version:refname').then(out => out ? out.split('\n') : []);
+        const afterCurrent = allTags.slice(allTags.indexOf(currentTag) + 1);
+        const latestIdx = afterCurrent.indexOf(latestTag);
+        // -1 would mean latestTag itself didn't sort where expected (an odd
+        // tag name); fall back to showing everything after currentTag rather
+        // than silently reporting zero pending changes.
+        const upToLatest = latestIdx === -1 ? afterCurrent : afterCurrent.slice(0, latestIdx + 1);
+        commits = upToLatest.map(tag => changelog[tag] ? `${tag} — ${changelog[tag]}` : tag);
+      }
 
       res.json({ currentTag, currentCommit, latestTag, latestCommit, updateAvailable, commits });
     } catch (err) {
