@@ -28,6 +28,15 @@ $deployDir  = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot   = Split-Path -Parent $deployDir
 $nodePath   = "C:\Program Files\nodejs"
 $env:PATH   = $env:PATH + ";$nodePath;C:\Program Files\Git\cmd"
+# Same dubious-ownership problem as src/routes/update.js. Triggered from the
+# admin UI this script runs as SYSTEM, while the checkout is owned by the
+# Administrator who cloned it, and git refuses to touch a repo owned by someone
+# else. Passed through the environment rather than `git config --global` so it
+# applies to every git call below without writing to any account's config or
+# accumulating duplicate entries on each run.
+$env:GIT_CONFIG_COUNT   = "1"
+$env:GIT_CONFIG_KEY_0   = "safe.directory"
+$env:GIT_CONFIG_VALUE_0 = "*"
 # Deliberately a SIBLING of the repo folder, not a subfolder of it — a
 # `Remove-Item -Recurse C:\quote-system` (like a clean reinstall) must not be
 # able to wipe this out along with the app.
@@ -77,10 +86,16 @@ function Install-And-Build($tag) {
     Write-Step "Writing VERSION.txt..."
     $pkgVersion = (Get-Content (Join-Path $repoRoot "package.json") -Raw | ConvertFrom-Json).version
     $commit = (git -C $repoRoot rev-parse --short HEAD).Trim()
+    # Ask git what is actually checked out instead of recording the tag we were
+    # asked to deploy. Those diverge whenever a checkout doesn't land where the
+    # caller assumed — the server once reported tag v1.0.10 beside a v1.0.15
+    # commit, which is exactly the kind of lie this file exists to prevent.
+    $actualTag = (git -C $repoRoot describe --tags --exact-match HEAD 2>$null)
+    if ($actualTag) { $actualTag = $actualTag.Trim() } else { $actualTag = $tag }
     $versionInfo = @{
         version    = $pkgVersion
         commit     = $commit
-        tag        = $tag
+        tag        = $actualTag
         deployedAt = (Get-Date).ToString("o")
     } | ConvertTo-Json
     # WriteAllText, not Set-Content -Encoding utf8: in Windows PowerShell 5.1

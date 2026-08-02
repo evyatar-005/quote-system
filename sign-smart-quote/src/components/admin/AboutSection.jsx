@@ -118,8 +118,12 @@ export default function AboutSection() {
       <div className="rounded-xl border-2 border-slate-200 bg-slate-50/60 p-4">
         <p className="text-xs text-slate-500">גרסה רצה כעת</p>
         <div className="flex items-baseline gap-2 mt-0.5 flex-wrap">
+          {/* package.json, not VERSION.txt's tag. package.json ships inside the
+              checkout, so it cannot disagree with the code that's running.
+              VERSION.txt is written by the deploy script and has already been
+              observed reporting v1.0.10 next to a v1.0.15 commit. */}
           <span className="text-2xl font-bold text-slate-900">
-            {version?.tag || (version?.version ? `v${version.version}` : "—")}
+            {version?.version ? `v${version.version}` : "—"}
           </span>
           {checking ? (
             <Badge variant="secondary" className="gap-1"><Loader2 className="w-3 h-3 animate-spin" /> בודק…</Badge>
@@ -132,6 +136,14 @@ export default function AboutSection() {
         <div className="mt-3 space-y-1 text-sm">
           <p><span className="text-slate-500">Commit: </span><span className="font-mono">{version?.commit || "—"}</span></p>
           <p><span className="text-slate-500">פריסה אחרונה: </span>{version?.deployedAt ? new Date(version.deployedAt).toLocaleString("he-IL") : "—"}</p>
+          {/* A tag that disagrees with the running code means the deploy didn't
+              land where it thought it did — worth surfacing rather than
+              quietly showing one of the two numbers and hoping. */}
+          {version?.tag && version?.version && version.tag !== `v${version.version}` && (
+            <p className="text-amber-700">
+              תג הפריסה הרשום הוא <span className="font-mono">{version.tag}</span> ואינו תואם לקוד הרץ — ייתכן שפריסה קודמת לא הושלמה.
+            </p>
+          )}
         </div>
       </div>
 

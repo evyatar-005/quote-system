@@ -14,6 +14,18 @@ const { exec, spawn } = require('child_process');
 
 const REPO_ROOT = path.join(__dirname, '../..');
 
+// Every git call goes through -c safe.directory=*. In production Node runs as
+// SYSTEM under the QuoteSystemServer task while the checkout is owned by the
+// Administrator who cloned it, and git refuses to operate on a repo owned by
+// someone else ("detected dubious ownership"). That protection is aimed at
+// shared/multi-user machines; here both identities are the same operator on a
+// single-purpose box, and without this the update endpoint fails only when
+// triggered from the UI — never when run by hand, which is the worst possible
+// way for it to fail.
+function git(args) {
+  return run(`git -c safe.directory=* ${args}`);
+}
+
 function run(cmd) {
   return new Promise((resolve, reject) => {
     exec(cmd, { cwd: REPO_ROOT, timeout: 30000 }, (err, stdout, stderr) => {
@@ -30,19 +42,19 @@ module.exports = function registerUpdate(app, db, deps) {
 
   app.get('/api/admin/check-update', requireAdmin, async (req, res) => {
     try {
-      await run('git fetch --tags');
-      const currentTag = await run('git describe --tags').catch(() => null);
-      const currentCommit = await run('git rev-parse --short HEAD');
-      const latestTag = await run('git tag --sort=-v:refname').then(out => out.split('\n')[0] || null);
+      await git('fetch --tags');
+      const currentTag = await git('describe --tags').catch(() => null);
+      const currentCommit = await git('rev-parse --short HEAD');
+      const latestTag = await git('tag --sort=-v:refname').then(out => out.split('\n')[0] || null);
 
       if (!latestTag) {
         return res.json({ currentTag, currentCommit, latestTag: null, updateAvailable: false, commits: [] });
       }
 
-      const latestCommit = await run(`git rev-list -n 1 ${latestTag}`).then(c => c.slice(0, 7));
+      const latestCommit = await git(`rev-list -n 1 ${latestTag}`).then(c => c.slice(0, 7));
       const updateAvailable = latestTag !== currentTag;
       const commits = updateAvailable && currentTag
-        ? await run(`git log ${currentTag}..${latestTag} --oneline`).then(out => out ? out.split('\n') : [])
+        ? await git(`log ${currentTag}..${latestTag} --oneline`).then(out => out ? out.split('\n') : [])
         : [];
 
       res.json({ currentTag, currentCommit, latestTag, latestCommit, updateAvailable, commits });
@@ -64,7 +76,7 @@ module.exports = function registerUpdate(app, db, deps) {
     // Still worth recording what got discarded, so an intentional hand-edit on
     // the server doesn't vanish without a trace.
     try {
-      const dirty = await run('git status --porcelain');
+      const dirty = await git('status --porcelain');
       if (dirty) {
         console.log(`[POST /api/admin/update] discarding local changes:\n${dirty}`);
       }
