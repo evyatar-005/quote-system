@@ -37,6 +37,18 @@ $externalBackupDir = Join-Path (Split-Path -Parent $repoRoot) "quote-system-back
 # live nowhere else, so a clean reinstall must not be able to lose them either.
 $externalUploadsDir = Join-Path (Split-Path -Parent $repoRoot) "quote-system-uploads-backup"
 
+# When the admin UI triggers this script it runs hidden, detached, with stdio
+# discarded — so without a transcript a failed deploy leaves no trace anywhere
+# and can only be diagnosed by re-running it by hand over RDP. Kept outside the
+# repo so a checkout can't clobber it mid-run, and capped at the last 20 runs.
+$logDir = Join-Path (Split-Path -Parent $repoRoot) "quote-system-logs"
+New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+$logFile = Join-Path $logDir ("update-{0}.log" -f (Get-Date -Format "yyyyMMdd-HHmmss"))
+try { Start-Transcript -Path $logFile -Force | Out-Null } catch {}
+Get-ChildItem -Path $logDir -Filter "update-*.log" -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTime -Descending | Select-Object -Skip 20 |
+    Remove-Item -Force -ErrorAction SilentlyContinue
+
 function Write-Step($msg) {
     Write-Host ""
     Write-Host ">>> $msg" -ForegroundColor Cyan
@@ -111,9 +123,17 @@ function Start-Server-And-Check {
     return $false
 }
 
-# --- 1. Must be run as Administrator (needed to control the scheduled task) ---
-$isAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-if (-not $isAdmin) {
+# --- 1. Must be elevated (needed to control the scheduled task) ---
+# Two ways in: an admin running it over RDP, or the app itself triggering it
+# from the admin UI. In the second case the caller is the QuoteSystemServer
+# task, which runs as NT AUTHORITY\SYSTEM — that token does carry
+# BUILTIN\Administrators, but it's checked explicitly so this stays obviously
+# correct rather than depending on a Windows detail nobody remembers.
+$identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+$isAdmin  = (New-Object Security.Principal.WindowsPrincipal $identity).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+$isSystem = $identity.User.Value -eq "S-1-5-18"
+Write-Host "Running as: $($identity.Name) (admin=$isAdmin, system=$isSystem)"
+if (-not ($isAdmin -or $isSystem)) {
     Write-Host "Please run this script as Administrator." -ForegroundColor Red
     exit 1
 }

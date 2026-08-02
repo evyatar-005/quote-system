@@ -70,13 +70,28 @@ module.exports = function registerUpdate(app, db, deps) {
     updateInProgress = true;
     console.log(`[POST /api/admin/update] triggered by "${req.user.username}" at ${new Date().toISOString()}`);
 
-    const child = spawn('powershell.exe', ['-ExecutionPolicy', 'Bypass', '-File', scriptPath], {
-      cwd: REPO_ROOT,
-      detached: true,
-      stdio: 'ignore',
-    });
+    // Runs with no console window and no profile: this is triggered from the
+    // web UI, so a PowerShell window flashing up on the server console (where
+    // nobody is watching) is noise at best. -NonInteractive makes the script
+    // fail fast instead of hanging forever on an unexpected prompt, since
+    // there is no one at the machine to answer it.
+    const child = spawn(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-File', scriptPath],
+      {
+        cwd: REPO_ROOT,
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true,
+      }
+    );
     child.unref();
+    // 'exit' never fires for an unref'd detached child that outlives us — and
+    // this process is deliberately killed mid-update when the script restarts
+    // the Scheduled Task. Without a timer the flag would latch on forever after
+    // a failed update and block every retry until someone restarts the server.
     child.on('exit', () => { updateInProgress = false; });
+    setTimeout(() => { updateInProgress = false; }, 10 * 60 * 1000).unref();
 
     res.json({ started: true });
   });

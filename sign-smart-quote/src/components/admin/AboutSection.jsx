@@ -5,9 +5,14 @@ import { Loader2, Info, RefreshCw, Rocket } from "lucide-react";
 import { toast } from "sonner";
 import { getVersion, checkForUpdate, triggerUpdate } from "@/api/systemClient";
 import CostSectionCard from "./CostSectionCard";
+import UpdateProgressOverlay from "./UpdateProgressOverlay";
 
 const POLL_INTERVAL_MS = 3000;
-const POLL_TIMEOUT_MS = 3 * 60 * 1000;
+const POLL_TIMEOUT_MS = 5 * 60 * 1000;
+// Time between "the new version answered" and reloading the page. The server
+// answers /api/version before the built frontend assets are necessarily being
+// served, and reloading into a half-swapped dist yields a blank page.
+const RELOAD_DELAY_MS = 2500;
 
 export default function AboutSection() {
   const [version, setVersion] = useState(null);
@@ -15,6 +20,7 @@ export default function AboutSection() {
   const [updateInfo, setUpdateInfo] = useState(null);
   const [updateError, setUpdateError] = useState("");
   const [updating, setUpdating] = useState(false);
+  const [phase, setPhase] = useState(null); // null | starting | running | done | failed
   const pollRef = useRef(null);
 
   const loadVersion = async () => {
@@ -47,12 +53,16 @@ export default function AboutSection() {
     const commitBefore = version?.commit;
     setUpdating(true);
     setUpdateError("");
+    setPhase("starting");
     try {
       await triggerUpdate();
-      toast.info("העדכון הופעל — השרת עשוי להיות לא זמין למספר דקות");
+      setPhase("running");
     } catch (err) {
+      // A rejected trigger (dirty tree, update already running, no git) never
+      // touches the server, so this is safe to surface and dismiss.
+      setPhase("failed");
+      setUpdateError(err?.message || "שגיאה בהפעלת העדכון");
       setUpdating(false);
-      toast.error(err?.message || "שגיאה בהפעלת העדכון");
       return;
     }
 
@@ -60,18 +70,21 @@ export default function AboutSection() {
     pollRef.current = setInterval(async () => {
       if (Date.now() - startedAt > POLL_TIMEOUT_MS) {
         clearInterval(pollRef.current);
+        setPhase("failed");
+        setUpdateError("העדכון נמשך זמן רב מהצפוי ולא הצלחנו לאשר שהוא הסתיים.");
         setUpdating(false);
-        toast.warning("העדכון לוקח יותר מהצפוי — בדוק ידנית בשרת");
         return;
       }
       try {
         const v = await getVersion();
         if (v?.commit && v.commit !== commitBefore) {
           clearInterval(pollRef.current);
-          setUpdating(false);
           setVersion(v);
           setUpdateInfo(null);
-          toast.success(`העדכון הסתיים — גרסה ${v.version} רצה כעת`);
+          setPhase("done");
+          // Hard reload: the whole point is to pick up the newly built assets,
+          // and a normal re-render would keep the old bundle in memory.
+          setTimeout(() => window.location.reload(), RELOAD_DELAY_MS);
         }
       } catch {
         // server mid-restart — expected, keep polling
@@ -80,6 +93,15 @@ export default function AboutSection() {
   };
 
   return (
+    <>
+    {phase && (
+      <UpdateProgressOverlay
+        phase={phase}
+        version={version}
+        error={updateError}
+        onClose={() => { setPhase(null); setUpdateError(""); }}
+      />
+    )}
     <CostSectionCard
       icon={<Info className="w-5 h-5" />}
       title="אודות המערכת"
@@ -122,5 +144,6 @@ export default function AboutSection() {
         </div>
       )}
     </CostSectionCard>
+    </>
   );
 }
