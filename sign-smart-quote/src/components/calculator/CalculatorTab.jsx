@@ -5,6 +5,8 @@ import CostResults from "./CostResults";
 import SalesResults from "./SalesResults";
 import { Plus, Trash2 } from "lucide-react";
 
+const round2 = (n) => Math.round(n * 100) / 100;
+
 const fmt = (val) =>
   val != null
     ? `₪ ${Number(val).toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -33,6 +35,14 @@ export default function CalculatorTab({ config, priceTiers, stickerPriceTiers, p
   const canAddExtraRows = form.productType && DIMENSION_FAMILIES.includes(categoryOf(form.productType));
   const showElementsForRows = ["logo", "foamex", "perspexBoard"].includes(categoryOf(form.productType));
 
+  // Sticker/installation minimum prices are a floor for the WHOLE product, not
+  // per size row — an agent splitting one order into 4 מידה rows shouldn't pay
+  // the ₪140 sticker minimum (or the ₪600/700 installation minimum) 4 times over.
+  // When there are extra rows, each row is calculated WITHOUT its own floor
+  // (enforceMinimumPrice: false below), and the shortfall vs. the combined total
+  // is topped up once on the main row — see stickerMinAdjust below.
+  const stickerHasMultipleRows = isSticker && extraRows.length > 0;
+
   // Memoize the calculated result so its identity stays stable across renders that
   // don't change the inputs (e.g. the parent passing fresh inline callbacks). A new
   // object every render would re-trigger the effect below → setState in the parent →
@@ -55,12 +65,12 @@ export default function CalculatorTab({ config, priceTiers, stickerPriceTiers, p
       };
     }
     try {
-      return config ? calculate({ config, priceTiers, stickerPriceTiers, paintSurchargeTiers, kapaPriceTiers, rollupPriceTiers, lokobondAreaTiers, glassPriceTiers, numberPriceTiers, ...form, enforceMinimumPrice, orderAreaOverride }) : null;
+      return config ? calculate({ config, priceTiers, stickerPriceTiers, paintSurchargeTiers, kapaPriceTiers, rollupPriceTiers, lokobondAreaTiers, glassPriceTiers, numberPriceTiers, ...form, enforceMinimumPrice: stickerHasMultipleRows ? false : enforceMinimumPrice, orderAreaOverride }) : null;
     } catch (e) {
       console.error(e);
       return null;
     }
-  }, [config, priceTiers, stickerPriceTiers, paintSurchargeTiers, kapaPriceTiers, rollupPriceTiers, lokobondAreaTiers, glassPriceTiers, numberPriceTiers, form, enforceMinimumPrice, orderAreaOverride]);
+  }, [config, priceTiers, stickerPriceTiers, paintSurchargeTiers, kapaPriceTiers, rollupPriceTiers, lokobondAreaTiers, glassPriceTiers, numberPriceTiers, form, enforceMinimumPrice, orderAreaOverride, stickerHasMultipleRows]);
 
   // Calculate extra rows results (same memoization rationale as `result` above).
   // Each row carries its OWN quantity — a different size can need a different
@@ -73,16 +83,54 @@ export default function CalculatorTab({ config, priceTiers, stickerPriceTiers, p
         ...form,
         widthM: row.widthM, heightM: row.heightM, quantity: row.quantity || "1",
         elements: row.elements || "", lineLabel: row.lineLabel,
-        enforceMinimumPrice, orderAreaOverride,
+        enforceMinimumPrice: stickerHasMultipleRows ? false : enforceMinimumPrice, orderAreaOverride,
       }) : null;
     } catch { return null; }
-  }), [config, priceTiers, stickerPriceTiers, paintSurchargeTiers, kapaPriceTiers, rollupPriceTiers, lokobondAreaTiers, glassPriceTiers, numberPriceTiers, form, extraRows, enforceMinimumPrice, orderAreaOverride]);
+  }), [config, priceTiers, stickerPriceTiers, paintSurchargeTiers, kapaPriceTiers, rollupPriceTiers, lokobondAreaTiers, glassPriceTiers, numberPriceTiers, form, extraRows, enforceMinimumPrice, orderAreaOverride, stickerHasMultipleRows]);
+
+  // Combined-total minimum enforcement for stickers split across multiple מידה
+  // rows: sum the raw (unfloored) sticker + installation prices across every
+  // row, apply each config minimum ONCE to the sum, and add any shortfall onto
+  // the main row only — so the order total reflects one floor per product, not
+  // one per row, while each row's own displayed price stays its true raw share.
+  const stickerMinAdjust = useMemo(() => {
+    if (!stickerHasMultipleRows || !config || !result) return { stickerTopUp: 0, installTopUp: 0 };
+    const prefix = form.productType === "vinyl_sticker" ? "vinyl" : "texture";
+    const isSouth = form.region === "דרום";
+    const minStickerPrice = parseFloat(config[`${prefix}_sticker_min_price`]) || 0;
+    const minInstallPrice = parseFloat(config[`${prefix}_sticker_install_min_price${isSouth ? "_south" : ""}`]) || 0;
+
+    const allResults = [result, ...extraRowResults].filter(Boolean);
+    const rawStickerSum = allResults.reduce((sum, r) => sum + (r.stickerOnlyPrice || 0), 0);
+    const rawInstallSum = allResults.reduce((sum, r) => sum + (r.breakdown?.installationCost || 0), 0);
+
+    return {
+      stickerTopUp: Math.max(0, minStickerPrice - rawStickerSum),
+      installTopUp: form.includeInstallation === "no" ? 0 : Math.max(0, minInstallPrice - rawInstallSum),
+    };
+  }, [stickerHasMultipleRows, config, result, extraRowResults, form.productType, form.region, form.includeInstallation]);
+
+  // The main row's result, with the once-per-product minimum shortfall (if any)
+  // folded in ex-VAT and re-grossed — this is what gets displayed/saved/summed
+  // for the main row instead of the raw, un-floored `result`.
+  const adjustedResult = useMemo(() => {
+    const topUp = stickerMinAdjust.stickerTopUp + stickerMinAdjust.installTopUp;
+    if (!result || topUp <= 0) return result;
+    const vatRate = 1 + (parseFloat(config?.vat_percent) || 18) / 100;
+    return {
+      ...result,
+      stickerOnlyPrice: round2(result.stickerOnlyPrice + stickerMinAdjust.stickerTopUp),
+      sellingPriceAll: round2(result.sellingPriceAll + topUp),
+      sellingPricePerUnit: round2(result.sellingPriceAll + topUp),
+      priceWithVat: round2((result.sellingPriceAll + topUp) * vatRate),
+    };
+  }, [result, stickerMinAdjust, config]);
 
   const q = parseInt(form.quantity) || 1;
   // Each product reports its CASH price (incl. VAT). The payment surcharge is
   // applied once, at the ORDER level (MultiProductCalculator), so it also covers
   // the shipping. paymentKey/installmentCount arrive as props only for display.
-  const priceWithVat = result ? result.priceWithVat / q : 0;
+  const priceWithVat = adjustedResult ? adjustedResult.priceWithVat / q : 0;
 
   // What one extra row contributes to the order total, in CASH — already the
   // full total for that row's own quantity (its own `calculate()` call above),
@@ -95,15 +143,16 @@ export default function CalculatorTab({ config, priceTiers, stickerPriceTiers, p
   useEffect(() => {
     if (onPriceChange) {
       // Cash line total: per-unit × quantity, plus any extra sticker rows.
-      onPriceChange(result ? priceWithVat * q + extraTotal : 0);
+      onPriceChange(adjustedResult ? priceWithVat * q + extraTotal : 0);
     }
     if (onFormDataChange) {
-      // `result` carries the full cost/profit breakdown for this line — saved
-      // verbatim into calculation_data. priceWithPayment holds the CASH row
-      // amount; the order applies the payment surcharge on top.
-      onFormDataChange({ ...form, result, extraRows: extraRows.map((row, i) => ({ ...row, result: extraRowResults[i], priceWithPayment: rowCashPrice(extraRowResults[i]) })) });
+      // `adjustedResult` carries the full cost/profit breakdown for this line
+      // (with any once-per-product minimum top-up folded in) — saved verbatim
+      // into calculation_data. priceWithPayment holds the CASH row amount; the
+      // order applies the payment surcharge on top.
+      onFormDataChange({ ...form, result: adjustedResult, extraRows: extraRows.map((row, i) => ({ ...row, result: extraRowResults[i], priceWithPayment: rowCashPrice(extraRowResults[i]) })) });
     }
-  }, [result, form, extraRows, extraTotal]);
+  }, [adjustedResult, form, extraRows, extraTotal]);
 
   return (
     <div className="space-y-5">
@@ -125,8 +174,8 @@ export default function CalculatorTab({ config, priceTiers, stickerPriceTiers, p
           rollupPriceTiers={rollupPriceTiers}
           glassPriceTiers={glassPriceTiers}
           numberPriceTiers={numberPriceTiers}
-          basePrice={result ? (result.sellingPricePerUnit - (result.paintSellingSurcharge || 0)) : null}
-          unitPriceExVat={result ? result.sellingPricePerUnit : null}
+          basePrice={adjustedResult ? (adjustedResult.sellingPricePerUnit - (adjustedResult.paintSellingSurcharge || 0)) : null}
+          unitPriceExVat={adjustedResult ? adjustedResult.sellingPricePerUnit : null}
           priceRangeMin={result ? result.priceRangeMin : null}
           priceRangeMax={result ? result.priceRangeMax : null}
           priceMissing={!!result?.priceMissing}
