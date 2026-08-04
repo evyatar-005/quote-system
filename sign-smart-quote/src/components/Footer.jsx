@@ -11,7 +11,7 @@ export default function Footer() {
         <div className="flex-1 bg-brand-purple" />
       </div>
       <p className="py-4 text-center text-xs text-slate-400">
-        נבנה ומתוחזק ע״י אביתר אבינועם
+        נבנה ומתוחזק ע״י אביתר אבינועם 2026
       </p>
     </footer>
   );
