@@ -56,3 +56,8 @@ export async function checkForUpdate() {
 export async function triggerUpdate() {
   return request('/api/admin/update', { method: 'POST' });
 }
+
+/** Tail of the most recent deploy/UPDATE.ps1 transcript. Admin only. */
+export async function getUpdateLog() {
+  return request('/api/admin/update-log');
+}

@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Info, RefreshCw, Rocket } from "lucide-react";
+import { Loader2, Info, RefreshCw, Rocket, ScrollText } from "lucide-react";
 import { toast } from "sonner";
-import { getVersion, checkForUpdate, triggerUpdate } from "@/api/systemClient";
+import { getVersion, checkForUpdate, triggerUpdate, getUpdateLog } from "@/api/systemClient";
 import CostSectionCard from "./CostSectionCard";
 import UpdateProgressOverlay from "./UpdateProgressOverlay";
 
@@ -21,6 +21,9 @@ export default function AboutSection() {
   const [updateError, setUpdateError] = useState("");
   const [updating, setUpdating] = useState(false);
   const [phase, setPhase] = useState(null); // null | starting | running | done | failed
+  const [log, setLog] = useState(null);
+  const [loadingLog, setLoadingLog] = useState(false);
+  const [logError, setLogError] = useState("");
   const pollRef = useRef(null);
 
   const loadVersion = async () => {
@@ -97,6 +100,22 @@ export default function AboutSection() {
     }, POLL_INTERVAL_MS);
   };
 
+  // Toggles the log panel; fetches fresh each time it's opened so it reflects
+  // whatever just happened rather than a stale earlier failure. No RDP/PowerShell
+  // needed to see why a deploy failed — this reads the same transcript
+  // UPDATE.ps1 already writes to C:\quote-system-logs\ on every run.
+  const handleToggleLog = async () => {
+    if (log) { setLog(null); return; }
+    setLoadingLog(true);
+    setLogError("");
+    try {
+      setLog(await getUpdateLog());
+    } catch (err) {
+      setLogError(err?.message || "שגיאה בטעינת הלוג");
+    }
+    setLoadingLog(false);
+  };
+
   return (
     <>
     {/* "starting" is skipped when the trigger returns instantly — the overlay
@@ -156,7 +175,35 @@ export default function AboutSection() {
           {updating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Rocket className="w-4 h-4" />}
           {updating ? "מתבצע עדכון..." : "עדכן עכשיו"}
         </Button>
+        <Button variant="outline" onClick={handleToggleLog} disabled={loadingLog} className="gap-2">
+          {loadingLog ? <Loader2 className="w-4 h-4 animate-spin" /> : <ScrollText className="w-4 h-4" />}
+          {log ? "הסתר לוג" : "הצג לוג עדכון אחרון"}
+        </Button>
       </div>
+
+      {logError && <p className="text-sm text-destructive">{logError}</p>}
+
+      {log && (
+        <div className="border-t border-border pt-3 space-y-2">
+          <div className="flex items-center justify-between flex-wrap gap-2 text-sm">
+            <p className="font-semibold text-slate-700">
+              לוג הפריסה האחרונה — <span className="font-mono">{log.file}</span>
+            </p>
+            <p className="text-slate-500">{new Date(log.modifiedAt).toLocaleString("he-IL")}</p>
+          </div>
+          {log.truncated && (
+            <p className="text-xs text-amber-700">
+              מוצגות {log.lines.length} השורות האחרונות מתוך {log.totalLines} — הקובץ המלא נמצא בשרת תחת quote-system-logs.
+            </p>
+          )}
+          <pre
+            dir="ltr"
+            className="bg-slate-900 text-slate-100 text-xs rounded-lg p-3 max-h-96 overflow-auto whitespace-pre-wrap break-words"
+          >
+            {log.lines.join('\n')}
+          </pre>
+        </div>
+      )}
 
       {updateError && <p className="text-sm text-destructive">{updateError}</p>}
 

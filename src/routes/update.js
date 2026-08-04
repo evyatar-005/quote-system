@@ -15,6 +15,9 @@ const { exec, spawn } = require('child_process');
 
 const REPO_ROOT = path.join(__dirname, '../..');
 const CHANGELOG_PATH = path.join(REPO_ROOT, 'deploy', 'changelog-he.json');
+// Matches $logDir in deploy/UPDATE.ps1: a sibling of the repo, not a subfolder,
+// so a clean reinstall of REPO_ROOT can't take the deploy history down with it.
+const LOG_DIR = path.join(REPO_ROOT, '..', 'quote-system-logs');
 
 // One short Hebrew line per tag (deploy/changelog-he.json) — the admin UI
 // otherwise showed raw `git log --oneline` subjects, which are written in
@@ -142,5 +145,38 @@ module.exports = function registerUpdate(app, db, deps) {
     setTimeout(() => { updateInProgress = false; }, 10 * 60 * 1000).unref();
 
     res.json({ started: true });
+  });
+
+  // ── GET /api/admin/update-log ────────────────────────────────────────────
+  // Surfaces the most recent deploy/UPDATE.ps1 transcript in the browser.
+  // Before this existed, diagnosing a failed deploy meant RDP + PowerShell —
+  // a real barrier for anyone not comfortable there, and the exact thing that
+  // made the port-collision and dirty-checkout incidents slow to pin down.
+  // Returns the tail only: these transcripts include full npm install/build
+  // output and can run to thousands of lines.
+  const LOG_TAIL_LINES = 400;
+  app.get('/api/admin/update-log', requireAdmin, (req, res) => {
+    let files;
+    try {
+      files = fs.readdirSync(LOG_DIR)
+        .filter(f => f.startsWith('update-') && f.endsWith('.log'))
+        .map(f => ({ name: f, mtime: fs.statSync(path.join(LOG_DIR, f)).mtimeMs }))
+        .sort((a, b) => b.mtime - a.mtime);
+    } catch (err) {
+      return res.status(404).json({ error: `אין תיקיית לוגים (${LOG_DIR}) — עדיין לא בוצעה אף פריסה בגרסה שתומכת בכך` });
+    }
+    if (!files.length) return res.status(404).json({ error: 'לא נמצאו לוגים של פריסה' });
+
+    const latest = files[0];
+    const fullText = fs.readFileSync(path.join(LOG_DIR, latest.name), 'utf8');
+    const allLines = fullText.split(/\r?\n/);
+    const tail = allLines.slice(-LOG_TAIL_LINES);
+    res.json({
+      file: latest.name,
+      modifiedAt: new Date(latest.mtime).toISOString(),
+      totalLines: allLines.length,
+      truncated: allLines.length > LOG_TAIL_LINES,
+      lines: tail,
+    });
   });
 };
