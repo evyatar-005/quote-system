@@ -304,12 +304,12 @@ function CostBreakdown({ result, livePrice, liveCost }) {
   return (
     <>
       <CostCard title="חומרי גלם">
-        {result.breakdown?.boardCost != null && <MiniRow label="עלות לוח" value={fmt(result.breakdown.boardCost)} />}
-        {result.breakdown?.inkCost != null && <MiniRow label="דיו" value={fmt(result.breakdown.inkCost)} />}
-        {result.breakdown?.dowelCost != null && <MiniRow label="דוץ" value={fmt(result.breakdown.dowelCost)} />}
-        {result.breakdown?.packagingCost != null && <MiniRow label="אריזה" value={fmt(result.breakdown.packagingCost)} />}
-        {result.breakdown?.instructionCost != null && <MiniRow label="דף הסבר" value={fmt(result.breakdown.instructionCost)} />}
-        {result.breakdown?.mountingCost != null && <MiniRow label="לוח התקנה" value={fmt(result.breakdown.mountingCost)} />}
+        {!result.isSticker && result.breakdown?.boardCost != null && <MiniRow label="עלות לוח" value={fmt(result.breakdown.boardCost)} />}
+        {!result.isSticker && result.breakdown?.inkCost != null && <MiniRow label="דיו" value={fmt(result.breakdown.inkCost)} />}
+        {!result.isSticker && result.breakdown?.dowelCost != null && <MiniRow label="דוץ" value={fmt(result.breakdown.dowelCost)} />}
+        {!result.isSticker && result.breakdown?.packagingCost != null && <MiniRow label="אריזה" value={fmt(result.breakdown.packagingCost)} />}
+        {!result.isSticker && result.breakdown?.instructionCost != null && <MiniRow label="דף הסבר" value={fmt(result.breakdown.instructionCost)} />}
+        {!result.isSticker && result.breakdown?.mountingCost != null && <MiniRow label="לוח התקנה" value={fmt(result.breakdown.mountingCost)} />}
         {result.breakdown?.paperCost != null && <MiniRow label="נייר" value={fmt(result.breakdown.paperCost)} />}
         {result.breakdown?.standCost != null && <MiniRow label="מתקן" value={fmt(result.breakdown.standCost)} />}
         {result.breakdown?.sheetCost != null && <MiniRow label="גיליון זכוכית" value={fmt(result.breakdown.sheetCost)} />}
