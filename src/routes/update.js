@@ -15,6 +15,12 @@ const { exec, spawn } = require('child_process');
 
 const REPO_ROOT = path.join(__dirname, '../..');
 const CHANGELOG_PATH = path.join(REPO_ROOT, 'deploy', 'changelog-he.json');
+// Absolute path rather than bare 'powershell.exe': spawn() resolves a bare
+// command name against the child's PATH, and the SYSTEM account's PATH under
+// the Scheduled Task is not guaranteed to be the same as an interactive
+// Administrator session's — the exact difference between the two ways this
+// endpoint has been invoked. Resolving it ourselves removes that variable.
+const POWERSHELL_EXE = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
 // Matches $logDir in deploy/UPDATE.ps1: a sibling of the repo, not a subfolder,
 // so a clean reinstall of REPO_ROOT can't take the deploy history down with it.
 const LOG_DIR = path.join(REPO_ROOT, '..', 'quote-system-logs');
@@ -126,16 +132,36 @@ module.exports = function registerUpdate(app, db, deps) {
     // nobody is watching) is noise at best. -NonInteractive makes the script
     // fail fast instead of hanging forever on an unexpected prompt, since
     // there is no one at the machine to answer it.
-    const child = spawn(
-      'powershell.exe',
-      ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-File', scriptPath],
-      {
-        cwd: REPO_ROOT,
-        detached: true,
-        stdio: 'ignore',
-        windowsHide: true,
-      }
-    );
+    let child;
+    try {
+      child = spawn(
+        POWERSHELL_EXE,
+        ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-ExecutionPolicy', 'Bypass', '-File', scriptPath],
+        {
+          cwd: REPO_ROOT,
+          detached: true,
+          stdio: 'ignore',
+          windowsHide: true,
+        }
+      );
+    } catch (err) {
+      updateInProgress = false;
+      console.error('[POST /api/admin/update] spawn threw synchronously:', err.message);
+      return res.status(500).json({ error: `לא ניתן היה להפעיל את סקריפט העדכון: ${err.message}` });
+    }
+    // Critical: without an 'error' listener, a spawn failure that surfaces
+    // asynchronously (e.g. the executable can't be found or launched under
+    // this account) becomes an uncaught exception that crashes this entire
+    // Node process. That crash happens silently from the browser's point of
+    // view — the response below has already been sent — and the Scheduled
+    // Task then restarts the server on whatever code was already checked out,
+    // looking exactly like "the button did nothing." This is believed to be
+    // why every prior attempt to update via the UI produced no new deploy log
+    // at all, while running the same script by hand always worked.
+    child.on('error', (err) => {
+      updateInProgress = false;
+      console.error('[POST /api/admin/update] child process error:', err.message);
+    });
     child.unref();
     // 'exit' never fires for an unref'd detached child that outlives us — and
     // this process is deliberately killed mid-update when the script restarts
