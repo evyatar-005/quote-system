@@ -7,7 +7,7 @@ const mail = require('../services/mail');
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days — sessions never expired before this
 const LOGIN_MAX_ATTEMPTS = 5;
 const LOGIN_LOCKOUT_MS = 15 * 60 * 1000; // 15 minutes
-const MIN_PASSWORD_LENGTH = 6;
+const MIN_PASSWORD_LENGTH = 8;
 const RESET_TTL_MS = 30 * 60 * 1000;   // 30 minutes
 const RESET_MAX_PER_HOUR = 3;          // per user — throttles mailbox flooding, not brute force
 

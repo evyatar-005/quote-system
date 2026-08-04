@@ -41,7 +41,7 @@ export default function UsersManagementSection() {
     // Required client-side too, not just server-side: login is by email now,
     // so a user created without one would have no way to ever sign in.
     if (!newUser.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newUser.email.trim())) return toast.error("יש להזין כתובת מייל תקינה — היא משמשת להתחברות");
-    if (!newUser.password || newUser.password.length < 6) return toast.error("סיסמה חייבת להכיל לפחות 6 תווים");
+    if (!newUser.password || newUser.password.length < 8) return toast.error("סיסמה חייבת להכיל לפחות 8 תווים");
     setCreating(true);
     try {
       await base44.adminUsers.create(newUser);
@@ -93,7 +93,7 @@ export default function UsersManagementSection() {
   };
 
   const handleResetPassword = async () => {
-    if (!resetPasswordValue || resetPasswordValue.length < 6) return toast.error("סיסמה חייבת להכיל לפחות 6 תווים");
+    if (!resetPasswordValue || resetPasswordValue.length < 8) return toast.error("סיסמה חייבת להכיל לפחות 8 תווים");
     try {
       await base44.adminUsers.resetPassword(resetPasswordFor.id, resetPasswordValue);
       toast.success(`הסיסמה של "${resetPasswordFor.username}" עודכנה`);

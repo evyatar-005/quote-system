@@ -19,7 +19,7 @@ export default function ResetPassword() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    if (newPassword.length < 6) return setError('הסיסמה החדשה חייבת להכיל לפחות 6 תווים');
+    if (newPassword.length < 8) return setError('הסיסמה החדשה חייבת להכיל לפחות 8 תווים');
     if (newPassword !== confirmPassword) return setError('הסיסמאות אינן תואמות');
     setLoading(true);
     try {
