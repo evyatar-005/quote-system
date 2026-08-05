@@ -4,6 +4,8 @@
 import { optimize } from '../src/components/cutlist/solver/optimize.js';
 import { verifyLayout } from '../src/components/cutlist/solver/stats.js';
 import { mulberry32 } from '../src/components/cutlist/solver/rng.js';
+import { packSheetMaxRects } from '../src/components/cutlist/solver/maxrects.js';
+import { createLookaheadCache } from '../src/components/cutlist/solver/lookahead.js';
 
 let failures = 0;
 let passed = 0;
@@ -143,6 +145,36 @@ console.log('--- T8: determinism ---');
   const r1 = run(input, { seed: 42 });
   const r2 = run(input, { seed: 42 });
   check('T8 deterministic', JSON.stringify(r1.sheets) === JSON.stringify(r2.sheets), 'mismatch');
+}
+
+console.log('--- T14: look-ahead makes a leftover strip take 2 small parts, not 1 big ---');
+{
+  // A 1654x980 part leaves a 1654x502 strip that fits EITHER one 1460x460 OR
+  // two 470x815 (rotated). Every plain fit rule prefers the 1460x460, which
+  // leaves ~95k mm2 more dead. This asserts the packer directly: at the
+  // optimize() level both outcomes tie on the objective (same sheet count,
+  // same unplaced count), so the sweep is free to pick either.
+  const demand = [
+    { id: 'big', name: 'big', length: 1654, width: 980, remaining: 1, i: 0 },
+    { id: 'small', name: 'small', length: 470, width: 815, remaining: 2, i: 1 },
+    { id: 'mid', name: 'mid', length: 1460, width: 460, remaining: 1, i: 2 },
+  ];
+  const st = stock('S', 2010, 1485, 1);
+  const mk = (la) => ({
+    order: [0, 1, 2], fitRule: 'BSSF', splitRule: 'MIN_AREA', placementMode: 'MIXED',
+    ...(la ? { lookahead: createLookaheadCache() } : {}),
+  });
+  const plain = packSheetMaxRects(st, demand.map((d) => ({ ...d })), mk(false), 3);
+  const ahead = packSheetMaxRects(st, demand.map((d) => ({ ...d })), mk(true), 3);
+  const count = (r) => r.placements.reduce((m, p) => ((m[p.name] = (m[p.name] || 0) + 1), m), {});
+  const a = count(ahead);
+  check('T14 look-ahead seats the big part', a.big === 1, JSON.stringify(a));
+  check('T14 look-ahead pairs 2 smalls in the strip', a.small === 2, JSON.stringify(a));
+  check(
+    'T14 look-ahead beats plain fit rules',
+    ahead.usedArea > plain.usedArea,
+    `plain ${(plain.usedArea / plain.sheetArea * 100).toFixed(1)}% vs ahead ${(ahead.usedArea / ahead.sheetArea * 100).toFixed(1)}%`
+  );
 }
 
 console.log('--- Fuzz: randomized inputs, both modes ---');
