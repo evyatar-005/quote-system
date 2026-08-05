@@ -7,7 +7,7 @@ import PartLegend from './PartLegend.jsx';
 import SheetCard from './SheetCard.jsx';
 import { exportSheetsToPdf } from './exportPdf.js';
 import { usePrintMode } from './usePrintMode.js';
-import { makeColorMap } from './palette.js';
+import { makeColorMap, partStroke } from './palette.js';
 
 /**
  * @param {{result: import('./solver/types.js').OptimizeResult, parts: object[],
@@ -21,12 +21,30 @@ export default function ResultsPanel({ result, parts, showLabels, showCuts }) {
   sheetRefs.current = [];
 
   const colorMap = makeColorMap(parts);
+  const strokeMap = new Map(parts.map((p, i) => [p.id, partStroke(i)]));
   const stockNames = new Map(result.sheets.map((s) => [s.stockId, s.stockName]));
 
   const placedCounts = new Map();
   for (const sheet of result.sheets) {
     for (const p of sheet.placements) placedCounts.set(p.partId, (placedCounts.get(p.partId) || 0) + 1);
   }
+
+  // The solver is handed the sheet already shrunk by the soma band, so its
+  // area totals describe the usable area only. Material is bought as whole
+  // plates, so re-inflate them here - otherwise consumed area and waste are
+  // under-reported and the costing is wrong.
+  const band = result.somaSheetBand || 0;
+  const stats = (() => {
+    if (band <= 0) return result.stats;
+    const realSheetArea = result.sheets.reduce((n, s) => n + (s.sheetW + 2 * band) * (s.sheetH + 2 * band), 0);
+    const placedArea = result.sheets.reduce((n, s) => n + s.usedArea, 0);
+    return {
+      ...result.stats,
+      totalSheetArea: realSheetArea,
+      wasteArea: realSheetArea - placedArea,
+      utilization: realSheetArea > 0 ? placedArea / realSheetArea : 0,
+    };
+  })();
 
   const handleDownloadPdf = async () => {
     setExporting(true);
@@ -76,13 +94,13 @@ export default function ResultsPanel({ result, parts, showLabels, showCuts }) {
 
       <div className="cutlist-print-root">
         <div ref={statsRef} className="bg-white p-2">
-          <StatsSummary stats={result.stats} mode={result.mode} sheetCount={result.sheets.length} stockNames={stockNames} />
+          <StatsSummary stats={stats} mode={result.mode} sheetCount={result.sheets.length} stockNames={stockNames} />
           <div className="mt-3">
             <PartLegend parts={parts} colorMap={colorMap} placedCounts={placedCounts} />
           </div>
         </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mt-4">
+        <div className="grid grid-cols-1 gap-4 mt-4">
           {result.sheets.map((layout, i) => (
             <SheetCard
               key={i}
@@ -91,8 +109,11 @@ export default function ResultsPanel({ result, parts, showLabels, showCuts }) {
               index={i}
               total={result.sheets.length}
               colorMap={colorMap}
+              strokeMap={strokeMap}
               showLabels={showLabels}
               showCuts={showCuts}
+              somaSheetBand={result.somaSheetBand}
+              somaPartBand={result.somaPartBand}
             />
           ))}
         </div>

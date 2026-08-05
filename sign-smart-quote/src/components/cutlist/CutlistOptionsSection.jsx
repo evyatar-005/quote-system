@@ -5,12 +5,6 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { sanitizeDecimal } from '@/lib/utils';
 
-const QUALITY_OPTIONS = [
-  { value: 'fast', label: 'מהיר' },
-  { value: 'normal', label: 'רגיל' },
-  { value: 'max', label: 'מקסימלי' },
-];
-
 /** Row helper: label on the right, control on the left - matches the compact options list in the reference. */
 function OptionRow({ label, children }) {
   return (
@@ -28,16 +22,18 @@ function OptionRow({ label, children }) {
 export default function CutlistOptionsSection({
   kerf,
   mode,
-  quality,
   deterministic,
   showLabels,
   showCuts,
+  somaPerSheet,
+  somaPerPart,
   onKerfChange,
   onModeChange,
-  onQualityChange,
   onDeterministicChange,
   onShowLabelsChange,
   onShowCutsChange,
+  onSomaPerSheetChange,
+  onSomaPerPartChange,
 }) {
   const [open, setOpen] = useState(true);
 
@@ -66,36 +62,45 @@ export default function CutlistOptionsSection({
         </OptionRow>
 
         <OptionRow label="ניסור חופשי (CNC / לייזר) במקום מסור פאנל">
-          <Switch checked={mode === 'nest'} onCheckedChange={(v) => onModeChange(v ? 'nest' : 'guillotine')} />
+          <Switch
+            checked={mode === 'nest'}
+            onCheckedChange={(v) => onModeChange(v ? 'nest' : 'guillotine')}
+            className="data-[state=unchecked]:bg-slate-300"
+          />
         </OptionRow>
 
         <OptionRow label="הצג שמות ומידות על החלקים">
-          <Switch checked={showLabels} onCheckedChange={onShowLabelsChange} />
+          <Switch checked={showLabels} onCheckedChange={onShowLabelsChange} className="data-[state=unchecked]:bg-slate-300" />
         </OptionRow>
 
         {mode === 'guillotine' && (
           <OptionRow label="הצג קווי חיתוך">
-            <Switch checked={showCuts} onCheckedChange={onShowCutsChange} />
+            <Switch checked={showCuts} onCheckedChange={onShowCutsChange} className="data-[state=unchecked]:bg-slate-300" />
           </OptionRow>
         )}
 
         <OptionRow label="מצב דטרמיניסטי (תוצאה זהה בכל הרצה)">
-          <Switch checked={deterministic} onCheckedChange={onDeterministicChange} />
+          <Switch checked={deterministic} onCheckedChange={onDeterministicChange} className="data-[state=unchecked]:bg-slate-300" />
         </OptionRow>
 
-        <OptionRow label="איכות חישוב">
-          <select
-            value={quality}
-            disabled={deterministic}
-            onChange={(e) => onQualityChange(e.target.value)}
-            className="h-8 px-2 text-sm border border-slate-300 rounded bg-white disabled:opacity-50"
-          >
-            {QUALITY_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
+        <OptionRow label='רוחב פס נקודות סומא לכל הפלטה (מ"מ)'>
+          <input
+            value={somaPerSheet}
+            dir="ltr"
+            inputMode="decimal"
+            onChange={(e) => onSomaPerSheetChange(sanitizeDecimal(e.target.value))}
+            className="w-16 h-8 px-2 text-sm text-center border border-slate-300 rounded"
+          />
+        </OptionRow>
+
+        <OptionRow label='רוחב פס נקודות סומא לכל חלק (מ"מ)'>
+          <input
+            value={somaPerPart}
+            dir="ltr"
+            inputMode="decimal"
+            onChange={(e) => onSomaPerPartChange(sanitizeDecimal(e.target.value))}
+            className="w-16 h-8 px-2 text-sm text-center border border-slate-300 rounded"
+          />
         </OptionRow>
       </CollapsibleContent>
     </Collapsible>
