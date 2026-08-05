@@ -61,10 +61,10 @@ export default function TraceControls({ params, onChange, measuredWhiteCut }) {
       </div>
 
       <Row
-        label="פישוט צורה"
+        label="איחוד ופישוט"
         value={params.simplifyMm}
         unit=" מ״מ"
-        hint="הכי חשוב. מאחד פרטים קרובים ומעגל פינות כדי שהסכין תוכל לעקוב — כמו בקובץ חיתוך מקצועי. הגדילו אם הקו מפורט/משונן מדי או אם מופיעה רשת."
+        hint="הכי חשוב. מאחד חלקים של אותו אלמנט לקו אחד ומעגל פינות כדי שהסכין תוכל לעקוב. הגדילו אם אלמנט יוצא כמה חתיכות נפרדות, או אם הקו משונן."
       >
         <Slider min={0} max={10} step={0.1} value={[params.simplifyMm]} onValueChange={([v]) => set('simplifyMm')(v)} />
       </Row>
@@ -90,9 +90,9 @@ export default function TraceControls({ params, onChange, measuredWhiteCut }) {
       <div className="space-y-2 rounded-lg border border-slate-200 px-3 py-2">
         <div className="flex items-center justify-between">
           <div>
-            <Label className="text-slate-700">סף רקע לבן — אוטומטי</Label>
+            <Label className="text-slate-700">סף רקע לבן — אוטומטי לפי אלמנט</Label>
             <p className="text-xs text-slate-400 max-w-[230px]">
-              המערכת מודדת את הרקע מהשוליים של התמונה. כבו רק כדי לכוון ידנית.
+              בגיליון עם כמה תמונות (מדבקות), לכל אחת רקע משלה — המערכת מודדת ומכיילת בנפרד לכל אלמנט, לא ערך אחד לכולן. כבו רק כדי לכפות ערך ידני אחיד.
             </p>
           </div>
           <Switch
@@ -100,11 +100,7 @@ export default function TraceControls({ params, onChange, measuredWhiteCut }) {
             onCheckedChange={(checked) => set('threshold')(checked ? 'auto' : (measuredWhiteCut || 240))}
           />
         </div>
-        {params.threshold === 'auto' ? (
-          measuredWhiteCut != null && (
-            <p className="text-xs text-slate-500">נמדד: <span className="tabular-nums">{measuredWhiteCut}</span></p>
-          )
-        ) : (
+        {params.threshold !== 'auto' && (
           <Row
             label="ערך ידני"
             value={params.threshold}
@@ -155,6 +151,15 @@ export default function TraceControls({ params, onChange, measuredWhiteCut }) {
 
           <Row label="החלקת קו נוספת" value={params.smoothing} unit=" מעברים">
             <Slider min={0} max={4} step={1} value={[params.smoothing]} onValueChange={([v]) => set('smoothing')(v)} />
+          </Row>
+
+          <Row
+            label="הסרת קוצים"
+            value={params.despikeMm}
+            unit=" מ״מ"
+            hint="מסיר בליטות דקיקות. השאירו נמוך — ערך גבוה מנתק רגליים ופרטים דקים."
+          >
+            <Slider min={0} max={3} step={0.1} value={[params.despikeMm]} onValueChange={([v]) => set('despikeMm')(v)} />
           </Row>
 
           <Row label="איחוי שוליים" value={params.cleanupRadius} unit=" px">

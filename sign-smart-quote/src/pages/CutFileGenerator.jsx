@@ -23,7 +23,8 @@ import ExportButtons from "@/components/cutfile/ExportButtons";
 const DEFAULT_PARAMS = {
   // Physical, blade-oriented defaults — a production cut file is a simplified
   // outline with a bleed, not a pixel-faithful trace.
-  simplifyMm: 1.5,
+  simplifyMm: 2.5,
+  despikeMm: 0.3,
   offsetMm: 1,
   minAreaMm2: 25,
   outerOnly: true,

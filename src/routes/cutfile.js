@@ -13,7 +13,7 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 
-const { buildMask } = require('../cutfile/mask');
+const { buildMask, buildMaskPerElement } = require('../cutfile/mask');
 const { isPdf, pdfToPng } = require('../cutfile/rasterize');
 const { traceMask } = require('../cutfile/trace');
 const {
@@ -159,7 +159,7 @@ module.exports = function registerCutFile(app, db, deps) {
     if (!files.length) return null;
     const originalPath = path.join(dir, files[0]);
     const { buffer, rasterMime } = await readRaster(originalPath);
-    const { maskPng, width, height, hasAlpha, whiteCut } = await buildMask(buffer, {});
+    const { maskPng, width, height, hasAlpha, whiteCut } = await buildMaskPerElement(buffer, {});
     job = {
       originalPath, rasterBuffer: buffer, rasterMime,
       maskPng, maskWidth: width, maskHeight: height, hasAlpha, whiteCut, createdAt: Date.now(),
@@ -195,7 +195,7 @@ module.exports = function registerCutFile(app, db, deps) {
       const jobId = req.cutfileJobId;
       try {
         const { buffer, rasterMime, pageCount } = await readRaster(req.file.path);
-        const { maskPng, width, height, hasAlpha, whiteCut } = await buildMask(buffer, {});
+        const { maskPng, width, height, hasAlpha, whiteCut } = await buildMaskPerElement(buffer, {});
         jobCache.set(jobId, {
           originalPath: req.file.path,
           rasterBuffer: buffer,
@@ -249,7 +249,10 @@ module.exports = function registerCutFile(app, db, deps) {
     // The two knobs that make the result look like a real production cut file
     // rather than a literal trace: how far to simplify, and how small a piece
     // is still a piece. Both in physical units.
-    const simplifyMm = Math.max(0, Math.min(20, num(params.simplifyMm, 1.5)));
+    // Merge bridges gaps and unifies an element's parts; despike only shaves
+    // slivers and must stay small, or it severs thin features (animal legs).
+    const simplifyMm = Math.max(0, Math.min(20, num(params.simplifyMm, 2.5)));
+    const despikeMm = Math.max(0, Math.min(3, num(params.despikeMm, 0.3)));
     const minAreaMm2 = Math.max(0, num(params.minAreaMm2, 25));
     const outerOnly = !(params.outerOnly === false || params.outerOnly === 'false');
     const alphaMax = num(params.alphaMax, 1);
@@ -295,7 +298,7 @@ module.exports = function registerCutFile(app, db, deps) {
     // spike-removal are judged against the real blade radius rather than
     // pixels; then drop anything too small to be a genuine part; then apply
     // the bleed; and only then do the cosmetic point-level smoothing.
-    const simplified = simplifyContoursMm(mmContours, simplifyMm);
+    const simplified = simplifyContoursMm(mmContours, simplifyMm, despikeMm);
     // Outer-only is the die-cut default: one closed loop per piece. Turning it
     // off is the opt-in for artwork that genuinely needs interior cuts (a
     // hanging hole, the counter of a letter cut right through).

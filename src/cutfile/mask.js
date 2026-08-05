@@ -279,4 +279,87 @@ async function buildMask(inputBuffer, {
   return { maskPng, width, height, hasAlpha, whiteCut: effectiveRemoveWhite ? whiteCut : null, auto };
 }
 
-module.exports = { buildMask, PROCESS_MAX_DIM };
+// Builds the mask element-by-element instead of with one global cutoff —
+// see autotune.js for why: measured on a real sheet of stickers, no single
+// cutoff works for every photo on the page at once.
+//
+// Each element is cropped out, given its own auto-tuned white cutoff (falling
+// back to the plain global measurement if tuning finds nothing usable — a
+// real alpha cutout with no white to remove at all), traced through the same
+// buildMask() as a standalone image, and its resulting subject pixels are
+// pasted back into a canvas the size of the full page. Everything outside any
+// detected element (the transparent gaps between stickers) stays background.
+//
+// Falls back to plain buildMask() when segmentation finds nothing — e.g. a
+// single full-bleed photo with no transparency has no element boundary to
+// find, and global tuning is already correct for it.
+async function buildMaskPerElement(inputBuffer, opts = {}) {
+  const { segmentElements } = require('./segment');
+  const { tuneElementCutoff } = require('./autotune');
+
+  const resized = await sharp(inputBuffer)
+    .rotate()
+    .resize({ width: PROCESS_MAX_DIM, height: PROCESS_MAX_DIM, fit: 'inside', withoutEnlargement: true })
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const { data, info } = resized;
+  const { width, height, channels } = info;
+  const total = width * height;
+
+  const alpha = new Uint8Array(total);
+  for (let p = 0, i = 0; p < total; p++, i += channels) alpha[p] = data[i + 3];
+  let transparentCount = 0;
+  for (let p = 0; p < total; p++) if (alpha[p] < ALPHA_OPAQUE_MIN) transparentCount++;
+  const hasAlpha = transparentCount / total > 0.02;
+
+  const elements = segmentElements(alpha, width, height);
+
+  if (!elements.length) return buildMask(inputBuffer, opts);
+
+  // 255 = background everywhere by default; each element paints its own
+  // subject pixels (0) into its bbox.
+  const canvas = new Uint8Array(total).fill(255);
+  const nominalMmPerPx = 200 / width; // only used to make the tuning pipeline's mm-based knobs consistent; doesn't affect the final trace's actual scale
+
+  for (const el of elements) {
+    // A fresh sharp() per crop — a raw-pixel pipeline is consumed by
+    // .toBuffer(), so it can't be reused across iterations.
+    const cropPng = await sharp(data, { raw: { width, height, channels } })
+      .extract({ left: el.x, top: el.y, width: el.width, height: el.height })
+      .png()
+      .toBuffer();
+
+    let cutoff = null;
+    try {
+      cutoff = await tuneElementCutoff(cropPng, { simplifyMm: 2.5, minAreaMm2: 25, mmPerPx: nominalMmPerPx });
+    } catch (_) { /* fall through to global auto-measurement below */ }
+
+    const elementResult = await buildMask(cropPng, { ...opts, threshold: cutoff ?? opts.threshold ?? 'auto' });
+    // sharp re-reads a single-channel PNG back out as 3 (RGB) channels, not 1
+    // — .toColourspace('b-w') forces it back to a single channel so the pixel
+    // index below actually lines up with what was written. Verified: without
+    // this, the paste read from the wrong byte offset and produced a
+    // consistently-wrong result (only the mask's top edge landed correctly).
+    const { data: maskRaw, info: maskInfo } = await sharp(elementResult.maskPng)
+      .toColourspace('b-w')
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+
+    for (let y = 0; y < maskInfo.height; y++) {
+      const canvasY = el.y + y;
+      if (canvasY < 0 || canvasY >= height) continue;
+      for (let x = 0; x < maskInfo.width; x++) {
+        const canvasX = el.x + x;
+        if (canvasX < 0 || canvasX >= width) continue;
+        // maskRaw is 0=subject/black, 255=background/white, 1 channel.
+        if (maskRaw[y * maskInfo.width + x] === 0) canvas[canvasY * width + canvasX] = 0;
+      }
+    }
+  }
+
+  const maskPng = await sharp(Buffer.from(canvas), { raw: { width, height, channels: 1 } }).png().toBuffer();
+  return { maskPng, width, height, hasAlpha, whiteCut: null, auto: true, perElement: true };
+}
+
+module.exports = { buildMask, buildMaskPerElement, PROCESS_MAX_DIM };

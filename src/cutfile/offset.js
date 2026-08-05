@@ -99,12 +99,30 @@ function offsetContoursMm(contoursMm, deltaMm) {
 // +r) then removes spikes and slivers thinner than 2r. Net displacement is
 // ~zero, so the outline stays on the artwork rather than growing — the
 // separate bleed offset is applied afterwards.
-function simplifyContoursMm(contoursMm, radiusMm) {
-  if (!radiusMm || radiusMm <= 0) return contoursMm;
-  const closed = offsetContoursMm(offsetContoursMm(contoursMm, radiusMm), -radiusMm);
-  if (!closed.length) return contoursMm;
-  const opened = offsetContoursMm(offsetContoursMm(closed, -radiusMm), radiusMm);
-  return opened.length ? opened : closed;
+// The two halves are deliberately separate, because they pull in opposite
+// directions and a single shared radius makes the result non-monotonic:
+//
+//   close (+r,-r) MERGES — bridges gaps, joins pieces of one element, fills
+//     pinholes. More of it = fewer pieces.
+//   open (-r,+r) SEVERS — erodes first, so anything thinner than 2r is cut
+//     through. On this artwork that means an animal's legs: raising a shared
+//     radius from 1.5mm to 2.5mm actually produced MORE pieces (9 → 12),
+//     because the open half was amputating limbs faster than the close half
+//     was merging bodies.
+//
+// So mergeMm should be tuned freely to unify each element, while despikeMm
+// stays small — just enough to shave slivers, never enough to cut a leg.
+function simplifyContoursMm(contoursMm, mergeMm, despikeMm = 0) {
+  let out = contoursMm;
+  if (mergeMm > 0) {
+    const closed = offsetContoursMm(offsetContoursMm(out, mergeMm), -mergeMm);
+    if (closed.length) out = closed;
+  }
+  if (despikeMm > 0) {
+    const opened = offsetContoursMm(offsetContoursMm(out, -despikeMm), despikeMm);
+    if (opened.length) out = opened;
+  }
+  return out;
 }
 
 // Keeps only outermost contours, discarding everything nested inside them.
