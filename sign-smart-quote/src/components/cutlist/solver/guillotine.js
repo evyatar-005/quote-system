@@ -1,4 +1,8 @@
-import { EPS, orientations } from './geometry.js';
+import { EPS } from './geometry.js';
+import { bestFit, lexLess, rankCandidates } from './fit.js';
+
+// Re-exported for callers that historically imported them from here.
+export { bestFit, lexLess };
 
 /**
  * Split a free rect after placing a pw x ph part at its top-left corner.
@@ -65,48 +69,29 @@ export function splitGuillotine(free, pw, ph, kerf, rule, out, cuts, depth) {
   }
 }
 
-function fitScore(rule, freeW, freeH, w, h) {
-  switch (rule) {
-    case 'BAF':
-      return freeW * freeH - w * h;
-    case 'BLSF':
-      return Math.max(freeW - w, freeH - h);
-    default: // BSSF
-      return Math.min(freeW - w, freeH - h);
-  }
-}
-
 /**
- * Find the best free rect + orientation for `part` across the given free list.
+ * Across ALL part types that still have pieces left, find the single best
+ * (type, free rect, orientation) placement. This is what lets a sheet
+ * interleave different part types instead of exhausting one type at a time -
+ * the type-at-a-time order tends to make one type claim whole full-width
+ * bands, leaving only a thin strip for everything else.
+ * Ties prefer the larger part (classic best-fit-decreasing behavior).
+ *
+ * When `cfg.lookahead` is supplied, the top-K plain-scored candidates are
+ * re-ranked by how much area dies in the residual they create - see
+ * lookahead.js for why the plain fit rules alone rank some cases backwards.
  * @param {import('./types.js').Rect[]} free
- * @param {import('./types.js').DemandEntry} part
+ * @param {import('./types.js').DemandEntry[]} demand
+ * @param {number[]} remaining parallel to `demand`
+ * @param {number[]} order type indices to consider
  * @param {'BAF'|'BSSF'|'BLSF'} fitRule
- * @returns {{idx:number, w:number, h:number, rotated:boolean}|null}
+ * @param {object} [cfg] full config; only `cfg.lookahead` is read here
+ * @param {number} [kerf]
+ * @param {'guillotine'|'nest'} [mode]
+ * @returns {{ti:number, idx:number, w:number, h:number, rotated:boolean}|null}
  */
-function bestFit(free, part, fitRule) {
-  let best = null;
-  let bestKey = null;
-  for (let idx = 0; idx < free.length; idx++) {
-    const f = free[idx];
-    for (const o of orientations(part, true)) {
-      if (o.w > f.w + EPS || o.h > f.h + EPS) continue;
-      const score = fitScore(fitRule, f.w, f.h, o.w, o.h);
-      const key = [score, f.y, f.x, o.rotated ? 1 : 0];
-      if (!best || lexLess(key, bestKey)) {
-        bestKey = key;
-        best = { idx, w: o.w, h: o.h, rotated: o.rotated };
-      }
-    }
-  }
-  return best;
-}
-
-function lexLess(a, b) {
-  for (let i = 0; i < a.length; i++) {
-    if (a[i] < b[i] - EPS) return true;
-    if (a[i] > b[i] + EPS) return false;
-  }
-  return false;
+export function pickGlobalBest(free, demand, remaining, order, fitRule, cfg, kerf, mode) {
+  return rankCandidates(free, demand, remaining, order, fitRule, cfg, kerf, mode);
 }
 
 /**
@@ -119,26 +104,39 @@ function lexLess(a, b) {
  */
 export function packSheetGuillotine(stock, demand, cfg, kerf) {
   /** @type {import('./types.js').Rect[]} */
-  let free = [{ x: 0, y: 0, w: stock.length, h: stock.width }];
+  const free = [{ x: 0, y: 0, w: stock.length, h: stock.width }];
   /** @type {import('./types.js').Placement[]} */
   const placements = [];
   /** @type {import('./types.js').Cut[]} */
   const cuts = [];
   const counts = new Array(demand.length).fill(0);
 
-  for (const ti of cfg.order) {
+  const place = (ti, idx, w, h, rotated) => {
     const entry = demand[ti];
-    let left = entry.remaining;
-    while (left > 0) {
-      const best = bestFit(free, entry, cfg.fitRule);
-      if (!best) break; // no room for this type on this sheet; won't get better later
-      const { idx, w, h, rotated } = best;
-      const f = free[idx];
-      placements.push({ partId: entry.id, typeIndex: ti, name: entry.name, x: f.x, y: f.y, w, h, rotated });
-      free.splice(idx, 1);
-      splitGuillotine(f, w, h, kerf, cfg.splitRule, free, cuts, 0);
-      counts[ti]++;
-      left--;
+    const f = free[idx];
+    placements.push({ partId: entry.id, typeIndex: ti, name: entry.name, x: f.x, y: f.y, w, h, rotated });
+    free.splice(idx, 1);
+    splitGuillotine(f, w, h, kerf, cfg.splitRule, free, cuts, 0);
+    counts[ti]++;
+  };
+
+  if (cfg.placementMode === 'MIXED') {
+    const remaining = demand.map((d) => d.remaining);
+    for (;;) {
+      const best = pickGlobalBest(free, demand, remaining, cfg.order, cfg.fitRule, cfg, kerf, 'guillotine');
+      if (!best) break;
+      place(best.ti, best.idx, best.w, best.h, best.rotated);
+      remaining[best.ti]--;
+    }
+  } else {
+    for (const ti of cfg.order) {
+      let left = demand[ti].remaining;
+      while (left > 0) {
+        const best = bestFit(free, demand[ti], cfg.fitRule);
+        if (!best) break; // no room for this type on this sheet; won't get better later
+        place(ti, best.idx, best.w, best.h, best.rotated);
+        left--;
+      }
     }
   }
 
