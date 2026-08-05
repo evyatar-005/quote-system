@@ -12,6 +12,8 @@ import CostsDashboard from './pages/CostsDashboard.jsx';
 import CutListOptimizer from './pages/CutListOptimizer.jsx';
 import CutFileGenerator from './pages/CutFileGenerator.jsx';
 import QuotesHistory from './pages/QuotesHistory.jsx';
+import RecipesAdmin from './pages/RecipesAdmin.jsx';
+import ProductionBoard from './pages/ProductionBoard.jsx';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import Login from './pages/Login.jsx';
 import ChangePassword from './pages/ChangePassword.jsx';
@@ -24,6 +26,16 @@ import { Navigate } from 'react-router-dom';
 const AdminOnly = ({ children }) => {
   const { user } = useAuth();
   if (user && user.role !== 'admin') return <Navigate to="/costs" replace />;
+  return children;
+};
+
+// Production/תפ"י screens (recipes + worksheet board) — admin can also reach
+// them (same reasoning as requireOperations on the server: admin can do
+// everything operations can), but a sales agent gets redirected away, same
+// as AdminOnly does for non-admins.
+const OperationsOnly = ({ children }) => {
+  const { user } = useAuth();
+  if (user && user.role !== 'admin' && user.role !== 'operations') return <Navigate to="/costs" replace />;
   return children;
 };
 
@@ -67,6 +79,8 @@ const AuthenticatedApp = () => {
         <Route path="/cutting" element={<CutListOptimizer />} />
         <Route path="/cutfile" element={<CutFileGenerator />} />
         <Route path="/quotes" element={<AdminOnly><QuotesHistory /></AdminOnly>} />
+        <Route path="/recipes" element={<OperationsOnly><RecipesAdmin /></OperationsOnly>} />
+        <Route path="/production" element={<OperationsOnly><ProductionBoard /></OperationsOnly>} />
         <Route path="*" element={<PageNotFound />} />
       </Routes>
       <Footer />

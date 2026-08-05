@@ -17,13 +17,11 @@ export default function Login() {
     return <ForgotPassword onBack={() => setShowForgotPassword(false)} />;
   }
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!email.trim() || !password.trim()) return;
+  const doLogin = async (loginEmail, loginPassword) => {
     setLoading(true);
     setError('');
     try {
-      await login(email.trim(), password);
+      await login(loginEmail, loginPassword);
     } catch (err) {
       setError(
         err && err.status === 401
@@ -33,6 +31,18 @@ export default function Login() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!email.trim() || !password.trim()) return;
+    doLogin(email.trim(), password);
+  };
+
+  const handleQuickLogin = (quickEmail, quickPassword) => {
+    setEmail(quickEmail);
+    setPassword(quickPassword);
+    doLogin(quickEmail, quickPassword);
   };
 
   return (
@@ -104,6 +114,19 @@ export default function Login() {
           >
             שכחתי סיסמה
           </button>
+
+          {/* Dev-only convenience — never present in a production build, so a
+              seeded credential is never one click away for a real user. */}
+          {import.meta.env.DEV && (
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => handleQuickLogin('admin@company.local', 'admin123')}
+              className="w-full h-9 text-sm border border-dashed border-slate-300 rounded-lg text-slate-500 hover:border-amber-400 hover:text-amber-600 transition-colors"
+            >
+              כניסה מהירה (פיתוח) — מנהל
+            </button>
+          )}
         </form>
         </div>
       </div>

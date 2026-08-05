@@ -21,26 +21,37 @@ import TraceControls from "@/components/cutfile/TraceControls";
 import ExportButtons from "@/components/cutfile/ExportButtons";
 
 const DEFAULT_PARAMS = {
-  threshold: 128,
+  // Physical, blade-oriented defaults — a production cut file is a simplified
+  // outline with a bleed, not a pixel-faithful trace.
+  simplifyMm: 1.5,
+  offsetMm: 1,
+  minAreaMm2: 25,
+  outerOnly: true,
+  widthCm: 20,
+  threshold: 'auto',
+  removeWhite: true,
+  holeMode: 'protect',
+  // Advanced / pixel-level.
+  cleanupRadius: 2,
+  speckleArea: 300,
+  blurSigma: 0,
   turdSize: 2,
   alphaMax: 1,
   smoothing: 1,
-  offsetMm: 0,
-  widthCm: 20,
-  holeMode: 'protect',
 };
 
 const TRACE_DEBOUNCE_MS = 300;
 
 export default function CutFileGenerator() {
   const [jobId, setJobId] = useState(null);
-  const [hasAlpha, setHasAlpha] = useState(true);
   const [sourceUrl, setSourceUrl] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [params, setParams] = useState(DEFAULT_PARAMS);
   const [traceResult, setTraceResult] = useState(null);
   const [tracing, setTracing] = useState(false);
   const [traceError, setTraceError] = useState(null);
+  const [dragging, setDragging] = useState(false);
+  const [uploadError, setUploadError] = useState(null);
 
   const debounceRef = useRef(null);
   const sourceUrlRef = useRef(null);
@@ -53,25 +64,69 @@ export default function CutFileGenerator() {
     setParams(DEFAULT_PARAMS);
     setTraceResult(null);
     setTraceError(null);
+    setUploadError(null);
   }, []);
 
   const handleFile = async (file) => {
     if (!file) return;
     reset();
     setUploading(true);
+    // A 0-byte File almost always means a cloud placeholder (OneDrive/Drive
+    // "online-only" file) that was never downloaded locally — the browser
+    // hands over an empty File rather than failing, so catch it here and say
+    // so, instead of sending an empty multipart body the server can't explain.
+    if (file.size === 0) {
+      const msg = `הקובץ "${file.name}" ריק (0 בייט). אם הוא מ-OneDrive/Google Drive — יש להוריד אותו למחשב לפני ההעלאה.`;
+      setUploadError(msg);
+      toast.error(msg);
+      setUploading(false);
+      return;
+    }
     try {
-      const { jobId: newJobId, hasAlpha: alpha } = await base44.cutfile.upload(file);
+      const { jobId: newJobId, pdfPageCount } = await base44.cutfile.upload(file);
       setJobId(newJobId);
-      setHasAlpha(alpha);
+      // Only the first page becomes a cut file — say so rather than silently
+      // dropping the rest of a multi-page PDF.
+      if (pdfPageCount > 1) {
+        toast.warning(`ה-PDF מכיל ${pdfPageCount} עמודים — נוצר קו חיתוך לעמוד הראשון בלבד.`);
+      }
       const blob = await base44.cutfile.fetchSourceBlob(newJobId);
       const url = URL.createObjectURL(blob);
       sourceUrlRef.current = url;
       setSourceUrl(url);
     } catch (err) {
-      toast.error(err.message || 'העלאת התמונה נכשלה');
+      const msg = err.message || 'העלאת התמונה נכשלה';
+      setUploadError(msg);
+      toast.error(msg);
     } finally {
       setUploading(false);
     }
+  };
+
+  // Drag & drop. The dropzone advertises "גררו תמונה לכאן", so it has to
+  // actually accept a drop — a bare <label>+<input type=file> does not, the
+  // browser just navigates away to the dropped file instead. dragenter/over
+  // must both preventDefault or the drop event never fires at all.
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!dragging) setDragging(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Ignore leave events fired when moving over a child element.
+    if (e.currentTarget.contains(e.relatedTarget)) return;
+    setDragging(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragging(false);
+    const file = e.dataTransfer?.files?.[0];
+    if (file) handleFile(file);
   };
 
   // Re-trace on every param change, debounced — mirrors "בדיקת התמונה מול
@@ -132,17 +187,37 @@ export default function CutFileGenerator() {
           </CardHeader>
           <CardContent>
             {!jobId ? (
-              <label className="flex flex-col items-center justify-center gap-2 h-64 border-2 border-dashed border-slate-300 rounded-xl cursor-pointer hover:border-amber-400 hover:bg-amber-50/40 transition-colors">
-                <Upload className="w-8 h-8 text-slate-400" />
-                <span className="text-sm text-slate-500">{uploading ? 'מעלה...' : 'גררו תמונה לכאן או לחצו לבחירה (PNG / JPG / WEBP)'}</span>
-                <input
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp"
-                  className="hidden"
-                  disabled={uploading}
-                  onChange={(e) => handleFile(e.target.files?.[0])}
-                />
-              </label>
+              <>
+                <label
+                  onDragEnter={handleDragOver}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  className={`flex flex-col items-center justify-center gap-2 h-64 border-2 border-dashed rounded-xl cursor-pointer transition-colors ${
+                    dragging
+                      ? 'border-amber-500 bg-amber-50'
+                      : 'border-slate-300 hover:border-amber-400 hover:bg-amber-50/40'
+                  }`}
+                >
+                  <Upload className={`w-8 h-8 ${dragging ? 'text-amber-600' : 'text-slate-400'}`} />
+                  <span className="text-sm text-slate-500">
+                    {uploading ? 'מעלה...' : dragging ? 'שחררו כדי להעלות' : 'גררו תמונה לכאן או לחצו לבחירה'}
+                  </span>
+                  <span className="text-xs text-slate-400">PDF · PNG · JPG · WEBP · GIF · BMP · TIFF · AVIF · HEIC</span>
+                  <input
+                    type="file"
+                    accept="image/*,application/pdf,.pdf"
+                    className="hidden"
+                    disabled={uploading}
+                    onChange={(e) => handleFile(e.target.files?.[0])}
+                  />
+                </label>
+                {uploadError && (
+                  <div className="mt-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                    {uploadError}
+                  </div>
+                )}
+              </>
             ) : (
               <div className="space-y-3">
                 <TracePreview
@@ -159,6 +234,7 @@ export default function CutFileGenerator() {
                   {traceResult && (
                     <span>
                       {traceResult.widthMm?.toFixed(0)}×{traceResult.heightMm?.toFixed(0)} מ״מ
+                      {traceResult.shapes > 0 && ` · ${traceResult.shapes} ${traceResult.shapes === 1 ? 'צורה' : 'צורות'}`}
                       {traceResult.holes > 0 && ` · ${traceResult.holes} ${traceResult.holes === 1 ? 'חור' : 'חורים'}`}
                     </span>
                   )}
@@ -179,7 +255,7 @@ export default function CutFileGenerator() {
               <CardTitle>פרמטרים</CardTitle>
             </CardHeader>
             <CardContent>
-              <TraceControls params={params} onChange={setParams} hasAlpha={hasAlpha} />
+              <TraceControls params={params} onChange={setParams} measuredWhiteCut={traceResult?.whiteCut} />
             </CardContent>
           </Card>
 

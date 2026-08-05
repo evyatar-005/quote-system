@@ -4,6 +4,7 @@ const path      = require('path');
 const fs        = require('fs');
 const Database  = require('better-sqlite3');
 const { seedSignshop } = require('./db/seed-signshop');
+const { seedProduction } = require('./db/seed-production');
 const registerAuth     = require('./routes/auth');
 const registerEntities = require('./routes/entities');
 const registerNotifications = require('./routes/notifications');
@@ -14,6 +15,7 @@ const registerMonday   = require('./routes/monday');
 const registerAttachments = require('./routes/attachments');
 const registerSmtp     = require('./routes/smtp');
 const registerCutFile  = require('./routes/cutfile');
+const registerProduction = require('./routes/production');
 
 const PORT    = process.env.PORT || 3000;
 const DB_PATH = path.join(__dirname, '../database.sqlite');
@@ -30,6 +32,7 @@ console.log('[db] Connected to', DB_PATH);
 // seed placeholders only when empty. Never wipes existing data.
 db.exec(fs.readFileSync(path.join(__dirname, 'db/schema.sql'), 'utf8'));
 seedSignshop(db);
+seedProduction(db);
 
 // Add Base44 Quote columns to signshop_quotes if they don't exist yet.
 for (const col of [
@@ -120,12 +123,13 @@ function loadConfig() {
 // ═══════════════════════════════════════════════════════════════════════════
 // Base44-compatible API — auth + generic entities (frontend SDK shim target)
 // ═══════════════════════════════════════════════════════════════════════════
-const { requireAuth, requireAdmin } = registerAuth(app, db);
+const { requireAuth, requireAdmin, requireOperations } = registerAuth(app, db);
 registerEntities(app, db, {
   loadConfig,
   upsertConfig,
   requireAuth,
   requireAdmin,
+  requireOperations,
 });
 registerNotifications(app, db, { requireAuth, requireAdmin });
 registerMorning(app, db, { requireAuth, requireAdmin });
@@ -135,6 +139,7 @@ registerMonday(app, db, { requireAuth, requireAdmin });
 registerAttachments(app, db, { requireAuth });
 registerSmtp(app, db, { requireAuth, requireAdmin });
 registerCutFile(app, db, { requireAuth });
+registerProduction(app, db, { requireOperations });
 
 // ─── Version info — read by deploy/UPDATE.ps1's post-deploy smoke check and
 // by anyone wanting to confirm which release is live without RDP access ─────
@@ -205,7 +210,10 @@ app.listen(PORT, () => {
   console.log('  POST   /api/auth/logout              PUT  /api/auth/change-password');
   console.log('  GET/POST/PUT/DELETE /api/entities/:name   (Quote, PriceTier, StickerPriceTier, PaintSurchargeTier,');
   console.log('                                              LightboxSizeTier, LightboxSellingPrice, KapaPriceTier,');
-  console.log('                                              RollupPriceTier, LokobondAreaTier, GlassPriceTier, NumberPriceTier, PricingConfig, User)');
+  console.log('                                              RollupPriceTier, LokobondAreaTier, GlassPriceTier, NumberPriceTier, PricingConfig, User,');
+  console.log('                                              Station, Operation, Recipe, RecipeStep, Worksheet — production recipes / תפ"י)');
+  console.log('  PUT    /api/entities/WorksheetStep/:id      (תפ"י operator toggling a resolved worksheet step)');
+  console.log('  GET    /api/production/orders                (price-free approved-quote list for תפ"י, requireOperations)');
   console.log('  GET    /api/admin/users              POST/PUT/DELETE /api/admin/users/:id');
   console.log('  GET    /api/notifications            PUT  /api/notifications/:id/read');
   console.log('  POST   /api/quotes/:id/decision      (manager approve/reject)');

@@ -54,6 +54,7 @@ function seedUsers(db) {
   const seeds = [
     ['admin', 'admin123', 'מנהל מכירות', 'admin@company.local', 'admin'],
     ['agent', 'agent123', 'סוכן לדוגמה',  'agent@company.local', 'agent'],
+    ['production', 'production123', 'תפ"י לדוגמה', 'production@company.local', 'operations'],
   ];
   let added = 0;
   for (const [username, pw, full_name, email, role] of seeds) {
@@ -109,6 +110,18 @@ module.exports = function registerAuth(app, db) {
     const user = userFromRequest(req);
     if (!user) return res.status(401).json({ error: 'unauthorized' });
     if (user.role !== 'admin') return res.status(403).json({ error: 'forbidden' });
+    req.user = user;
+    next();
+  }
+
+  // Production/תפ"י staff (graphic operators, floor lead, production manager) —
+  // needs to read/edit recipes and worksheets, but must NOT get the pricing/
+  // commission access requireAdmin implies. admin also passes, since an admin
+  // can do everything operations can.
+  function requireOperations(req, res, next) {
+    const user = userFromRequest(req);
+    if (!user) return res.status(401).json({ error: 'unauthorized' });
+    if (user.role !== 'admin' && user.role !== 'operations') return res.status(403).json({ error: 'forbidden' });
     req.user = user;
     next();
   }
@@ -282,7 +295,7 @@ module.exports = function registerAuth(app, db) {
   const updateUser  = db.prepare(`UPDATE users SET full_name = ?, email = ?, role = ? WHERE id = ?`);
   const updatePassword = db.prepare(`UPDATE users SET password_hash = ?, must_change_password = 1 WHERE id = ?`);
   const deleteUserStmt = db.prepare(`DELETE FROM users WHERE id = ?`);
-  const ROLES = new Set(['admin', 'agent']);
+  const ROLES = new Set(['admin', 'agent', 'operations']);
 
   // GET /api/admin/users
   app.get('/api/admin/users', requireAdmin, (req, res) => {
@@ -301,7 +314,7 @@ module.exports = function registerAuth(app, db) {
     // without one would be permanently unreachable.
     if (!normalizedEmail || !EMAIL_RE.test(normalizedEmail)) return res.status(400).json({ error: 'valid email required' });
     if (!password || password.length < MIN_PASSWORD_LENGTH) return res.status(400).json({ error: `password must be at least ${MIN_PASSWORD_LENGTH} characters` });
-    if (!ROLES.has(role))   return res.status(400).json({ error: 'role must be admin or agent' });
+    if (!ROLES.has(role))   return res.status(400).json({ error: 'role must be admin, agent, or operations' });
     if (userByName.get(username.trim())) return res.status(409).json({ error: 'username already exists' });
     if (userByEmail.get(normalizedEmail)) return res.status(409).json({ error: 'email already exists' });
     // New accounts always start with must_change_password = 1 (see insertUser) —
@@ -323,7 +336,7 @@ module.exports = function registerAuth(app, db) {
     const emailProvided = req.body.email !== undefined;
     const email = emailProvided ? normalizeEmail(req.body.email) : existing.email;
     const role  = req.body.role ?? existing.role;
-    if (!ROLES.has(role)) return res.status(400).json({ error: 'role must be admin or agent' });
+    if (!ROLES.has(role)) return res.status(400).json({ error: 'role must be admin, agent, or operations' });
     // Blank is allowed here (unlike creation) so an admin can clear a wrong
     // address without being forced to supply a replacement in the same request —
     // the amber "no email" warning in the users list is the guard against
@@ -364,7 +377,7 @@ module.exports = function registerAuth(app, db) {
     res.json({ deleted: true, id });
   });
 
-  return { requireAuth, requireAdmin, hashPassword, verifyPassword, publicUser };
+  return { requireAuth, requireAdmin, requireOperations, hashPassword, verifyPassword, publicUser };
 };
 
 module.exports.hashPassword = hashPassword;

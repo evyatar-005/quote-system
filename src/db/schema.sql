@@ -363,6 +363,79 @@ CREATE TABLE IF NOT EXISTS smtp_credentials (
   updated_at   TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
+-- ════════════════════════════════════════════════════════════════════════════
+-- Production recipes (תפ"י) — phase 1: recipe = ORDERED template of steps per
+-- product_type, no timing/hours yet. Instance ("worksheet") = frozen copy of
+-- the template after a תפ"י operator has resolved alt_groups/optional steps
+-- for one specific quote. Additive, isolated from the pricing engine above.
+-- ════════════════════════════════════════════════════════════════════════════
+
+-- Physical stations/machines: ווטק5, אר-3, לייזר, סומא, חדר צבע, ידני, ספק חוץ.
+CREATE TABLE IF NOT EXISTS production_stations (
+  id   INTEGER PRIMARY KEY AUTOINCREMENT,
+  key  TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  kind TEXT NOT NULL DEFAULT 'other'  -- print | cut | finish | external | other
+);
+
+-- Vocabulary of operations (קדם הדפסה, הדפסה, חיתוך, קילוף, הדבקת 3M, ...).
+CREATE TABLE IF NOT EXISTS production_operations (
+  id   INTEGER PRIMARY KEY AUTOINCREMENT,
+  key  TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL
+);
+
+-- One recipe per product_type (the calculator's productType key, e.g.
+-- 'lokobond_diecut', 'pvc_white') — NOT per family/SKU, since sibling
+-- product_types in the same family can need different stations (005: perspex
+-- goes to laser, PVC goes to soma).
+CREATE TABLE IF NOT EXISTS production_recipes (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  product_type TEXT NOT NULL UNIQUE,
+  notes        TEXT
+);
+
+-- The recipe template's steps. alt_group lets a תפ"י choose between
+-- interchangeable options that share the same group value — covers both an
+-- order swap (001 לוקובונד: print-then-cut vs cut-then-print) and a station
+-- swap (013 שטיח: אר-3 vs ווטק5) with the same mechanism.
+CREATE TABLE IF NOT EXISTS production_recipe_steps (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  recipe_id      INTEGER NOT NULL REFERENCES production_recipes(id) ON DELETE CASCADE,
+  seq            INTEGER NOT NULL,
+  operation_key  TEXT    NOT NULL REFERENCES production_operations(key),
+  station_key    TEXT    REFERENCES production_stations(key),
+  performer      TEXT    NOT NULL DEFAULT 'in_house',  -- in_house | external
+  is_optional    INTEGER NOT NULL DEFAULT 0,
+  condition_text TEXT,   -- free text, e.g. "רק בדייקאט", "רק אם נבחר גוון"
+  alt_group      TEXT,   -- steps sharing this value are mutually-exclusive alternatives
+  notes          TEXT
+);
+
+-- A frozen, per-quote instance of the resolved recipe — what actually gets
+-- printed and handed to the floor. Recipes keep changing; a worksheet, once
+-- created, must not silently drift when the template is edited later.
+CREATE TABLE IF NOT EXISTS production_worksheets (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  quote_id     INTEGER NOT NULL REFERENCES signshop_quotes(id) ON DELETE CASCADE,
+  line_index   INTEGER NOT NULL DEFAULT 0,  -- which line item within the quote
+  product_type TEXT NOT NULL,
+  created_by   TEXT,
+  created_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS production_worksheet_steps (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  worksheet_id   INTEGER NOT NULL REFERENCES production_worksheets(id) ON DELETE CASCADE,
+  seq            INTEGER NOT NULL,
+  operation_key  TEXT    NOT NULL,
+  station_key    TEXT,
+  performer      TEXT    NOT NULL DEFAULT 'in_house',
+  included       INTEGER NOT NULL DEFAULT 1,  -- final תפ"י decision for an optional/alt step
+  auto_reason    TEXT,    -- why resolveRecipe() proposed this, e.g. "חלק גדול ⇒ הדפסה לפני חיתוך"
+  notes          TEXT
+);
+
 -- SQLite doesn't auto-index FK-like columns — these are all looked up by value.
 CREATE INDEX IF NOT EXISTS idx_notifications_recipient  ON notifications(recipient_username);
 CREATE INDEX IF NOT EXISTS idx_sub_products_product      ON sub_products(product_id);
@@ -372,4 +445,7 @@ CREATE INDEX IF NOT EXISTS idx_quote_attachments_quote     ON signshop_quote_att
 CREATE INDEX IF NOT EXISTS idx_morning_documents_map_quote ON morning_documents_map(quote_id);
 CREATE INDEX IF NOT EXISTS idx_morning_sync_log_quote      ON morning_sync_log(quote_id);
 CREATE INDEX IF NOT EXISTS idx_whatsapp_send_log_quote     ON whatsapp_send_log(quote_id);
+CREATE INDEX IF NOT EXISTS idx_recipe_steps_recipe          ON production_recipe_steps(recipe_id);
+CREATE INDEX IF NOT EXISTS idx_worksheets_quote              ON production_worksheets(quote_id);
+CREATE INDEX IF NOT EXISTS idx_worksheet_steps_worksheet     ON production_worksheet_steps(worksheet_id);
 CREATE INDEX IF NOT EXISTS idx_password_resets_token       ON password_resets(token_hash);

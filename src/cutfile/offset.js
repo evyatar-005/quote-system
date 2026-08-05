@@ -84,6 +84,56 @@ function offsetContoursMm(contoursMm, deltaMm) {
   return fromClipperPaths(solution);
 }
 
+// Morphological close+open performed in millimetre space with the offset
+// engine itself — the operation that turns a literal trace into something a
+// blade can actually cut.
+//
+// A real production cut file (compare any professionally prepared one) is a
+// SIMPLIFIED outline: gaps narrower than the blade's practical radius are
+// bridged, hairline protrusions are dropped, corners come out rounded. Chasing
+// pixel-accurate fidelity instead produces a contour full of detail no cutter
+// can follow — and it is also what leaves compression noise and stippled
+// edges in the result at all.
+//
+// close (+r then -r) bridges gaps and pinholes up to 2r wide; open (-r then
+// +r) then removes spikes and slivers thinner than 2r. Net displacement is
+// ~zero, so the outline stays on the artwork rather than growing — the
+// separate bleed offset is applied afterwards.
+function simplifyContoursMm(contoursMm, radiusMm) {
+  if (!radiusMm || radiusMm <= 0) return contoursMm;
+  const closed = offsetContoursMm(offsetContoursMm(contoursMm, radiusMm), -radiusMm);
+  if (!closed.length) return contoursMm;
+  const opened = offsetContoursMm(offsetContoursMm(closed, -radiusMm), radiusMm);
+  return opened.length ? opened : closed;
+}
+
+// Keeps only outermost contours, discarding everything nested inside them.
+//
+// This is what a die-cut sticker actually is: the blade travels one closed
+// loop around each piece. Interior contours — the gap between a chicken's
+// legs, the counters of letters in a logo, a light patch in the middle of an
+// animal — are detail the cut must ignore, not extra cuts to perform. Any
+// professionally prepared cut file shows exactly one outline per piece.
+//
+// Nesting depth, not winding order, decides this: depth 0 is a piece, any
+// deeper contour lies inside one and is dropped.
+function keepOuterContours(contours) {
+  return contours.filter((c, i) => {
+    for (let j = 0; j < contours.length; j++) {
+      if (i !== j && pointInPolygon(c[0], contours[j])) return false;
+    }
+    return true;
+  });
+}
+
+// Drops contours whose enclosed area is below minAreaMm2. Physical units, so
+// the rule is "smaller than this is not a real part" regardless of source
+// resolution — the reliable way to discard leftover crumbs and noise blobs.
+function dropTinyContoursMm(contoursMm, minAreaMm2) {
+  if (!minAreaMm2 || minAreaMm2 <= 0) return contoursMm;
+  return contoursMm.filter((c) => Math.abs(signedArea(c)) >= minAreaMm2);
+}
+
 // Chaikin corner-cutting — softens the small facets left by offsetting a
 // polyline (potrace's own curves are already smooth; this mainly cleans up
 // the round-join approximation clipper introduces).
@@ -107,4 +157,28 @@ function smoothContours(contours, iterations = 1) {
   return contours.map((c) => chaikinSmooth(c, iterations));
 }
 
-module.exports = { offsetContoursMm, smoothContours, chaikinSmooth, orientContoursForClipper, signedArea, CLIPPER_SCALE };
+// Separates real holes from separate shapes. A sheet of stickers traces to
+// many top-level contours — calling those "holes" (as a naive
+// contours.length - 1 does) is actively misleading to the operator checking
+// the preview. Nesting depth is the honest test: depth 0/even = its own
+// shape, odd = a hole inside one.
+function classifyContours(contours) {
+  let shapes = 0;
+  let holes = 0;
+  contours.forEach((c, i) => {
+    let depth = 0;
+    contours.forEach((other, j) => {
+      if (i !== j && pointInPolygon(c[0], other)) depth++;
+    });
+    if (depth % 2 === 1) holes++;
+    else shapes++;
+  });
+  return { shapes, holes };
+}
+
+module.exports = {
+  offsetContoursMm, smoothContours, chaikinSmooth,
+  simplifyContoursMm, dropTinyContoursMm, keepOuterContours,
+  orientContoursForClipper, classifyContours, signedArea, pointInPolygon,
+  CLIPPER_SCALE,
+};

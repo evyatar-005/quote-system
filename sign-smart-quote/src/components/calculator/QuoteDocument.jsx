@@ -142,8 +142,9 @@ export default function QuoteDocument({ lineItems: initialLineItems, clientName,
                                   placeholder="מק״ט" dir="ltr" />
                               </td>
                               <td className="px-2 py-2 align-middle">
-                                <input type="text" value={item.description} onChange={(e) => updateItem(item._id, "description", e.target.value)}
-                                  className="w-full text-slate-700 bg-transparent border border-transparent hover:border-slate-200 focus:border-amber-400 focus:bg-white rounded px-1.5 py-1 focus:outline-none transition-colors text-sm"
+                                <textarea value={item.description} onChange={(e) => updateItem(item._id, "description", e.target.value)}
+                                  rows={(item.description || "").split("\n").length || 1}
+                                  className="w-full text-slate-700 bg-transparent border border-transparent hover:border-slate-200 focus:border-amber-400 focus:bg-white rounded px-1.5 py-1 focus:outline-none transition-colors text-sm resize-none leading-snug"
                                   placeholder="הקלד תיאור שירות או מוצר" />
                                 <input type="text" value={item.freeText} onChange={(e) => updateItem(item._id, "freeText", e.target.value)}
                                   placeholder="הערה נוספת..."

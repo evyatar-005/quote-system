@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, Plus, Trash2, KeyRound, Mail, Users as UsersIcon } from "lucide-react";
 import { toast } from "sonner";
 
-const ROLE_LABEL = { admin: "מנהל מכירות", agent: "סוכן מכירות" };
+const ROLE_LABEL = { admin: "מנהל מכירות", agent: "סוכן מכירות", operations: "תפעול (תפ\"י)" };
 
 export default function UsersManagementSection() {
   const { user: currentUser } = useAuth();
@@ -159,6 +159,7 @@ export default function UsersManagementSection() {
               <SelectContent>
                 <SelectItem value="agent">סוכן מכירות</SelectItem>
                 <SelectItem value="admin">מנהל מכירות</SelectItem>
+                <SelectItem value="operations">תפעול (תפ"י)</SelectItem>
               </SelectContent>
             </Select>
           </div>

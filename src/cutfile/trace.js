@@ -1,8 +1,11 @@
 // Wraps `potrace` — the automated equivalent of Illustrator's Image Trace +
-// Expand + Smooth Line steps. potrace already returns a single <path> whose
-// `d` combines the outer silhouette and any interior holes as separate
-// subpaths with fill-rule="evenodd" — exactly the multi-contour shape this
-// whole pipeline (and clipper's offset) needs; no separate hole-detection.
+// Expand + Smooth Line steps. potrace returns a single <path> whose `d`
+// combines every separate shape on the page AND any interior holes as
+// subpaths, with fill-rule="evenodd" — exactly the multi-contour form this
+// pipeline (and clipper's offset) needs, so there's no separate
+// hole-detection or shape-splitting step. Note that means one upload can
+// legitimately yield many contours: a sheet of stickers traces as one path
+// with one subpath per sticker.
 
 const potrace = require('potrace');
 const { flattenPathData } = require('./flatten');

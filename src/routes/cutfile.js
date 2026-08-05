@@ -14,20 +14,74 @@ const fs = require('fs');
 const crypto = require('crypto');
 
 const { buildMask } = require('../cutfile/mask');
+const { isPdf, pdfToPng } = require('../cutfile/rasterize');
 const { traceMask } = require('../cutfile/trace');
-const { offsetContoursMm, smoothContours } = require('../cutfile/offset');
+const {
+  offsetContoursMm, smoothContours, classifyContours,
+  simplifyContoursMm, dropTinyContoursMm, keepOuterContours,
+} = require('../cutfile/offset');
 const { exportSvg, contoursToPathD } = require('../cutfile/export-svg');
 const { exportDxf } = require('../cutfile/export-dxf');
 const { exportPdf } = require('../cutfile/export-pdf');
 
 const UPLOAD_ROOT = path.join(__dirname, '../../uploads/cutfiles');
-const ALLOWED_MIME = new Set(['image/png', 'image/jpeg', 'image/webp']);
+
+// Every raster format sharp can decode in this build — deliberately wider than
+// the original PNG/JPG/WEBP. A sign shop receives client artwork in whatever
+// the client happened to send: .jfif straight out of a browser download, .heic
+// from an iPhone, .avif, .gif, .tif. Rejecting those outright (with multer's
+// silent drop, which surfaces only as an unexplained "no image uploaded")
+// was the single biggest usability failure of the first version.
+const ALLOWED_MIME = new Set([
+  'image/png', 'image/jpeg', 'image/webp', 'image/gif',
+  'image/bmp', 'image/tiff', 'image/avif', 'image/heic', 'image/heif',
+  'image/svg+xml',
+  'application/pdf',
+]);
+// Some OS/browser combinations report an empty or generic mimetype
+// (application/octet-stream) for an otherwise perfectly valid image — e.g.
+// files that arrived via WhatsApp/clipboard/network share and were renamed
+// without the OS re-sniffing content type. Falling back to the extension
+// avoids rejecting a real image outright; sharp still fails loudly in
+// buildMask() if the bytes aren't actually decodable.
+const ALLOWED_EXT = new Set([
+  '.png', '.jpg', '.jpeg', '.jfif', '.webp', '.gif',
+  '.bmp', '.tif', '.tiff', '.avif', '.heic', '.heif', '.svg',
+  // PDF is accepted and rasterized on the way in (see cutfile/rasterize.js) —
+  // clients send artwork as PDF constantly.
+  '.pdf',
+]);
+// Design formats that still can't be read directly. Recognised only so the
+// error can say "export it to PNG/PDF" instead of a generic rejection.
+// (.ai is usually PDF-compatible internally, but not reliably, so it stays
+// here rather than being silently handed to the PDF renderer.)
+const VECTOR_EXT = new Set(['.ai', '.eps', '.psd', '.cdr', '.indd']);
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
+// Must match buildMask's own default — the cached mask is built with it, and
+// computeContours only re-derives the mask when a request differs from it.
+const DEFAULT_THRESHOLD = 240;
+// JPEG encodes in 8x8 blocks, so compression artifacts in a near-white area
+// form ~64px islands. The default sits comfortably above that.
+const DEFAULT_SPECKLE = 300;
 const JOB_TTL_MS = 24 * 60 * 60 * 1000; // stale upload/preview cleanup
 
 function num(v, def) {
   const n = Number(v);
   return Number.isFinite(n) ? n : def;
+}
+
+// busboy (under multer) hands over the multipart filename as a latin1-decoded
+// string, so a Hebrew name like "פרינטלה.pdf" arrives as mojibake ("×¤×¨×...")
+// and gets echoed straight back into the error message the user reads.
+// Re-interpret those bytes as UTF-8. Pure-ASCII names round-trip unchanged.
+function decodeFilename(name) {
+  if (!name) return '';
+  try {
+    const decoded = Buffer.from(name, 'latin1').toString('utf8');
+    return decoded.includes('�') ? name : decoded; // keep original if it wasn't UTF-8
+  } catch {
+    return name;
+  }
 }
 
 function mimeFromExt(filename) {
@@ -68,8 +122,32 @@ module.exports = function registerCutFile(app, db, deps) {
   const upload = multer({
     storage,
     limits: { fileSize: MAX_FILE_SIZE, files: 1 },
-    fileFilter: (req, file, cb) => cb(null, ALLOWED_MIME.has(file.mimetype)),
+    // multer drops a rejected file silently — req.file just comes back
+    // undefined, indistinguishable from "no file was sent at all". Record why
+    // on the request so the handler can return a specific reason instead of a
+    // generic message the user can't act on.
+    fileFilter: (req, file, cb) => {
+      const name = decodeFilename(file.originalname);
+      const ext = path.extname(name).toLowerCase();
+      const accepted = ALLOWED_MIME.has(file.mimetype) || ALLOWED_EXT.has(ext);
+      if (!accepted) {
+        req.cutfileRejected = { name, mimetype: file.mimetype, ext };
+        console.warn(`[cutfile] rejected "${name}" mimetype="${file.mimetype}" ext="${ext}"`);
+      }
+      cb(null, accepted);
+    },
   });
+
+  // Everything downstream (mask, trace, and the browser's <img> preview) needs
+  // raster bytes. A PDF is rendered to PNG once here, and that PNG — not the
+  // original file — becomes the job's working image: an <img> cannot display a
+  // PDF blob, and re-rendering on every slider change would be wasteful.
+  async function readRaster(filePath) {
+    const raw = fs.readFileSync(filePath);
+    if (!isPdf(raw)) return { buffer: raw, rasterMime: mimeFromExt(filePath), pageCount: null };
+    const { png, pageCount } = await pdfToPng(raw);
+    return { buffer: png, rasterMime: 'image/png', pageCount };
+  }
 
   async function loadJob(jobId) {
     if (!/^[a-f0-9]+$/.test(jobId || '')) return null; // reject path-traversal-shaped ids outright
@@ -80,8 +158,12 @@ module.exports = function registerCutFile(app, db, deps) {
     const files = fs.readdirSync(dir).filter((f) => f.startsWith('original'));
     if (!files.length) return null;
     const originalPath = path.join(dir, files[0]);
-    const { maskPng, width, height, hasAlpha } = await buildMask(fs.readFileSync(originalPath), {});
-    job = { originalPath, originalMime: mimeFromExt(files[0]), maskPng, maskWidth: width, maskHeight: height, hasAlpha, createdAt: Date.now() };
+    const { buffer, rasterMime } = await readRaster(originalPath);
+    const { maskPng, width, height, hasAlpha, whiteCut } = await buildMask(buffer, {});
+    job = {
+      originalPath, rasterBuffer: buffer, rasterMime,
+      maskPng, maskWidth: width, maskHeight: height, hasAlpha, whiteCut, createdAt: Date.now(),
+    };
     jobCache.set(jobId, job);
     return job;
   }
@@ -89,55 +171,119 @@ module.exports = function registerCutFile(app, db, deps) {
   // POST /api/cutfile/upload — multipart, field "image"
   app.post('/api/cutfile/upload', requireAuth, (req, res) => {
     upload.single('image')(req, res, async (err) => {
-      if (err) return res.status(400).json({ error: err.message });
-      if (!req.file) return res.status(400).json({ error: 'no image uploaded (PNG/JPG/WEBP only)' });
+      if (err) {
+        console.error(`[POST /api/cutfile/upload] multer error:`, err.message);
+        return res.status(400).json({ error: err.message });
+      }
+      if (!req.file) {
+        const rejected = req.cutfileRejected;
+        console.error(`[POST /api/cutfile/upload] no req.file — rejected=${JSON.stringify(rejected || null)} content-type="${req.headers['content-type']}"`);
+        if (rejected) {
+          if (VECTOR_EXT.has(rejected.ext)) {
+            return res.status(400).json({
+              error: `הקובץ "${rejected.name}" הוא קובץ וקטורי/עיצוב (${rejected.ext}) ולא תמונה. יש לייצא אותו קודם ל-PNG או JPG ואז להעלות.`,
+            });
+          }
+          return res.status(400).json({
+            error: `סוג הקובץ אינו נתמך: "${rejected.name}" (${rejected.mimetype || 'סוג לא ידוע'}). נתמכים: PNG, JPG, WEBP, GIF, BMP, TIFF, AVIF, HEIC.`,
+          });
+        }
+        return res.status(400).json({ error: 'לא התקבל קובץ. נסו לבחור את התמונה שוב.' });
+      }
+      const originalName = decodeFilename(req.file.originalname);
+      console.log(`[POST /api/cutfile/upload] received "${originalName}" mimetype="${req.file.mimetype}" size=${req.file.size}`);
       const jobId = req.cutfileJobId;
       try {
-        const { maskPng, width, height, hasAlpha } = await buildMask(fs.readFileSync(req.file.path), {});
+        const { buffer, rasterMime, pageCount } = await readRaster(req.file.path);
+        const { maskPng, width, height, hasAlpha, whiteCut } = await buildMask(buffer, {});
         jobCache.set(jobId, {
           originalPath: req.file.path,
-          originalMime: req.file.mimetype,
-          maskPng, maskWidth: width, maskHeight: height, hasAlpha,
+          rasterBuffer: buffer,
+          rasterMime,
+          maskPng, maskWidth: width, maskHeight: height, hasAlpha, whiteCut,
           createdAt: Date.now(),
         });
-        console.log(`[POST /api/cutfile/upload] job=${jobId} ${width}x${height} hasAlpha=${hasAlpha} by "${req.user.username}"`);
-        res.status(201).json({ jobId, width, height, hasAlpha });
+        console.log(`[POST /api/cutfile/upload] job=${jobId} ${width}x${height} hasAlpha=${hasAlpha}${pageCount ? ` pdfPages=${pageCount}` : ''} by "${req.user.username}"`);
+        res.status(201).json({
+          jobId, width, height, hasAlpha,
+          // Non-null only for PDFs. >1 tells the UI to warn that only the
+          // first page became a cut file, rather than silently dropping the rest.
+          pdfPageCount: pageCount,
+        });
       } catch (e) {
-        res.status(400).json({ error: `could not read image: ${e.message}` });
+        // Reached when the extension looked fine but the bytes aren't
+        // decodable (truncated download, cloud placeholder file that was never
+        // synced locally, renamed non-image, password-protected PDF).
+        console.error(`[POST /api/cutfile/upload] could not decode "${originalName}":`, e.message);
+        res.status(400).json({ error: `לא ניתן לקרוא את הקובץ "${originalName}". ייתכן שהוא פגום, מוגן בסיסמה, או שהוא קובץ מ-OneDrive/Drive שלא הורד למחשב בפועל.` });
       }
     });
   });
 
-  // GET /api/cutfile/:jobId/source — original image bytes, for the QA overlay
-  // preview. Auth-gated like everything here, so the client must fetch() with
-  // the bearer header and blob-URL the result — a plain <img src> can't send
-  // an Authorization header (same constraint as the existing attachment viewer).
+  // GET /api/cutfile/:jobId/source — the working raster image, for the QA
+  // overlay preview. Serves the rasterized bytes rather than the file on disk:
+  // for a PDF upload those differ, and an <img> can't render a PDF blob.
+  // Auth-gated like everything here, so the client must fetch() with the
+  // bearer header and blob-URL the result — a plain <img src> can't send an
+  // Authorization header (same constraint as the existing attachment viewer).
   app.get('/api/cutfile/:jobId/source', requireAuth, async (req, res) => {
     const job = await loadJob(req.params.jobId);
     if (!job) return res.status(404).json({ error: 'job not found' });
-    res.setHeader('Content-Type', job.originalMime);
-    fs.createReadStream(job.originalPath).pipe(res);
+    res.setHeader('Content-Type', job.rasterMime);
+    res.send(job.rasterBuffer);
   });
 
   async function computeContours(job, params) {
-    const threshold = num(params.threshold, 128);
+    // 'auto' (default) lets buildMask measure the background off the image
+    // border. A number is an explicit manual override.
+    const threshold = (params.threshold === undefined || params.threshold === 'auto' || params.threshold === '')
+      ? 'auto'
+      : num(params.threshold, 'auto');
     const turdSize = num(params.turdSize, 2);
+    // Speckle slider doubles as the mask-level despeckle size. potrace's own
+    // turdSize only drops tiny traced paths; killing the islands before the
+    // trace is what actually clears a JPEG-noise lattice.
+    const speckleArea = Math.max(0, Math.round(num(params.speckleArea, DEFAULT_SPECKLE)));
+    const cleanupRadius = Math.max(0, Math.min(12, Math.round(num(params.cleanupRadius, 2))));
+    const blurSigma = Math.max(0, Math.min(15, num(params.blurSigma, 0)));
+    // The two knobs that make the result look like a real production cut file
+    // rather than a literal trace: how far to simplify, and how small a piece
+    // is still a piece. Both in physical units.
+    const simplifyMm = Math.max(0, Math.min(20, num(params.simplifyMm, 1.5)));
+    const minAreaMm2 = Math.max(0, num(params.minAreaMm2, 25));
+    const outerOnly = !(params.outerOnly === false || params.outerOnly === 'false');
     const alphaMax = num(params.alphaMax, 1);
     const smoothing = Math.max(0, Math.round(num(params.smoothing, 1)));
     const offsetMm = num(params.offsetMm, 0);
     const widthCm = num(params.widthCm, 10);
     const holeMode = params.holeMode === 'detect' ? 'detect' : 'protect';
+    // Defaults to on: the common real-world upload is artwork whose subject
+    // sits on white, including opaque JPEG photos placed on a transparent
+    // page, where leaving white in place traces each photo's rectangle
+    // instead of the subject inside it.
+    const removeWhite = params.removeWhite === undefined
+      ? true
+      : !(params.removeWhite === false || params.removeWhite === 'false');
 
-    // threshold/holeMode change the mask itself — everything else (turdSize,
-    // alphaMax, smoothing, offsetMm) only affects the cheap trace/offset pass
-    // that runs on top of it, so avoid re-deriving the mask unless it must.
+    // threshold/holeMode/removeWhite change the mask itself — everything else
+    // (turdSize, alphaMax, smoothing, offsetMm) only affects the cheap
+    // trace/offset pass on top of it, so avoid re-deriving the mask unless
+    // one of those three differs from what the cached mask was built with.
     let maskPng = job.maskPng, maskWidth = job.maskWidth, maskHeight = job.maskHeight;
-    if (threshold !== 128 || holeMode !== 'protect') {
-      const rebuilt = await buildMask(fs.readFileSync(job.originalPath), { threshold, holeMode });
+    let whiteCut = job.whiteCut;
+    if (threshold !== 'auto' || holeMode !== 'protect' || removeWhite !== true
+        || speckleArea !== DEFAULT_SPECKLE || cleanupRadius !== 2 || blurSigma !== 0) {
+      const rebuilt = await buildMask(job.rasterBuffer, {
+        threshold, holeMode, removeWhite, speckleArea, cleanupRadius, blurSigma,
+      });
       maskPng = rebuilt.maskPng; maskWidth = rebuilt.width; maskHeight = rebuilt.height;
+      whiteCut = rebuilt.whiteCut;
     }
 
-    const { contours } = await traceMask(maskPng, { threshold, turdSize, alphaMax });
+    // The mask is already pure black/white, so potrace gets a fixed mid-grey
+    // cutoff — the user-facing `threshold` applies to background detection in
+    // buildMask, not here, and feeding it in twice would double-apply it.
+    const { contours } = await traceMask(maskPng, { threshold: 128, turdSize, alphaMax });
     if (!contours.length) return null;
 
     const mmPerPx = (widthCm * 10) / maskWidth;
@@ -145,10 +291,20 @@ module.exports = function registerCutFile(app, db, deps) {
     const widthMm = maskWidth * mmPerPx;
     const heightMm = maskHeight * mmPerPx;
 
-    const smoothed = smoothContours(mmContours, smoothing);
-    const cutPath = offsetContoursMm(smoothed, offsetMm);
+    // Order matters. Simplify FIRST, in millimetres, so gap-bridging and
+    // spike-removal are judged against the real blade radius rather than
+    // pixels; then drop anything too small to be a genuine part; then apply
+    // the bleed; and only then do the cosmetic point-level smoothing.
+    const simplified = simplifyContoursMm(mmContours, simplifyMm);
+    // Outer-only is the die-cut default: one closed loop per piece. Turning it
+    // off is the opt-in for artwork that genuinely needs interior cuts (a
+    // hanging hole, the counter of a letter cut right through).
+    const silhouetted = outerOnly ? keepOuterContours(simplified) : simplified;
+    const kept = dropTinyContoursMm(silhouetted, minAreaMm2);
+    if (!kept.length) return null;
+    const cutPath = smoothContours(offsetContoursMm(kept, offsetMm), smoothing);
 
-    return { tracePath: smoothed, cutPath, widthMm, heightMm };
+    return { tracePath: smoothContours(kept, smoothing), cutPath, widthMm, heightMm, whiteCut };
   }
 
   // POST /api/cutfile/:jobId/trace — recompute + return path data for the
@@ -164,7 +320,12 @@ module.exports = function registerCutFile(app, db, deps) {
         cutPathD: contoursToPathD(result.cutPath),
         widthMm: result.widthMm,
         heightMm: result.heightMm,
-        holes: Math.max(0, result.cutPath.length - 1),
+        // shapes vs holes, not a raw contour count — a sheet of stickers is
+        // many shapes, not one shape full of holes.
+        ...classifyContours(result.cutPath),
+        // What the automatic background measurement settled on, so the panel
+        // can show it instead of leaving the operator guessing.
+        whiteCut: result.whiteCut ?? null,
       });
     } catch (e) {
       console.error(`[POST /api/cutfile/${req.params.jobId}/trace]`, e);
@@ -198,7 +359,7 @@ module.exports = function registerCutFile(app, db, deps) {
       }
 
       try {
-        insertHistory.run(req.params.jobId, path.basename(job.originalPath), job.originalMime, num(req.query.widthCm, null), JSON.stringify(req.query), req.user.username);
+        insertHistory.run(req.params.jobId, path.basename(job.originalPath), job.rasterMime, num(req.query.widthCm, null), JSON.stringify(req.query), req.user.username);
       } catch (_) { /* history is best-effort, never blocks the download */ }
 
       res.setHeader('Content-Type', contentType);

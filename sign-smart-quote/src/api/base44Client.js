@@ -125,6 +125,12 @@ const ENTITY_NAMES = [
   'GlassPriceTier',
   'NumberPriceTier',
   'User',
+  // Production recipes (תפ"י) — phase 1, template only, no timing.
+  'Station',
+  'Operation',
+  'Recipe',
+  'RecipeStep',
+  'Worksheet',
 ];
 
 const entities = {};
@@ -308,4 +314,19 @@ const cutfile = {
   },
 };
 
-export const base44 = { entities, auth, adminUsers, notifications, quotes, cutfile };
+// Production/תפ"י board — price-free approved-order list, and the one
+// WorksheetStep mutation (toggle included / swap performer-station) that
+// entities.WorksheetStep can't cover: the server only exposes PUT for it
+// (a worksheet step is created only as part of Worksheet.create's resolved
+// proposal, never created/listed/deleted standalone), so makeEntity's
+// list/create/delete would just 404 if used here.
+const production = {
+  orders() {
+    return request('/api/production/orders');
+  },
+  updateStep(id, data) {
+    return request(`/api/entities/WorksheetStep/${id}`, { method: 'PUT', body: data });
+  },
+};
+
+export const base44 = { entities, auth, adminUsers, notifications, quotes, cutfile, production };
