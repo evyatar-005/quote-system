@@ -203,7 +203,7 @@ app.listen(PORT, () => {
   console.log('  POST   /api/auth/logout              PUT  /api/auth/change-password');
   console.log('  GET/POST/PUT/DELETE /api/entities/:name   (Quote, PriceTier, StickerPriceTier, PaintSurchargeTier,');
   console.log('                                              LightboxSizeTier, LightboxSellingPrice, KapaPriceTier,');
-  console.log('                                              RollupPriceTier, LokobondAreaTier, GlassPriceTier, PricingConfig, User)');
+  console.log('                                              RollupPriceTier, LokobondAreaTier, GlassPriceTier, NumberPriceTier, PricingConfig, User)');
   console.log('  GET    /api/admin/users              POST/PUT/DELETE /api/admin/users/:id');
   console.log('  GET    /api/notifications            PUT  /api/notifications/:id/read');
   console.log('  POST   /api/quotes/:id/decision      (manager approve/reject)');

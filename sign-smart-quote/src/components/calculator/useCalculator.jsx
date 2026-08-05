@@ -58,6 +58,14 @@ function lokobondMaterialCostPerSqm(config) {
   return parseFloat(config?.lokobond_cost_per_sqm) || 0;
 }
 
+// Laser-cut numbers (012) — same perspex finishes as the logo family, but
+// priced per single digit by height+thickness (signshop_number_tiers), not
+// per m² — see NumberPriceTable.jsx.
+const NUMBER_TYPES = [
+  'numbers_perspex_clear', 'numbers_perspex_black', 'numbers_perspex_white',
+  'numbers_perspex_milky', 'numbers_perspex_mirror', 'numbers_perspex_metallic',
+];
+
 // Foamex (006) product types → PricingConfig material-cost field (₪/mm/m², like PVC).
 const FOAMEX_MATERIAL_COST_KEY_BY_PRODUCT_TYPE = {
   foamex_white: "foamex_white_cost_per_mm",
@@ -88,7 +96,7 @@ function perspexBoardMaterialCostPerSqm(config, productType, thicknessMm) {
   return (parseFloat(config?.[key]) || 0) * T;
 }
 
-export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknessMm, quantity = 1, productType, region = 'מרכז', includeInstallation = 'yes', delivery = 'pickup', priceTiers = [], stickerPriceTiers = [], paintSurchargeTiers = [], kapaPriceTiers = [], kapaTierId = null, rollupPriceTiers = [], rollupTierId = null, lokobondAreaTiers = [], glassPriceTiers = [], glassTierId = null, cutType = 'straight', standardShelves = 0, customShelves = 0, elements, extras = [], enforceMinimumPrice = true, customPricePerSqm = null, orderAreaOverride = null }) {
+export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknessMm, quantity = 1, productType, region = 'מרכז', includeInstallation = 'yes', delivery = 'pickup', priceTiers = [], stickerPriceTiers = [], paintSurchargeTiers = [], kapaPriceTiers = [], kapaTierId = null, rollupPriceTiers = [], rollupTierId = null, lokobondAreaTiers = [], glassPriceTiers = [], glassTierId = null, numberPriceTiers = [], numberTierId = null, cutType = 'straight', standardShelves = 0, customShelves = 0, elements, extras = [], enforceMinimumPrice = true, customPricePerSqm = null, orderAreaOverride = null }) {
   const W = widthM != null && widthM !== '' ? parseFloat(widthM) : (parseFloat(widthCm) || 0) / 100;
   const H = heightM != null && heightM !== '' ? parseFloat(heightM) : (parseFloat(heightCm) || 0) / 100;
   // A dimension must be a real positive number — "0", a blank field, or a
@@ -103,6 +111,7 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
   const isFoamex = productType === 'foamex_white' || productType === 'foamex_black';
   const isPerspexBoard = Object.prototype.hasOwnProperty.call(PERSPEX_BOARD_MATERIAL_COST_KEY_BY_PRODUCT_TYPE, productType);
   const isGlass = productType === 'glass_extra_clear';
+  const isNumbers = NUMBER_TYPES.includes(productType);
   // PVC carpet (013) — sold by roll width, not by thickness; the form always
   // sends a fixed placeholder thicknessMm (just a price-tier lookup key, same
   // as lokobond's fixed "3"), same reasoning as the lokobond exclusion below.
@@ -111,8 +120,8 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
   // Kapa / roll-up / glass are fixed-price catalog items chosen directly (מחיר קבוע × כמות) —
   // no dimensions needed. Everything else still needs width/height (+ thickness for logo/foamex).
   // Lokobond has a fixed 3mm thickness — the form always sends it, but don't require it here.
-  if (!isKapa && !isRollup && !isGlass && (!hasWidth || !hasHeight)) return null;
-  if (!isSticker && !isKapa && !isRollup && !isLokobond && !isGlass && !isPvcCarpet && !thicknessMm) return null;
+  if (!isKapa && !isRollup && !isGlass && !isNumbers && (!hasWidth || !hasHeight)) return null;
+  if (!isSticker && !isKapa && !isRollup && !isLokobond && !isGlass && !isPvcCarpet && !isNumbers && !thicknessMm) return null;
 
   const Q = parseInt(quantity) || 1;
   const area = (W || 0) * (H || 0);
@@ -385,6 +394,57 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
         spacersCost: round(spacersCost * Q),
         inkCost: round(inkCost),
         printLaborCost: round(printLaborCost),
+        salesAgentCommissionCost: round(salesAgentCommissionCost),
+        marketingCommissionCost: round(marketingCommissionCost),
+      },
+    };
+  }
+
+  // --- NUMBERS PATH (laser-cut digits, fixed price per unit by height+thickness) ---
+  // No live material/labor cost model — like Kapa/Glass, the admin enters the
+  // final ₪-per-digit directly in NumberPriceTable.jsx. The picker only ever
+  // offers rows that already have a real price set (see CalculatorForm.jsx),
+  // so `tier` is guaranteed to exist here — this mirrors the same
+  // never-price-silently guarantee the other fixed-price families rely on.
+  if (isNumbers) {
+    const tier = numberTierId != null ? numberPriceTiers.find(t => String(t.id) === String(numberTierId)) : null;
+    if (!tier) return null;
+
+    const sellingPricePerUnit = Math.max(parseFloat(tier.price_per_unit) || 0, parseFloat(tier.min_price) || 0);
+    const sellingPriceAll = sellingPricePerUnit * Q;
+
+    const salesAgentCommissionCost = sellingPriceAll * (parseFloat(config.sales_agent_commission_percent) || 0) / 100;
+    const marketingCommissionCost = sellingPriceAll * (parseFloat(config.marketing_commission_percent) || 0) / 100;
+    const totalCostAll = salesAgentCommissionCost + marketingCommissionCost;
+
+    const profitPerUnit = (sellingPriceAll - totalCostAll) / Q;
+    const profitMarginPct = sellingPriceAll > 0 ? ((sellingPriceAll - totalCostAll) / sellingPriceAll) * 100 : 0;
+    const priceWithVat = sellingPriceAll * (1 + (parseFloat(config.vat_percent) || 18) / 100);
+
+    return {
+      area: 0,
+      totalArea: 0,
+      numberHeightCm: tier.height_cm,
+      numberThicknessMm: tier.thickness_mm,
+      rawMaterialCost: 0,
+      rawMaterialBeforeWaste: 0,
+      wasteAmount: 0,
+      laborCost: 0,
+      overheadCost: 0,
+      baseCost: 0,
+      totalCostPerUnit: round(totalCostAll / Q),
+      totalCostAll: round(totalCostAll),
+      sellingPricePerUnit: round(sellingPricePerUnit),
+      sellingPriceAll: round(sellingPriceAll),
+      profitPerUnit: round(profitPerUnit),
+      profitMarginPct: round(profitMarginPct),
+      priceWithVat: round(priceWithVat),
+      extrasBreakdown: [],
+      isSticker: false,
+      isKapa: false,
+      isRollup: false,
+      productFamily: 'numbers',
+      breakdown: {
         salesAgentCommissionCost: round(salesAgentCommissionCost),
         marketingCommissionCost: round(marketingCommissionCost),
       },

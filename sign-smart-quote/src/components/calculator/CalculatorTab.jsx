@@ -19,7 +19,7 @@ const DIMENSION_FAMILIES = ["logo", "sticker", "lokobond", "foamex", "perspexBoa
 
 let nextRowId = 1;
 
-export default function CalculatorTab({ config, priceTiers, stickerPriceTiers, paintSurchargeTiers = [], kapaPriceTiers = [], rollupPriceTiers = [], lokobondAreaTiers = [], glassPriceTiers = [], defaultForm, initialFormData, allowedProducts, onPriceChange, productCategory, onFormDataChange, enforceMinimumPrice = true, paymentKey = "cash", installmentCount = 2, orderAreaOverride = null }) {
+export default function CalculatorTab({ config, priceTiers, stickerPriceTiers, paintSurchargeTiers = [], kapaPriceTiers = [], rollupPriceTiers = [], lokobondAreaTiers = [], glassPriceTiers = [], numberPriceTiers = [], defaultForm, initialFormData, allowedProducts, onPriceChange, productCategory, onFormDataChange, enforceMinimumPrice = true, paymentKey = "cash", installmentCount = 2, orderAreaOverride = null }) {
   // initialFormData is the parent's already-known state for this item (e.g.
   // re-expanding a product the agent previously locked/collapsed at the order
   // level). Without seeding from it, this component would remount from a
@@ -65,12 +65,12 @@ export default function CalculatorTab({ config, priceTiers, stickerPriceTiers, p
       };
     }
     try {
-      return config ? calculate({ config, priceTiers, stickerPriceTiers, paintSurchargeTiers, kapaPriceTiers, rollupPriceTiers, lokobondAreaTiers, glassPriceTiers, ...form, enforceMinimumPrice: stickerHasMultipleRows ? false : enforceMinimumPrice, orderAreaOverride }) : null;
+      return config ? calculate({ config, priceTiers, stickerPriceTiers, paintSurchargeTiers, kapaPriceTiers, rollupPriceTiers, lokobondAreaTiers, glassPriceTiers, numberPriceTiers, ...form, enforceMinimumPrice: stickerHasMultipleRows ? false : enforceMinimumPrice, orderAreaOverride }) : null;
     } catch (e) {
       console.error(e);
       return null;
     }
-  }, [config, priceTiers, stickerPriceTiers, paintSurchargeTiers, kapaPriceTiers, rollupPriceTiers, lokobondAreaTiers, glassPriceTiers, form, enforceMinimumPrice, orderAreaOverride, stickerHasMultipleRows]);
+  }, [config, priceTiers, stickerPriceTiers, paintSurchargeTiers, kapaPriceTiers, rollupPriceTiers, lokobondAreaTiers, glassPriceTiers, numberPriceTiers, form, enforceMinimumPrice, orderAreaOverride, stickerHasMultipleRows]);
 
   // Calculate extra rows results (same memoization rationale as `result` above).
   // Each row carries its OWN quantity — a different size can need a different
@@ -79,14 +79,14 @@ export default function CalculatorTab({ config, priceTiers, stickerPriceTiers, p
   const extraRowResults = useMemo(() => extraRows.map(row => {
     try {
       return config ? calculate({
-        config, priceTiers, stickerPriceTiers, paintSurchargeTiers, kapaPriceTiers, rollupPriceTiers, lokobondAreaTiers, glassPriceTiers,
+        config, priceTiers, stickerPriceTiers, paintSurchargeTiers, kapaPriceTiers, rollupPriceTiers, lokobondAreaTiers, glassPriceTiers, numberPriceTiers,
         ...form,
         widthM: row.widthM, heightM: row.heightM, quantity: row.quantity || "1",
         elements: row.elements || "", lineLabel: row.lineLabel,
         enforceMinimumPrice: stickerHasMultipleRows ? false : enforceMinimumPrice, orderAreaOverride,
       }) : null;
     } catch { return null; }
-  }), [config, priceTiers, stickerPriceTiers, paintSurchargeTiers, kapaPriceTiers, rollupPriceTiers, lokobondAreaTiers, glassPriceTiers, form, extraRows, enforceMinimumPrice, orderAreaOverride, stickerHasMultipleRows]);
+  }), [config, priceTiers, stickerPriceTiers, paintSurchargeTiers, kapaPriceTiers, rollupPriceTiers, lokobondAreaTiers, glassPriceTiers, numberPriceTiers, form, extraRows, enforceMinimumPrice, orderAreaOverride, stickerHasMultipleRows]);
 
   // Combined-total minimum enforcement for stickers split across multiple מידה
   // rows: sum the raw (unfloored) sticker + installation prices across every
@@ -174,6 +174,7 @@ export default function CalculatorTab({ config, priceTiers, stickerPriceTiers, p
           kapaPriceTiers={kapaPriceTiers}
           rollupPriceTiers={rollupPriceTiers}
           glassPriceTiers={glassPriceTiers}
+          numberPriceTiers={numberPriceTiers}
           basePrice={adjustedResult ? (adjustedResult.sellingPricePerUnit - (adjustedResult.paintSellingSurcharge || 0)) : null}
           unitPriceExVat={adjustedResult ? adjustedResult.sellingPricePerUnit : null}
           priceRangeMin={result ? result.priceRangeMin : null}

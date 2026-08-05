@@ -18,12 +18,13 @@ const REGISTRY = {
   RollupPriceTier:      { table: 'signshop_rollup_tiers',    cols: ['product_type', 'sku', 'description', 'width_m', 'height_m', 'paper_cost_per_sqm', 'stand_cost', 'price_unit_1', 'price_unit_2', 'price_unit_3_plus'] },
   LokobondAreaTier:     { table: 'signshop_lokobond_area_tiers', cols: ['product_type', 'area_from', 'price_per_sqm', 'min_price', 'agent_min_price_per_sqm'] },
   GlassPriceTier:       { table: 'signshop_glass_tiers', cols: ['product_type', 'sku', 'description', 'width_cm', 'height_cm', 'cost_price', 'selling_price'] },
+  NumberPriceTier:      { table: 'signshop_number_tiers', cols: ['product_type', 'height_cm', 'thickness_mm', 'price_per_unit', 'min_price'] },
 };
 
 // Which entities require admin for writes.
 const ADMIN_WRITE = new Set([
   'PriceTier', 'StickerPriceTier', 'PaintSurchargeTier',
-  'LightboxSizeTier', 'LightboxSellingPrice', 'PricingConfig', 'KapaPriceTier', 'RollupPriceTier', 'LokobondAreaTier', 'GlassPriceTier',
+  'LightboxSizeTier', 'LightboxSellingPrice', 'PricingConfig', 'KapaPriceTier', 'RollupPriceTier', 'LokobondAreaTier', 'GlassPriceTier', 'NumberPriceTier',
 ]);
 
 const CONFIG_META = new Set(['id', 'config_name', 'created_date', 'created_by', 'updated_date']);

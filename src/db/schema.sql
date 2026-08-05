@@ -151,6 +151,18 @@ CREATE TABLE IF NOT EXISTS signshop_kapa_tiers (
   price         REAL NOT NULL DEFAULT 0
 );
 
+-- Laser-cut number/digit tiers: priced per single digit by height + perspex
+-- thickness (not per m² like the logo family) — admin adds new height/thickness
+-- rows freely from the UI, there's no fixed hardcoded list like other families.
+CREATE TABLE IF NOT EXISTS signshop_number_tiers (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  product_type   TEXT NOT NULL,   -- numbers_perspex_clear | _black | _white | _milky | _mirror | _metallic
+  height_cm      REAL NOT NULL DEFAULT 0,
+  thickness_mm   TEXT NOT NULL,
+  price_per_unit REAL NOT NULL DEFAULT 0,
+  min_price      REAL NOT NULL DEFAULT 0
+);
+
 -- Roll-up banner tiers: magnetic + regular, fixed size, quantity-discount pricing
 -- (unit 1 / unit 2 / unit 3-and-up each has its own price, no formula — set directly).
 CREATE TABLE IF NOT EXISTS signshop_rollup_tiers (

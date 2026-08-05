@@ -56,6 +56,12 @@ export const PRODUCT_CODES = {
   rollup_regular: "009-2",
   glass_extra_clear: "010",
   pvc_carpet: "013",
+  numbers_perspex_clear: "012-1",
+  numbers_perspex_black: "012-2",
+  numbers_perspex_white: "012-3",
+  numbers_perspex_milky: "012-4",
+  numbers_perspex_mirror: "012-5",
+  numbers_perspex_metallic: "012-6",
 };
 
 // Product image for a given productType, resolved via its מק"ט's parent code
@@ -93,6 +99,12 @@ export const PRODUCT_NAMES = {
   perspex_board_milky: "פרספקס חלבי",
   perspex_board_back_print: "פרספקס שקוף הדפסה אחורית",
   pvc_carpet: "שטיח פיויסי",
+  numbers_perspex_clear: "מספרים בחיתוך לייזר פרספקס שקוף",
+  numbers_perspex_black: "מספרים בחיתוך לייזר פרספקס שחור",
+  numbers_perspex_white: "מספרים בחיתוך לייזר פרספקס לבן",
+  numbers_perspex_milky: "מספרים בחיתוך לייזר פרספקס חלבי",
+  numbers_perspex_mirror: "מספרים בחיתוך לייזר פרספקס מראה",
+  numbers_perspex_metallic: "מספרים בחיתוך לייזר פרספקס מטאלי",
 };
 
 const STICKER_TYPES = ["vinyl_sticker", "texture_sticker"];
@@ -102,6 +114,12 @@ const LOKOBOND_TYPES = ["lokobond_plain", "lokobond_diecut"];
 const FOAMEX_TYPES = ["foamex_white", "foamex_black"];
 const GLASS_TYPES = ["glass_extra_clear"];
 const PVC_CARPET_TYPES = ["pvc_carpet"];
+// Laser-cut numbers (012) — same perspex finishes as the logo family, but
+// priced per single digit by height+thickness, not per m².
+const NUMBER_TYPES = [
+  "numbers_perspex_clear", "numbers_perspex_black", "numbers_perspex_white",
+  "numbers_perspex_milky", "numbers_perspex_mirror", "numbers_perspex_metallic",
+];
 const PERSPEX_BOARD_TYPES = ["perspex_board_clear_print", "perspex_board_black_matte", "perspex_board_black_glossy", "perspex_board_white", "perspex_board_milky", "perspex_board_back_print"];
 const REGIONS = ["מרכז", "דרום"];
 const THICKNESS_OPTIONS = ["3", "5", "10", "19"];
@@ -132,7 +150,6 @@ const STICKER_PRODUCTS = { vinyl_sticker: 'מדבקת ויניל', texture_stick
 // them yet). Once an admin sets real prices for one, move it into CATALOG.
 const COMING_SOON_PRODUCTS = [
   "שילוט פולט אור",
-  "שילוט חיתוך מספרים בלייזר",
   "מדבקות בחיתוך צורני",
   "ארגז מואר",
 ];
@@ -147,6 +164,7 @@ const CATALOG = [
   { parent: "008", label: "קאפה", subs: ["kapa"] },
   { parent: "009", label: "רול אפ", subs: ["rollup_magnetic", "rollup_regular"] },
   { parent: "010", label: "זכוכית אקסטרה קליר", subs: ["glass_extra_clear"] },
+  { parent: "012", label: "מספרים בחיתוך לייזר", subs: NUMBER_TYPES },
   { parent: "013", label: "שטיח פיויסי", subs: ["pvc_carpet"] },
 ];
 
@@ -188,6 +206,8 @@ const CATEGORY_DEFAULTS = {
   // thicknessMm below is just a price-tier lookup key (same reasoning as
   // lokobond's fixed "3"), never shown as a dropdown, never used in the cost math.
   pvcCarpet: { widthM: "", heightM: "", thicknessMm: "2", quantity: "1", extras: [] },
+  // No dimension inputs — the chosen tier already carries height + thickness.
+  numbers: { quantity: "1", extras: [] },
 };
 
 export function categoryOf(pt) {
@@ -199,6 +219,7 @@ export function categoryOf(pt) {
   if (FOAMEX_TYPES.includes(pt)) return "foamex";
   if (GLASS_TYPES.includes(pt)) return "glass";
   if (PVC_CARPET_TYPES.includes(pt)) return "pvcCarpet";
+  if (NUMBER_TYPES.includes(pt)) return "numbers";
   return "logo";
 }
 
@@ -243,7 +264,7 @@ function availableThicknesses(category, productType, priceTiers) {
   return priced.length ? priced : all;
 }
 
-export default function CalculatorForm({ values, onChange, allowedProducts, extrasInfo, basePrice, unitPriceExVat, priceRangeMin, priceRangeMax, paymentKey = 'full', installmentCount = 2, config, priceTiers = [], kapaPriceTiers = [], rollupPriceTiers = [], glassPriceTiers = [], priceMissing = false, priceErrorMessage = null }) {
+export default function CalculatorForm({ values, onChange, allowedProducts, extrasInfo, basePrice, unitPriceExVat, priceRangeMin, priceRangeMax, paymentKey = 'full', installmentCount = 2, config, priceTiers = [], kapaPriceTiers = [], rollupPriceTiers = [], glassPriceTiers = [], numberPriceTiers = [], priceMissing = false, priceErrorMessage = null }) {
   // Restrict the catalog to the products this instance is allowed to offer —
   // e.g. the קאפה test section should only ever show the קאפה category.
   const filteredCatalog = allowedProducts && allowedProducts.length
@@ -349,10 +370,18 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
     setPickerOpen(false);
     setPickerSearch("");
   };
-  const clearProduct = () => onChange({ productType: "", kapaTierId: null, rollupTierId: null, glassTierId: null, lineLabel: values.lineLabel || "", extras: [] });
+  // Numbers sub-SKU = a fixed-price row from the price list (מחיר קבוע לספרה × כמות ספרות).
+  const selectNumberTier = (tier) => {
+    onChange({ ...CATEGORY_DEFAULTS.numbers, productType: tier.product_type, numberTierId: tier.id, lineLabel: values.lineLabel || "" });
+    setExpandedParent(null);
+    setPickerOpen(false);
+    setPickerSearch("");
+  };
+  const clearProduct = () => onChange({ productType: "", kapaTierId: null, rollupTierId: null, glassTierId: null, numberTierId: null, lineLabel: values.lineLabel || "", extras: [] });
   const kapaTier = values.kapaTierId != null ? kapaPriceTiers.find(t => String(t.id) === String(values.kapaTierId)) : null;
   const rollupTier = values.rollupTierId != null ? rollupPriceTiers.find(t => String(t.id) === String(values.rollupTierId)) : null;
   const glassTier = values.glassTierId != null ? glassPriceTiers.find(t => String(t.id) === String(values.glassTierId)) : null;
+  const numberTier = values.numberTierId != null ? numberPriceTiers.find(t => String(t.id) === String(values.numberTierId)) : null;
 
   // Calculate price multiplier based on payment key
   const installmentSurchargePct = (parseFloat(config?.payment_installment_surcharge_percent) || 2.5) / 100;
@@ -401,7 +430,8 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
   const isKapa = KAPA_TYPES.includes(values.productType);
   const isRollup = ROLLUP_TYPES.includes(values.productType);
   const isGlass = GLASS_TYPES.includes(values.productType);
-  const isFixedPrice = isKapa || isRollup || isGlass;
+  const isNumbers = NUMBER_TYPES.includes(values.productType);
+  const isFixedPrice = isKapa || isRollup || isGlass || isNumbers;
   const category = categoryOf(values.productType);
   const isLogo = category === "logo";
   const isSticker = STICKER_TYPES.includes(values.productType);
@@ -452,6 +482,10 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
     const kapaSubs = cat.parent === "008" ? kapaPriceTiers : null;
     const rollupSubs = cat.parent === "009" ? rollupPriceTiers : null;
     const glassSubs = cat.parent === "010" ? glassPriceTiers : null;
+    // Only rows an admin has actually priced (> 0) are ever selectable here — a
+    // freshly-added height/thickness row defaults to ₪0 in NumberPriceTable.jsx
+    // until someone fills it in, and must never be quotable at ₪0 in the meantime.
+    const numberSubs = cat.parent === "012" ? numberPriceTiers.filter((t) => Number(t.price_per_unit) > 0) : null;
     if (kapaSubs) {
       return kapaSubs.map((t) => ({ key: `kapa-${t.id}`, image: CATEGORY_IMAGES[cat.parent], code: cat.parent, title: t.description, sub: cat.label, price: paymentAdjustedPrice(t.price), onClick: () => selectKapa(t) }));
     }
@@ -460,6 +494,9 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
     }
     if (glassSubs) {
       return glassSubs.map((t) => ({ key: `glass-${t.id}`, image: CATEGORY_IMAGES[cat.parent], code: cat.parent, title: t.description, sub: cat.label, price: paymentAdjustedPrice(t.selling_price), onClick: () => selectGlass(t) }));
+    }
+    if (numberSubs) {
+      return numberSubs.map((t) => ({ key: `number-${t.id}`, image: CATEGORY_IMAGES[cat.parent], code: PRODUCT_CODES[t.product_type] || cat.parent, title: `${PRODUCT_NAMES[t.product_type]} — ${t.height_cm} ס"מ / ${t.thickness_mm} מ"מ`, sub: cat.label, price: paymentAdjustedPrice(t.price_per_unit), onClick: () => selectNumberTier(t) }));
     }
     return cat.subs.map((pt) => ({ key: pt, image: CATEGORY_IMAGES[cat.parent], code: PRODUCT_CODES[pt], title: PRODUCT_NAMES[pt], sub: cat.label, price: null, onClick: () => selectSub(pt) }));
   }).filter((entry) => `${entry.title} ${entry.code} ${entry.sub}`.toLowerCase().includes(pickerSearchQuery)) : [];
@@ -544,6 +581,7 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
               const kapaSubs = cat.parent === "008" ? kapaPriceTiers : null;
               const rollupSubs = cat.parent === "009" ? rollupPriceTiers : null;
               const glassSubs = cat.parent === "010" ? glassPriceTiers : null;
+              const numberSubs = cat.parent === "012" ? numberPriceTiers.filter((t) => Number(t.price_per_unit) > 0) : null;
               const [, accentBg] = (CATEGORY_ACCENT[cat.parent] || "border-slate-300 bg-black").split(" ");
               return (
                 <div>
@@ -611,6 +649,21 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
                               <span className="text-lg font-semibold text-slate-700 truncate">{t.description}</span>
                             </div>
                             <span className="text-lg font-bold text-amber-600 shrink-0">₪{paymentAdjustedPrice(t.selling_price)}</span>
+                          </button>
+                        ))
+                      : numberSubs
+                      ? numberSubs.map((t) => (
+                          <button
+                            type="button"
+                            key={t.id}
+                            onClick={() => selectNumberTier(t)}
+                            className="w-full flex items-center justify-between gap-3 px-4 py-1.5 text-right hover:bg-amber-50 transition-colors"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <span className="text-base font-mono text-slate-400 w-14 shrink-0">{PRODUCT_CODES[t.product_type] || cat.parent}</span>
+                              <span className="text-lg font-semibold text-slate-700 truncate">{PRODUCT_NAMES[t.product_type]} — {t.height_cm} ס"מ / {t.thickness_mm} מ"מ</span>
+                            </div>
+                            <span className="text-lg font-bold text-amber-600 shrink-0">₪{paymentAdjustedPrice(t.price_per_unit)}</span>
                           </button>
                         ))
                       : cat.subs.map((pt) => (
@@ -779,6 +832,7 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
   const skuLabel = isKapa && kapaTier ? kapaTier.description
     : isRollup && rollupTier ? rollupTier.description
     : isGlass && glassTier ? glassTier.description
+    : isNumbers && numberTier ? `${PRODUCT_NAMES[numberTier.product_type]} — ${numberTier.height_cm} ס"מ / ${numberTier.thickness_mm} מ"מ`
     : PRODUCT_NAMES[values.productType];
   const skuCode = isKapa ? "008"
     : isRollup ? PRODUCT_CODES[values.productType]

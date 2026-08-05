@@ -123,6 +123,7 @@ const ENTITY_NAMES = [
   'RollupPriceTier',
   'LokobondAreaTier',
   'GlassPriceTier',
+  'NumberPriceTier',
   'User',
 ];
 
