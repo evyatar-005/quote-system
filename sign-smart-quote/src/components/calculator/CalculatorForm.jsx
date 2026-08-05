@@ -12,6 +12,9 @@ import foamex006 from "@/assets/products/foamex-006.png";
 import rollup007 from "@/assets/products/rollup-007.png";
 import rollupMagnetic007 from "@/assets/products/rollup-magnetic-007.png";
 import glass009 from "@/assets/products/glass-009.png";
+import perspexBoard003 from "@/assets/products/perspex-board-003.png";
+import numbers012 from "@/assets/products/numbers-012.png";
+import pvcCarpet013 from "@/assets/products/pvc-carpet-013.png";
 
 // Same category thumbnails used in the admin price tables — reused here so the
 // מק"ט picker (shared by both admin test panel and agent quote builder) shows
@@ -19,7 +22,7 @@ import glass009 from "@/assets/products/glass-009.png";
 export const CATEGORY_IMAGES = {
   "001": lokobond005,
   "002": foamex006,
-  // No dedicated product photo yet for שילוט פרספקס (003).
+  "003": perspexBoard003,
   "005": logo001,
   "006": sticker002,
   "008": kapa004,
@@ -27,6 +30,8 @@ export const CATEGORY_IMAGES = {
   "009-1": rollupMagnetic007,
   "009-2": rollup007,
   "010": glass009,
+  "012": numbers012,
+  "013": pvcCarpet013,
 };
 
 export const PRODUCT_CODES = {
@@ -154,8 +159,11 @@ const COMING_SOON_PRODUCTS = [
   "ארגז מואר",
 ];
 
-// Morning-style cascade: parent (אב מק"ט) → sub-products (תת מק"ט).
-const CATALOG = [
+// Morning-style cascade: parent (אב מק"ט) → sub-products (תת מק"ט). Exported
+// so other screens that need the same product-family grouping (e.g. the
+// production-recipe admin) reuse this instead of re-deriving it from
+// PRODUCT_CODES/PRODUCT_NAMES and risking the two lists drifting apart.
+export const CATALOG = [
   { parent: "001", label: "שילוט לוקובונד", subs: ["lokobond_plain", "lokobond_diecut"] },
   { parent: "002", label: "שילוט פיויסי", subs: ["foamex_white", "foamex_black"] },
   { parent: "003", label: "שילוט פרספקס", subs: PERSPEX_BOARD_TYPES },

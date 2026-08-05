@@ -22,6 +22,9 @@ import lokobond005 from "@/assets/products/lokobond-005.png";
 import foamex006 from "@/assets/products/foamex-006.png";
 import rollup007 from "@/assets/products/rollup-007.png";
 import glass009 from "@/assets/products/glass-009.png";
+import perspexBoard003 from "@/assets/products/perspex-board-003.png";
+import numbers012 from "@/assets/products/numbers-012.png";
+import pvcCarpet013 from "@/assets/products/pvc-carpet-013.png";
 import { sanitizeDecimal } from "@/lib/utils";
 import { calculate } from "../calculator/useCalculator";
 
@@ -55,7 +58,7 @@ const THICKNESSES = ["3", "5", "10", "19"];
 const ITEMS = [
   { key: "001", sku: "001", label: "שילוט לוקובונד", badgeClass: "bg-cyan-100 text-cyan-700", ringClass: "border-cyan-400/60 bg-cyan-50 shadow-cyan-100", image: lokobond005 },
   { key: "002", sku: "002", label: "שילוט פיויסי", badgeClass: "bg-rose-100 text-rose-700", ringClass: "border-rose-400/60 bg-rose-50 shadow-rose-100", image: foamex006 },
-  { key: "003", sku: "003", label: "שילוט פרספקס", badgeClass: "bg-teal-100 text-teal-700", ringClass: "border-teal-400/60 bg-teal-50 shadow-teal-100", image: null },
+  { key: "003", sku: "003", label: "שילוט פרספקס", badgeClass: "bg-teal-100 text-teal-700", ringClass: "border-teal-400/60 bg-teal-50 shadow-teal-100", image: perspexBoard003 },
   { key: "004", sku: "004", label: "שילוט פולט אור", badgeClass: "bg-yellow-100 text-yellow-700", ringClass: "border-yellow-400/60 bg-yellow-50 shadow-yellow-100", image: null },
   { key: "005", sku: "005", label: "לוגו בחיתוך צורני", badgeClass: "bg-blue-100 text-blue-700", ringClass: "border-blue-400/60 bg-blue-50 shadow-blue-100", image: logo001 },
   { key: "006", sku: "006", label: "מדבקות קיר", badgeClass: "bg-emerald-100 text-emerald-700", ringClass: "border-emerald-400/60 bg-emerald-50 shadow-emerald-100", image: sticker002 },
@@ -64,8 +67,8 @@ const ITEMS = [
   { key: "009", sku: "009", label: "רול אפ", badgeClass: "bg-indigo-100 text-indigo-700", ringClass: "border-indigo-400/60 bg-indigo-50 shadow-indigo-100", image: rollup007 },
   { key: "010", sku: "010", label: "זכוכית אקסטרה קליר", badgeClass: "bg-sky-100 text-sky-700", ringClass: "border-sky-400/60 bg-sky-50 shadow-sky-100", image: glass009 },
   { key: "011", sku: "011", label: "ארגז מואר", badgeClass: "bg-amber-100 text-amber-700", ringClass: "border-amber-400/60 bg-amber-50 shadow-amber-100", image: lightbox003 },
-  { key: "012", sku: "012", label: "חיתוך מספרים בלייזר", badgeClass: "bg-orange-100 text-orange-700", ringClass: "border-orange-400/60 bg-orange-50 shadow-orange-100", image: null },
-  { key: "013", sku: "013", label: "שטיח פיויסי", badgeClass: "bg-fuchsia-100 text-fuchsia-700", ringClass: "border-fuchsia-400/60 bg-fuchsia-50 shadow-fuchsia-100", image: null },
+  { key: "012", sku: "012", label: "חיתוך מספרים בלייזר", badgeClass: "bg-orange-100 text-orange-700", ringClass: "border-orange-400/60 bg-orange-50 shadow-orange-100", image: numbers012 },
+  { key: "013", sku: "013", label: "שטיח פיויסי", badgeClass: "bg-fuchsia-100 text-fuchsia-700", ringClass: "border-fuchsia-400/60 bg-fuchsia-50 shadow-fuchsia-100", image: pvcCarpet013 },
 ];
 
 // מוצרים חדשים שטרם הוגדרו — מק"ט שמור, מסכי ניהול קיימים אבל ריקים.
