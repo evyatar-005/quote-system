@@ -576,7 +576,7 @@ export default function QuoteDetailsModal({ quote, onClose, onSaved }) {
                     {items.length > 1 ? `מוצר ${idx + 1}` : "מוצר"}
                   </div>
                   <div className="text-[11px] text-zinc-500 truncate mt-0.5">
-                    {label}{dimsLabel(it) ? ` · ${dimsLabel(it)}` : ""}
+                    {label}{it.quantity > 1 ? ` · כמות ${it.quantity}` : ""}{dimsLabel(it) ? ` · ${dimsLabel(it)}` : ""}
                   </div>
                   {pricingMode === "discount" && disc?.value ? (
                     <div className="text-[11px] text-emerald-400 mt-1">הנחה: {disc.type === "percent" ? `${disc.value}%` : fmt(disc.value)}</div>
@@ -596,6 +596,7 @@ export default function QuoteDetailsModal({ quote, onClose, onSaved }) {
                   {items.length > 1 ? `מוצר ${selectedIndex + 1}` : "מוצר"}
                   {selectedItem.productType ? ` — ${PRODUCT_NAMES[selectedItem.productType] || selectedItem.productType}` : ""}
                   {selectedItem.thicknessMm && <span className="text-zinc-400 font-normal"> · עובי {selectedItem.thicknessMm} מ״מ</span>}
+                  {selectedItem.quantity > 1 && <span className="text-zinc-400 font-normal"> · כמות {selectedItem.quantity}</span>}
                   {dimsLabel(selectedItem) && <span className="text-zinc-400 font-normal"> · מידות {dimsLabel(selectedItem)}</span>}
                   {selectedItem.result?.totalArea != null && (
                     <span className="text-zinc-400 font-normal"> · סה״כ {selectedItem.result.totalArea.toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} מ״ר</span>
