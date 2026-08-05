@@ -35,6 +35,14 @@ export default [
       "unused-imports": pluginUnusedImports,
     },
     rules: {
+      // This object replaces pluginJs.configs.recommended.rules wholesale, so
+      // anything from recommended that we rely on has to be repeated here.
+      // no-undef is the one that matters: a reference to an identifier that was
+      // never declared is a guaranteed runtime ReferenceError, and without this
+      // rule nothing in the pipeline catches it - that is exactly how the
+      // cut-list page shipped returning an undeclared `seed` and crashed on
+      // first render in production.
+      "no-undef": "error",
       "no-unused-vars": "off",
       "react/jsx-uses-vars": "error",
       "react/jsx-uses-react": "error",
