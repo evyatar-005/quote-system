@@ -224,6 +224,21 @@ CREATE TABLE IF NOT EXISTS signshop_quote_attachments (
   created_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Automated cut-file generator (Image Trace + Offset Path automation) — one
+-- row per exported download, kept for history/audit only. The actual traced
+-- geometry is never persisted; job_id points at a temp folder under
+-- uploads/cutfiles/ that's cleaned up ~24h after upload (see routes/cutfile.js).
+CREATE TABLE IF NOT EXISTS cut_files (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  job_id        TEXT NOT NULL,
+  original_name TEXT,
+  mime_type     TEXT,
+  width_cm      REAL,
+  params_json   TEXT,   -- trace/offset parameters used for this export, for support/debugging
+  created_by    TEXT,
+  created_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 -- In-app notifications for sales agents — e.g. "your quote was approved by the
 -- manager and is ready to issue" or "your quote was rejected". recipient_username
 -- ties back to users.username (not email — several accounts have no email set).

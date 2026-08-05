@@ -13,6 +13,7 @@ const registerGreenApi = require('./routes/greenapi');
 const registerMonday   = require('./routes/monday');
 const registerAttachments = require('./routes/attachments');
 const registerSmtp     = require('./routes/smtp');
+const registerCutFile  = require('./routes/cutfile');
 
 const PORT    = process.env.PORT || 3000;
 const DB_PATH = path.join(__dirname, '../database.sqlite');
@@ -133,6 +134,7 @@ registerGreenApi(app, db, { requireAuth, requireAdmin });
 registerMonday(app, db, { requireAuth, requireAdmin });
 registerAttachments(app, db, { requireAuth });
 registerSmtp(app, db, { requireAuth, requireAdmin });
+registerCutFile(app, db, { requireAuth });
 
 // ─── Version info — read by deploy/UPDATE.ps1's post-deploy smoke check and
 // by anyone wanting to confirm which release is live without RDP access ─────
@@ -216,6 +218,7 @@ app.listen(PORT, () => {
   console.log('  GET/PUT /api/monday/config            GET /api/monday/boards|boards/:id/groups');
   console.log('  POST   /api/auth/forgot-password      POST /api/auth/reset-password');
   console.log('  GET/PUT /api/smtp/config               POST /api/smtp/test');
+  console.log('  POST   /api/cutfile/upload             POST /api/cutfile/:jobId/trace  GET /api/cutfile/:jobId/source|export  (cut-file generator)');
 });
 
 // ─── Removed (2026-07-07 pre-launch cleanup) ─────────────────────────────────

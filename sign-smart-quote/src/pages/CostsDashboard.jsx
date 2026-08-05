@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { Link } from "react-router-dom";
-import { Loader2, Settings2, BarChart3, Tag, Lightbulb, Sparkles, Layers, Rows3, LogOut, ChevronDown, Scissors } from "lucide-react";
+import { Loader2, Settings2, BarChart3, Tag, Lightbulb, Sparkles, Layers, Rows3, LogOut, ChevronDown, Scissors, PenTool } from "lucide-react";
 import MultiProductCalculator from "../components/calculator/MultiProductCalculator.jsx";
 import NotificationBell from "@/components/NotificationBell";
 import printellaLogo from "@/assets/printella-logo.png";
@@ -200,6 +200,12 @@ export default function CostsDashboard() {
                 className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-amber-600 transition-colors px-3 py-1.5 rounded-lg border border-black hover:border-amber-300"
               >
                 <Scissors className="w-3.5 h-3.5" /> ניצולת לוחות
+              </Link>
+              <Link
+                to="/cutfile"
+                className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-amber-600 transition-colors px-3 py-1.5 rounded-lg border border-black hover:border-amber-300"
+              >
+                <PenTool className="w-3.5 h-3.5" /> קו חיתוך אוטומטי
               </Link>
               <DropdownMenu>
               <DropdownMenuTrigger asChild>

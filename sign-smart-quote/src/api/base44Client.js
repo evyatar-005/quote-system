@@ -258,4 +258,54 @@ const quotes = {
   },
 };
 
-export const base44 = { entities, auth, adminUsers, notifications, quotes };
+// Automated cut-file generator — upload once, then cheaply re-trace as the
+// UI's sliders move, and download the result. Every route here needs the
+// Bearer token, which rules out a plain <img src>/<a href> for the image
+// preview and file downloads (same constraint as quotes.fetchAttachmentBlob
+// above) — both go through fetch() + blob instead.
+const cutfile = {
+  async upload(file) {
+    const formData = new FormData();
+    formData.append('image', file);
+    const token = getToken();
+    const res = await fetch('/api/cutfile/upload', {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+    if (!res.ok) {
+      let message = `Upload failed with status ${res.status}`;
+      try { const data = await res.json(); if (data?.error) message = data.error; } catch {}
+      const err = new Error(message);
+      err.status = res.status;
+      throw err;
+    }
+    return res.json();
+  },
+  trace(jobId, params) {
+    return request(`/api/cutfile/${jobId}/trace`, { method: 'POST', body: params });
+  },
+  async fetchSourceBlob(jobId) {
+    const token = getToken();
+    const res = await fetch(`/api/cutfile/${jobId}/source`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new Error(`Request failed with status ${res.status}`);
+    return res.blob();
+  },
+  async downloadExport(jobId, format, params) {
+    const token = getToken();
+    const qs = new URLSearchParams({ ...params, format }).toString();
+    const res = await fetch(`/api/cutfile/${jobId}/export?${qs}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) {
+      let message = `Export failed with status ${res.status}`;
+      try { const data = await res.json(); if (data?.error) message = data.error; } catch {}
+      throw new Error(message);
+    }
+    return res.blob();
+  },
+};
+
+export const base44 = { entities, auth, adminUsers, notifications, quotes, cutfile };

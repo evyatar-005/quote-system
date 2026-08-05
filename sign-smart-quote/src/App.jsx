@@ -10,6 +10,7 @@ import PageNotFound from './lib/PageNotFound';
 import AdminDashboard from './pages/AdminDashboard';
 import CostsDashboard from './pages/CostsDashboard.jsx';
 import CutListOptimizer from './pages/CutListOptimizer.jsx';
+import CutFileGenerator from './pages/CutFileGenerator.jsx';
 import QuotesHistory from './pages/QuotesHistory.jsx';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import Login from './pages/Login.jsx';
@@ -64,6 +65,7 @@ const AuthenticatedApp = () => {
         <Route path="/" element={<AdminOnly><AdminDashboard /></AdminOnly>} />
         <Route path="/costs" element={<CostsDashboard />} />
         <Route path="/cutting" element={<CutListOptimizer />} />
+        <Route path="/cutfile" element={<CutFileGenerator />} />
         <Route path="/quotes" element={<AdminOnly><QuotesHistory /></AdminOnly>} />
         <Route path="*" element={<PageNotFound />} />
       </Routes>
