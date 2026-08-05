@@ -1,5 +1,6 @@
-import { EPS, orientations } from './geometry.js';
+import { EPS } from './geometry.js';
 import { finalizeSheet } from './guillotine.js';
+import { bestFit, rankCandidates } from './fit.js';
 
 /**
  * Split `free` against a used rect (already kerf-inflated). Pushes up to 4
@@ -69,36 +70,6 @@ export function pruneFreeList(free, minDim) {
   }
 }
 
-function fitScoreBSSF(freeW, freeH, w, h) {
-  return Math.min(freeW - w, freeH - h);
-}
-
-function bestFit(free, part) {
-  let best = null;
-  let bestKey = null;
-  for (let idx = 0; idx < free.length; idx++) {
-    const f = free[idx];
-    for (const o of orientations(part, true)) {
-      if (o.w > f.w + EPS || o.h > f.h + EPS) continue;
-      const score = fitScoreBSSF(f.w, f.h, o.w, o.h);
-      const key = [score, f.y, f.x, o.rotated ? 1 : 0];
-      if (!best || lexLess(key, bestKey)) {
-        bestKey = key;
-        best = { idx, w: o.w, h: o.h, rotated: o.rotated };
-      }
-    }
-  }
-  return best;
-}
-
-function lexLess(a, b) {
-  for (let i = 0; i < a.length; i++) {
-    if (a[i] < b[i] - EPS) return true;
-    if (a[i] > b[i] + EPS) return false;
-  }
-  return false;
-}
-
 /**
  * Pack one sheet using MaxRects/BSSF (free nesting - no guillotine constraint).
  * Kerf is applied by inflating each placed rect by `kerf` on +x/+y before
@@ -116,35 +87,45 @@ export function packSheetMaxRects(stock, demand, cfg, kerf) {
   const placements = [];
   const counts = new Array(demand.length).fill(0);
 
+  const remaining = demand.map((d) => d.remaining);
   const minRemainingDim = () => {
     let m = Infinity;
-    for (const d of demand) {
-      if (d.remaining > 0) m = Math.min(m, d.length, d.width);
+    for (let i = 0; i < demand.length; i++) {
+      if (remaining[i] > 0) m = Math.min(m, demand[i].length, demand[i].width);
     }
     return Number.isFinite(m) ? m : 0;
   };
 
-  for (const ti of cfg.order) {
+  const place = (ti, idx, w, h, rotated) => {
     const entry = demand[ti];
-    let left = entry.remaining;
-    while (left > 0) {
-      const best = bestFit(free, entry);
+    const f = free[idx];
+    const pos = { x: f.x, y: f.y };
+    placements.push({ partId: entry.id, typeIndex: ti, name: entry.name, x: pos.x, y: pos.y, w, h, rotated });
+
+    const inflated = { x: pos.x, y: pos.y, w: w + kerf, h: h + kerf };
+    const next = [];
+    for (const fr of free) {
+      if (!splitFreeNode(fr, inflated, next)) next.push(fr);
+    }
+    free = next;
+    counts[ti]++;
+    remaining[ti]--;
+    pruneFreeList(free, minRemainingDim());
+  };
+
+  if (cfg.placementMode === 'MIXED') {
+    for (;;) {
+      const best = rankCandidates(free, demand, remaining, cfg.order, cfg.fitRule, cfg, kerf, 'nest');
       if (!best) break;
-      const { idx, w, h, rotated } = best;
-      const f = free[idx];
-      const pos = { x: f.x, y: f.y };
-      placements.push({ partId: entry.id, typeIndex: ti, name: entry.name, x: pos.x, y: pos.y, w, h, rotated });
-
-      const inflated = { x: pos.x, y: pos.y, w: w + kerf, h: h + kerf };
-      const next = [];
-      for (const fr of free) {
-        if (!splitFreeNode(fr, inflated, next)) next.push(fr);
+      place(best.ti, best.idx, best.w, best.h, best.rotated);
+    }
+  } else {
+    for (const ti of cfg.order) {
+      while (remaining[ti] > 0) {
+        const best = bestFit(free, demand[ti], cfg.fitRule);
+        if (!best) break;
+        place(ti, best.idx, best.w, best.h, best.rotated);
       }
-      free = next;
-      pruneFreeList(free, minRemainingDim());
-
-      counts[ti]++;
-      left--;
     }
   }
 

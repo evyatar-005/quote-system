@@ -74,12 +74,27 @@ export function useCutListState() {
   const [unit, setUnitState] = useState(draft?.unit ?? 'mm');
   const [kerf, setKerf] = useState(draft?.kerf ?? '3');
   const [mode, setMode] = useState(draft?.mode ?? 'guillotine');
-  const [quality, setQuality] = useState(draft?.quality ?? 'normal');
   const [deterministic, setDeterministic] = useState(draft?.deterministic ?? false);
+  // CNC (סומא) registration-mark margins - mutually exclusive: setting one to
+  // a value > 0 clears the other, since the machine only needs one kind of
+  // margin per job (either a border around the whole sheet, or one around
+  // each individual part). Always mm, like kerf - independent of the length/
+  // width unit selector.
+  const [somaPerSheet, setSomaPerSheetRaw] = useState(draft?.somaPerSheet ?? '0');
+  const [somaPerPart, setSomaPerPartRaw] = useState(draft?.somaPerPart ?? '0');
 
   useEffect(() => {
-    saveDraft({ stocks, parts, unit, kerf, mode, quality, deterministic });
-  }, [stocks, parts, unit, kerf, mode, quality, deterministic]);
+    saveDraft({ stocks, parts, unit, kerf, mode, deterministic, somaPerSheet, somaPerPart });
+  }, [stocks, parts, unit, kerf, mode, deterministic, somaPerSheet, somaPerPart]);
+
+  const setSomaPerSheet = useCallback((value) => {
+    setSomaPerSheetRaw(value);
+    if (parseFloat(value) > 0) setSomaPerPartRaw('0');
+  }, []);
+  const setSomaPerPart = useCallback((value) => {
+    setSomaPerPartRaw(value);
+    if (parseFloat(value) > 0) setSomaPerSheetRaw('0');
+  }, []);
 
   /** Changing the unit bulk-converts every already-entered dimension (in both
    * tables at once) so the numbers keep representing the same physical size -
@@ -110,6 +125,8 @@ export function useCutListState() {
     setStocks(Array.from({ length: MIN_VISIBLE_ROWS }, emptyStockRow));
     setParts(Array.from({ length: MIN_VISIBLE_ROWS }, emptyPartRow));
     setKerf('3');
+    setSomaPerSheetRaw('0');
+    setSomaPerPartRaw('0');
     try {
       window.localStorage.removeItem(STORAGE_KEY);
     } catch {
@@ -127,13 +144,20 @@ export function useCutListState() {
   /** Normalized numeric input, ready for the solver (always in mm), or errors listed. */
   const normalized = useMemo(() => {
     const toMm = UNIT_FACTORS[unit];
+    // Soma (CNC registration mark) margins - always mm, independent of the unit
+    // selector. Per-sheet margin shrinks the usable board (deducted from the
+    // whole plate); per-part margin grows every individual part's footprint.
+    const somaSheetBand = toNumber(somaPerSheet) || 0; // band width on each edge
+    const somaSheetMm = somaSheetBand * 2; // total deducted across the sheet
+    const somaPartBand = toNumber(somaPerPart) || 0; // band width around each part
+    const somaPartMm = somaPartBand * 2; // total added to each part
     const stockDefs = stocks
       .filter((r) => r.name || r.length || r.width || r.qty)
       .map((r, i) => ({
         id: r.id,
         name: r.name || `לוח ${i + 1}`,
-        length: toNumber(r.length) * toMm,
-        width: toNumber(r.width) * toMm,
+        length: toNumber(r.length) * toMm - somaSheetMm,
+        width: toNumber(r.width) * toMm - somaSheetMm,
         qty: toNumber(r.qty) || 0,
       }));
     const partDefs = parts
@@ -141,8 +165,8 @@ export function useCutListState() {
       .map((r, i) => ({
         id: r.id,
         name: r.name || `חלק ${i + 1}`,
-        length: toNumber(r.length) * toMm,
-        width: toNumber(r.width) * toMm,
+        length: toNumber(r.length) * toMm + somaPartMm,
+        width: toNumber(r.width) * toMm + somaPartMm,
         qty: toNumber(r.qty) || 0,
       }));
     // kerf (blade thickness) is always mm regardless of the dimensions unit
@@ -154,8 +178,10 @@ export function useCutListState() {
       errors,
       warnings,
       tooLarge,
+      somaSheetBand,
+      somaPartBand,
     };
-  }, [stocks, parts, unit, kerf, mode]);
+  }, [stocks, parts, unit, kerf, mode, somaPerSheet, somaPerPart]);
 
   return {
     stocks,
@@ -164,14 +190,14 @@ export function useCutListState() {
     setUnit,
     kerf,
     mode,
-    quality,
-    seed,
     deterministic,
+    somaPerSheet,
+    somaPerPart,
     setKerf,
     setMode,
-    setQuality,
-    setSeed,
     setDeterministic,
+    setSomaPerSheet,
+    setSomaPerPart,
     updateStock,
     addStock,
     removeStock,

@@ -9,9 +9,12 @@ import CutlistGridSection from '@/components/cutlist/CutlistGridSection.jsx';
 import CutlistOptionsSection from '@/components/cutlist/CutlistOptionsSection.jsx';
 import ResultsPanel from '@/components/cutlist/ResultsPanel.jsx';
 import { useCutListState } from '@/components/cutlist/useCutListState.js';
-import { sampleInput } from '@/components/cutlist/presets.js';
 import { optimize } from '@/components/cutlist/solver/optimize.js';
 import { verifyLayout } from '@/components/cutlist/solver/stats.js';
+
+// Fixed seed used only in "מצב דטרמיניסטי" so re-computing the same inputs
+// always reproduces the exact same layout.
+const DETERMINISTIC_SEED = 24301;
 
 export default function CutListOptimizer() {
   const state = useCutListState();
@@ -20,7 +23,7 @@ export default function CutListOptimizer() {
   const [showLabels, setShowLabels] = useState(true);
   const [showCuts, setShowCuts] = useState(true);
 
-  const { input, errors, tooLarge } = state.normalized;
+  const { input, errors, tooLarge, somaSheetBand, somaPartBand } = state.normalized;
   const canCompute = errors.length === 0;
 
   const handleCompute = () => {
@@ -29,16 +32,25 @@ export default function CutListOptimizer() {
     // the second guarantees a paint before the (possibly blocking) solve runs.
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
+        // Not deterministic → a fresh random seed each click gives the
+        // multi-pass sweep a different starting point to try, so re-clicking
+        // "חשב" on the same input can turn up a better layout.
+        const seed = state.deterministic ? DETERMINISTIC_SEED : Math.floor(Math.random() * 1e9);
+        // Always run at max quality (longest/most thorough sweep = least waste) -
+        // there's no reason to trade a worse layout for speed on this page.
         const res = optimize(input, {
-          quality: state.quality,
-          seed: state.seed,
+          quality: 'max',
+          seed,
           deterministic: state.deterministic,
         });
         if (import.meta.env.DEV) {
           const violations = verifyLayout(res, input);
           if (violations.length) console.error('[cutlist] invariant violations', violations);
         }
-        setResult(res);
+        // Snapshot the soma band alongside the layout, so the drawing keeps
+        // matching the numbers it was actually solved with even if the field
+        // is edited afterwards without re-computing.
+        setResult({ ...res, somaSheetBand, somaPartBand });
         setComputing(false);
       })
     );
@@ -96,26 +108,23 @@ export default function CutListOptimizer() {
             <CutlistOptionsSection
               kerf={state.kerf}
               mode={state.mode}
-              quality={state.quality}
-              seed={state.seed}
               deterministic={state.deterministic}
               showLabels={showLabels}
               showCuts={showCuts}
+              somaPerSheet={state.somaPerSheet}
+              somaPerPart={state.somaPerPart}
               onKerfChange={state.setKerf}
               onModeChange={state.setMode}
-              onQualityChange={state.setQuality}
-              onSeedChange={state.setSeed}
               onDeterministicChange={state.setDeterministic}
               onShowLabelsChange={setShowLabels}
               onShowCutsChange={setShowCuts}
+              onSomaPerSheetChange={state.setSomaPerSheet}
+              onSomaPerPartChange={state.setSomaPerPart}
             />
 
             <div className="flex flex-wrap items-center gap-2">
               <Button type="button" className="gap-2" onClick={handleCompute} disabled={!canCompute || computing}>
                 <Calculator className="w-4 h-4" /> {computing ? 'מחשב...' : 'חשב'}
-              </Button>
-              <Button type="button" variant="outline" onClick={() => state.loadPreset(sampleInput())}>
-                טען דוגמה
               </Button>
               <Button type="button" variant="ghost" className="gap-2 text-slate-500" onClick={state.clearAll}>
                 <Eraser className="w-4 h-4" /> נקה הכל
