@@ -7,7 +7,6 @@ import {
   Calendar,
   Copy,
   PackagePlus,
-  Check,
   X,
   BarChart3,
   ArrowRight,
@@ -36,10 +35,6 @@ export default function MyQuotes() {
   const [morningDocs, setMorningDocs] = useState({});
   const [issuingIds, setIssuingIds] = useState(() => new Set());
   const [documentQuote, setDocumentQuote] = useState(null);
-  // Row id currently showing the inline email/VAT prompt (blocked conversion).
-  const [gateRowId, setGateRowId] = useState(null);
-  const [gateEmail, setGateEmail] = useState("");
-  const [gateVatId, setGateVatId] = useState("");
   const [paymentLinkPanel, setPaymentLinkPanel] = useState(null); // { quoteNumber, url }
 
   const loadQuotes = async () => {
@@ -138,44 +133,51 @@ export default function MyQuotes() {
     }
   };
 
+  // Email/VAT-ID are never required to issue an order + payment link — an
+  // agent who just wants a link to forward manually (WhatsApp etc.) shouldn't
+  // have to chase down the client's contact details first. Whatever's already
+  // on the quote is still sent along so Morning's client card benefits from it
+  // when present (see routes/morning.js), it's just never mandatory.
   const handleIssueOrder = async (q) => {
     if (issuingIds.has(q.id)) return;
     await withIssuing(q.id, async () => {
       try {
         await runConvert(q);
       } catch (err) {
-        if (err?.message === "client_email_and_vat_required") {
-          setGateRowId(q.id);
-          setGateEmail(q.client_email || "");
-          setGateVatId(q.client_vat_id || "");
-        } else {
-          toast.error(err?.message || "שגיאה בהנפקת ההזמנה");
-        }
-      }
-    });
-  };
-
-  const submitGate = async (q) => {
-    if (!gateEmail.trim() || !gateVatId.trim()) {
-      toast.error("יש למלא אימייל ות.ז/ח.פ");
-      return;
-    }
-    await withIssuing(q.id, async () => {
-      try {
-        await runConvert(q, { clientEmail: gateEmail.trim(), clientVatId: gateVatId.trim() });
-        setGateRowId(null);
-      } catch (err) {
         toast.error(err?.message || "שגיאה בהנפקת ההזמנה");
       }
     });
   };
 
+  // navigator.clipboard requires a "secure context" (https, or localhost) —
+  // this app is often reached over plain http on the local network (e.g.
+  // 10.0.0.x:3000), where that API is simply undefined. Fall back to the
+  // old execCommand('copy') trick via a hidden textarea, which has no such
+  // restriction, instead of just failing silently on every LAN user.
   const copyLink = async (url) => {
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(url);
+        toast.success("הקישור הועתק");
+        return;
+      } catch {
+        // fall through to the legacy method below
+      }
+    }
     try {
-      await navigator.clipboard.writeText(url);
-      toast.success("הקישור הועתק");
+      const textarea = document.createElement("textarea");
+      textarea.value = url;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      const ok = document.execCommand("copy");
+      document.body.removeChild(textarea);
+      if (ok) toast.success("הקישור הועתק");
+      else throw new Error("execCommand failed");
     } catch {
-      toast.error("שגיאה בהעתקת הקישור");
+      toast.error("לא ניתן להעתיק אוטומטית — יש לסמן ולהעתיק את הקישור ידנית (Ctrl+C)");
     }
   };
 
@@ -206,9 +208,15 @@ export default function MyQuotes() {
               <div className="text-sm font-semibold text-emerald-700">
                 הזמנה {paymentLinkPanel.quoteNumber} הונפקה — קישור לתשלום:
               </div>
-              <div className="text-xs text-emerald-600 truncate" dir="ltr">
-                {paymentLinkPanel.url}
-              </div>
+              {/* readOnly input, not a plain div — lets the agent manually select
+                  + Ctrl+C as a last resort if both copy methods above fail. */}
+              <input
+                readOnly
+                value={paymentLinkPanel.url}
+                onFocus={(e) => e.target.select()}
+                dir="ltr"
+                className="w-full bg-transparent text-xs text-emerald-600 border-0 p-0 focus:outline-none focus:ring-0"
+              />
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <button
@@ -266,47 +274,6 @@ export default function MyQuotes() {
                           </span>
                         )}
                       </div>
-
-                      {gateRowId === q.id && (
-                        <div className="mt-3 flex flex-wrap items-end gap-2 bg-amber-50 border border-amber-200 rounded-xl p-3">
-                          <div className="space-y-1">
-                            <label className="text-xs font-semibold text-amber-700">אימייל לקוח</label>
-                            <input
-                              type="email"
-                              value={gateEmail}
-                              onChange={(e) => setGateEmail(e.target.value)}
-                              className="h-9 rounded-lg border border-amber-300 bg-white px-2.5 text-sm"
-                              dir="ltr"
-                              placeholder="client@example.com"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <label className="text-xs font-semibold text-amber-700">ת.ז / ח.פ</label>
-                            <input
-                              type="text"
-                              value={gateVatId}
-                              onChange={(e) => setGateVatId(e.target.value)}
-                              className="h-9 rounded-lg border border-amber-300 bg-white px-2.5 text-sm"
-                              dir="ltr"
-                              placeholder="123456789"
-                            />
-                          </div>
-                          <button
-                            onClick={() => submitGate(q)}
-                            disabled={issuingIds.has(q.id)}
-                            className="h-9 flex items-center gap-1.5 text-xs px-3 rounded-lg bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50"
-                          >
-                            {issuingIds.has(q.id) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                            אישור והנפקה
-                          </button>
-                          <button
-                            onClick={() => setGateRowId(null)}
-                            className="h-9 flex items-center gap-1 text-xs px-2.5 rounded-lg text-amber-600 hover:bg-amber-100"
-                          >
-                            <X className="w-3.5 h-3.5" /> ביטול
-                          </button>
-                        </div>
-                      )}
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0">
@@ -333,7 +300,7 @@ export default function MyQuotes() {
                       ) : (
                         <button
                           onClick={() => handleIssueOrder(q)}
-                          disabled={issuingIds.has(q.id) || gateRowId === q.id}
+                          disabled={issuingIds.has(q.id)}
                           className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50 transition-colors"
                         >
                           {issuingIds.has(q.id) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PackagePlus className="w-3.5 h-3.5" />}

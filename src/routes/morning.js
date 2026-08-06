@@ -71,17 +71,14 @@ module.exports = function registerMorning(app, db, deps) {
     const quote = loadOwnedQuote(req, res);
     if (!quote) return;
 
-    // Client email/VAT-ID become mandatory only for /convert (toType) — an
-    // order/invoice needs a real identified client on Morning's side. The
-    // initial /document "quote" issuance (the calculator's existing "הנפק
-    // ללקוח" button) predates this requirement and must keep working without
-    // it, so it's deliberately excluded here.
+    // Email/VAT-ID are optional, not required — an agent generating a payment
+    // link to forward manually (WhatsApp etc.) shouldn't be blocked for not
+    // having them on hand. If the caller does supply them (the MyQuotes.jsx
+    // inline form), persist them onto the quote so Morning's client card
+    // still gets enriched whenever they ARE available — just never mandatory.
     if (typeFieldName === 'toType') {
-      const email = (req.body.clientEmail ?? quote.client_email ?? '').toString().trim();
-      const vatId = (req.body.clientVatId ?? quote.client_vat_id ?? '').toString().trim();
-      if (!email || !vatId) {
-        return res.status(400).json({ error: 'client_email_and_vat_required' });
-      }
+      const email = req.body.clientEmail !== undefined ? req.body.clientEmail.toString().trim() : quote.client_email;
+      const vatId = req.body.clientVatId !== undefined ? req.body.clientVatId.toString().trim() : quote.client_vat_id;
       if (email !== quote.client_email || vatId !== quote.client_vat_id) {
         db.prepare(`UPDATE signshop_quotes SET client_email = ?, client_vat_id = ? WHERE id = ?`)
           .run(email, vatId, quote.id);
