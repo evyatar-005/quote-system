@@ -159,7 +159,7 @@ async function createOrConvertDocument(db, { quoteId, targetType, actorUsername,
     if (wantPaymentLink) {
       try {
         const info = await request(db, 'GET', `/documents/info?type=${targetType}`);
-        const plugin = (info.plugins || []).find(p => p.active);
+        const plugin = (info.paymentPlugins || []).find(p => p.active);
         if (plugin) body.paymentRequestData = { plugins: [{ id: plugin.id }], maxPayments: 1 };
       } catch (err) {
         console.error(`[createOrConvertDocument] payment plugin lookup failed for quote #${quoteId}:`, err.message);
