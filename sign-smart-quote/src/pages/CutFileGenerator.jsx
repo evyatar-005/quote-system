@@ -27,11 +27,10 @@ const DEFAULT_PARAMS = {
   despikeMm: 0.3,
   offsetMm: 1,
   minAreaMm2: 25,
-  outerOnly: true,
+  cutInnerHoles: false,
   widthCm: 20,
   threshold: 'auto',
   removeWhite: true,
-  holeMode: 'protect',
   // Advanced / pixel-level.
   cleanupRadius: 2,
   speckleArea: 300,

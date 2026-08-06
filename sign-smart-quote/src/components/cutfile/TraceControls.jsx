@@ -119,20 +119,11 @@ export default function TraceControls({ params, onChange, measuredWhiteCut }) {
       />
 
       <Toggle
-        label="מתאר חיצוני בלבד"
-        hint="ברירת מחדל לדייקאט: קו סגור אחד לכל מדבקה, בלי חיתוכים פנימיים. כבו רק אם צריך לחתוך גם חור פנימי (חור תלייה, פנים של אות)."
-        checked={params.outerOnly !== false}
-        onCheckedChange={set('outerOnly')}
+        label="חיתוך חורים פנימיים"
+        hint="הדליקו לגרפיקה עם פתחים אמיתיים לחיתוך — פנים של אותיות (O, A, D), חור תלייה. כבוי כברירת מחדל כי בתמונות מצולמות אזורים בהירים בתוך האלמנט (צמר, כתמים לבנים) ייחתכו בטעות ויהרסו את המדבקה."
+        checked={params.cutInnerHoles === true}
+        onCheckedChange={set('cutInnerHoles')}
       />
-
-      {params.outerOnly === false && (
-        <Toggle
-          label="זיהוי חורים פנימיים"
-          hint="חורים סגורים (אות O, חור תלייה) ייחתכו. עלול לחתוך גם אזורים בהירים בתוך האלמנט."
-          checked={params.holeMode === 'detect'}
-          onCheckedChange={(checked) => set('holeMode')(checked ? 'detect' : 'protect')}
-        />
-      )}
 
       <button
         type="button"

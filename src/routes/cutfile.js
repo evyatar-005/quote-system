@@ -254,12 +254,26 @@ module.exports = function registerCutFile(app, db, deps) {
     const simplifyMm = Math.max(0, Math.min(20, num(params.simplifyMm, 2.5)));
     const despikeMm = Math.max(0, Math.min(3, num(params.despikeMm, 0.3)));
     const minAreaMm2 = Math.max(0, num(params.minAreaMm2, 25));
-    const outerOnly = !(params.outerOnly === false || params.outerOnly === 'false');
+    // ONE control for interior cuts, because the two it replaces were coupled:
+    // dropping "outer only" alone did nothing while hole detection stayed off,
+    // so no combination the operator could find actually produced an interior
+    // cut. Both are now driven together.
+    //
+    // Default OFF, on failure asymmetry: cutting a hole that shouldn't be cut
+    // destroys the sticker (a cow's white patch, a sheep's fleece all read as
+    // enclosed light regions), while a missing hole is visible and fixable by
+    // flipping this on. Brightness alone cannot tell a letter's counter from
+    // light detail inside a photo — both are enclosed and both are pale — so
+    // this stays a per-job decision rather than a guess.
+    const cutInnerHoles = params.cutInnerHoles === true || params.cutInnerHoles === 'true';
+    const outerOnly = !cutInnerHoles;
     const alphaMax = num(params.alphaMax, 1);
     const smoothing = Math.max(0, Math.round(num(params.smoothing, 1)));
     const offsetMm = num(params.offsetMm, 0);
     const widthCm = num(params.widthCm, 10);
-    const holeMode = params.holeMode === 'detect' ? 'detect' : 'protect';
+    // Follows cutInnerHoles: enclosed light regions only become holes when
+    // interior cuts were actually asked for.
+    const holeMode = cutInnerHoles ? 'detect' : 'protect';
     // Defaults to on: the common real-world upload is artwork whose subject
     // sits on white, including opaque JPEG photos placed on a transparent
     // page, where leaving white in place traces each photo's rectangle
@@ -351,13 +365,13 @@ module.exports = function registerCutFile(app, db, deps) {
 
       let body, contentType;
       if (format === 'svg') {
-        body = exportSvg({ contours: result.cutPath, widthMm: result.widthMm, heightMm: result.heightMm });
+        body = exportSvg({ contours: result.cutPath, netContours: result.tracePath, widthMm: result.widthMm, heightMm: result.heightMm });
         contentType = 'image/svg+xml';
       } else if (format === 'dxf') {
-        body = exportDxf({ contours: result.cutPath, widthMm: result.widthMm, heightMm: result.heightMm });
+        body = exportDxf({ contours: result.cutPath, netContours: result.tracePath, widthMm: result.widthMm, heightMm: result.heightMm });
         contentType = 'application/dxf';
       } else {
-        body = Buffer.from(await exportPdf({ contours: result.cutPath, widthMm: result.widthMm, heightMm: result.heightMm }));
+        body = Buffer.from(await exportPdf({ contours: result.cutPath, netContours: result.tracePath, widthMm: result.widthMm, heightMm: result.heightMm }));
         contentType = 'application/pdf';
       }
 
