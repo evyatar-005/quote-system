@@ -56,6 +56,13 @@ for (const col of [
   // as taxId / emails so the saved client record there is complete.
   'ALTER TABLE signshop_quotes ADD COLUMN client_vat_id TEXT',
   'ALTER TABLE signshop_quotes ADD COLUMN client_email TEXT',
+  // Full calculator state snapshot (items/formDataMap/itemLabels/client
+  // fields) so "שכפל" (My Quotes tab) can reopen a saved quote in the
+  // calculator for editing. Separate from calculation_data, which is a
+  // write-mostly pricing/margin summary consumed by QuoteDetailsModal —
+  // NULL on quotes saved before this existed (duplicate falls back to
+  // client-fields-only prefill for those).
+  'ALTER TABLE signshop_quotes ADD COLUMN builder_state TEXT',
 ]) {
   try { db.exec(col); } catch (_) {}
 }

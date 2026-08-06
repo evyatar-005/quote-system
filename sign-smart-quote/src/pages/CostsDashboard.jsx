@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { Link } from "react-router-dom";
-import { Loader2, Settings2, BarChart3, Tag, Lightbulb, Sparkles, Layers, Rows3, LogOut, ChevronDown, Scissors, PenTool } from "lucide-react";
+import { Link, useLocation } from "react-router-dom";
+import { Loader2, Settings2, BarChart3, Tag, Lightbulb, Sparkles, Layers, Rows3, LogOut, ChevronDown, Scissors, PenTool, FileStack } from "lucide-react";
 import MultiProductCalculator from "../components/calculator/MultiProductCalculator.jsx";
 import NotificationBell from "@/components/NotificationBell";
 import printellaLogo from "@/assets/printella-logo.png";
@@ -93,6 +93,14 @@ const ROLLUP_FORM = {
 
 export default function CostsDashboard() {
   const { user, logout } = useAuth();
+  const location = useLocation();
+  // Populated by MyQuotes.jsx's "שכפל" action (navigate('/costs', {state:...}))
+  // — a full builder_state snapshot to reopen in the calculator, plus the
+  // source quote number so the save sets parent_quote_number. Read once; a
+  // page refresh loses router state and simply starts a blank quote, which is
+  // the correct fallback (nothing here is persisted until the agent saves).
+  const initialBuilderState = location.state?.builderState || null;
+  const sourceQuoteNumber = location.state?.sourceQuoteNumber || null;
   const [config, setConfig] = useState(null);
   const [priceTiers, setPriceTiers] = useState([]);
   const [stickerPriceTiers, setStickerPriceTiers] = useState([]);
@@ -196,6 +204,12 @@ export default function CostsDashboard() {
           <div className="flex flex-col items-end gap-1">
             <div className="flex items-center gap-2">
               <Link
+                to="/my-quotes"
+                className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-amber-600 transition-colors px-3 py-1.5 rounded-lg border border-black hover:border-amber-300"
+              >
+                <FileStack className="w-3.5 h-3.5" /> ההצעות שלי
+              </Link>
+              <Link
                 to="/cutting"
                 className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-amber-600 transition-colors px-3 py-1.5 rounded-lg border border-black hover:border-amber-300"
               >
@@ -253,6 +267,8 @@ export default function CostsDashboard() {
             glassPriceTiers={glassPriceTiers}
             numberPriceTiers={numberPriceTiers}
             allTabs={TABS}
+            initialBuilderState={initialBuilderState}
+            sourceQuoteNumber={sourceQuoteNumber}
           />
         )}
       </div>

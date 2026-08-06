@@ -75,11 +75,23 @@ export async function issueQuoteToMorning(quote) {
  * Converts (or creates, if none exists yet) this quote's Morning document to
  * `toType`. Throws on failure — the manager-side caller in
  * QuoteDetailsModal.jsx catches it and shows a toast.
+ *
+ * `options` lets callers (e.g. MyQuotes.jsx's "הנפק הזמנה" flow) pass
+ * `clientEmail`/`clientVatId` (required by the server for `toType: 'order'`
+ * conversions when missing from the quote row) and `wantPaymentLink` (asks
+ * the server to attach a Morning payment plugin to the resulting document).
+ * Each key is only included in the body when explicitly provided, keeping
+ * this backward compatible with the original 2-arg call shape.
  */
-export async function convertMorningDocument(quoteId, toType) {
+export async function convertMorningDocument(quoteId, toType, { clientEmail, clientVatId, wantPaymentLink } = {}) {
   return request(`/api/morning/quotes/${quoteId}/convert`, {
     method: 'POST',
-    body: { toType },
+    body: {
+      toType,
+      ...(clientEmail !== undefined ? { clientEmail } : {}),
+      ...(clientVatId !== undefined ? { clientVatId } : {}),
+      ...(wantPaymentLink !== undefined ? { wantPaymentLink } : {}),
+    },
   });
 }
 

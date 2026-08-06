@@ -125,45 +125,75 @@ let nextId = 1;
 // sub-product is picked.
 const EMPTY_ITEM_FORM = { productType: "", widthM: "", heightM: "", quantity: "1", extras: [], lineLabel: "" };
 
-export default function MultiProductCalculator({ config, priceTiers, stickerPriceTiers, paintSurchargeTiers, kapaPriceTiers, rollupPriceTiers, lokobondAreaTiers, glassPriceTiers, numberPriceTiers, defaultForm, allowedProducts, allTabs }) {
+// "שכפל" (My Quotes tab) reopens a saved quote's builder_state here. item ids
+// in the saved snapshot came from a past, unrelated `nextId` sequence — remap
+// them to fresh ids from THIS session's counter so a later addItem() can't
+// collide with a hydrated id. Runs at most once per mount (guarded by the
+// useRef check at the call site), so this is the only place nextId is
+// incremented outside the normal addItem() flow.
+function hydrateBuilderState(state) {
+  if (!state) return null;
+  const idMap = {};
+  const items = (state.items || []).map((it) => {
+    const id = nextId++;
+    idMap[it.id] = id;
+    return { id, tabKey: it.tabKey };
+  });
+  const formDataMap = {};
+  for (const [oldId, fd] of Object.entries(state.formDataMap || {})) formDataMap[idMap[oldId]] = fd;
+  const itemLabels = {};
+  for (const [oldId, label] of Object.entries(state.itemLabels || {})) itemLabels[idMap[oldId]] = label;
+  return { ...state, items, formDataMap, itemLabels };
+}
+
+export default function MultiProductCalculator({ config, priceTiers, stickerPriceTiers, paintSurchargeTiers, kapaPriceTiers, rollupPriceTiers, lokobondAreaTiers, glassPriceTiers, numberPriceTiers, defaultForm, allowedProducts, allTabs, initialBuilderState, sourceQuoteNumber }) {
   const firstTabKey = allTabs?.[0]?.key;
-  const [items, setItems] = useState([{ id: nextId++, tabKey: null, formData: {} }]);
+  // Computed once on mount (never on re-render, which would otherwise burn
+  // fresh ids from nextId every time) — see hydrateBuilderState above.
+  const hydrationRef = useRef(null);
+  if (hydrationRef.current === null) {
+    hydrationRef.current = hydrateBuilderState(initialBuilderState) || {};
+  }
+  const hydration = hydrationRef.current;
+
+  const [items, setItems] = useState(() => hydration.items || [{ id: nextId++, tabKey: null, formData: {} }]);
   const [prices, setPrices] = useState({});
-  const [formDataMap, setFormDataMap] = useState({});
+  const [formDataMap, setFormDataMap] = useState(() => hydration.formDataMap || {});
   // Agent-chosen name per product card — shown instead of the default "מוצר N"
   // wherever the product is labeled (the document + eventually Morning's
   // description field), so the agent can call it something meaningful like
   // "לוגו כניסה" instead of a generic index.
-  const [itemLabels, setItemLabels] = useState({});
+  const [itemLabels, setItemLabels] = useState(() => hydration.itemLabels || {});
   // Locked (collapsed-to-summary) product cards — a card auto-locks the moment
   // a NEW product is added after it, so the order reads as a clean list while
   // being filled in; the agent can still reopen any locked card by clicking
-  // "ערוך" on its summary row.
+  // "ערוך" on its summary row. A duplicated quote opens every card unlocked
+  // (empty {}) so the agent immediately sees everything to edit.
   const [lockedIds, setLockedIds] = useState({});
-  const [clientName, setClientName] = useState("");
-  const [clientPhone, setClientPhone] = useState("");
+  const [clientName, setClientName] = useState(hydration.clientName || "");
+  const [clientPhone, setClientPhone] = useState(hydration.clientPhone || "");
   // Set when a result from ClientSearchField (an existing Morning client) is
   // picked — lets buildQuotePayload skip re-searching/re-creating that client
   // in Morning. Cleared whenever the name is edited by hand afterwards, since
   // that means it's no longer necessarily the same client.
-  const [morningClientId, setMorningClientId] = useState(null);
-  const [documentTitle, setDocumentTitle] = useState("");
+  const [morningClientId, setMorningClientId] = useState(hydration.morningClientId || null);
+  const [documentTitle, setDocumentTitle] = useState(hydration.documentTitle || "");
   // Free-text background for the sales manager — visible only in the review
   // screen (QuotesHistory/QuoteDetailsModal), never on the client-facing document.
-  const [agentNote, setAgentNote] = useState("");
+  const [agentNote, setAgentNote] = useState(hydration.agentNote || "");
   // Reference images/PDFs (e.g. a photo of the client's wall) picked before the
   // quote itself exists — held as plain File objects and only actually
   // uploaded once save/send returns a real quote id (see uploadPendingAttachments).
   const [attachedFiles, setAttachedFiles] = useState([]);
   // Shipping (pre-VAT) — default comes from the admin config (shipping_cost), editable per quote.
-  const [shipping, setShipping] = useState(config?.shipping_cost != null ? String(config.shipping_cost) : "");
-  const [delivery, setDelivery] = useState("pickup"); // אספקה — order-level: משלוח / איסוף עצמי
+  const [shipping, setShipping] = useState(hydration.shipping ?? (config?.shipping_cost != null ? String(config.shipping_cost) : ""));
+  const [delivery, setDelivery] = useState(hydration.delivery || "pickup"); // אספקה — order-level: משלוח / איסוף עצמי
   // Payment is order-level: a single "number of installments" for the whole
   // quote (1 = מזומן, no surcharge). Applied on top of all products + shipping.
-  const [installmentCount, setInstallmentCount] = useState(2);
-  const [clientAddress, setClientAddress] = useState("");
-  const [clientVatId, setClientVatId] = useState("");
-  const [clientEmail, setClientEmail] = useState("");
+  const [installmentCount, setInstallmentCount] = useState(hydration.installmentCount ?? 2);
+  const [clientAddress, setClientAddress] = useState(hydration.clientAddress || "");
+  const [clientVatId, setClientVatId] = useState(hydration.clientVatId || "");
+  const [clientEmail, setClientEmail] = useState(hydration.clientEmail || "");
   // Assigned by the server on save/send — never typed by the agent — so it's
   // unmistakably a number issued by "ממשק סוכני מכירות" (see quoteCreate in
   // src/routes/entities.js).
@@ -446,6 +476,20 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
     return lines;
   };
 
+  // Full snapshot for "שכפל" (My Quotes tab) to reopen this exact quote here
+  // for editing later — deliberately separate from calculation_data below,
+  // which is a write-mostly pricing/margin summary for QuoteDetailsModal and
+  // was never meant to round-trip back into live form state.
+  const buildBuilderState = () => ({
+    items: items.map(({ id, tabKey }) => ({ id, tabKey })),
+    formDataMap,
+    itemLabels,
+    clientName, clientPhone, clientAddress, clientVatId, clientEmail,
+    morningClientId,
+    documentTitle, agentNote,
+    shipping, delivery, installmentCount,
+  });
+
   const buildQuotePayload = (status) => ({
     client_name: clientName.trim(),
     client_phone: clientPhone.trim(),
@@ -458,6 +502,8 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
     price_before_vat: Math.round(grandBeforeVat * 100) / 100,
     price_with_vat: Math.round(grandTotal * 100) / 100,
     line_items: JSON.stringify(buildLineItems()),
+    builder_state: JSON.stringify(buildBuilderState()),
+    ...(sourceQuoteNumber ? { parent_quote_number: sourceQuoteNumber } : {}),
     calculation_data: JSON.stringify({
       items: items.map((item, index) => ({
         index,

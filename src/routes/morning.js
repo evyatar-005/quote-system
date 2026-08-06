@@ -44,6 +44,21 @@ module.exports = function registerMorning(app, db, deps) {
     res.json({ ok: true });
   });
 
+  // Every route below acts on one quote by id — none had an ownership check
+  // before this: any authenticated agent could issue/convert/inspect the
+  // Morning history of *any* quote, not just their own. This is the actual
+  // enforcement point for "an agent only touches their own quotes" as far as
+  // Morning is concerned (list-level scoping lives in entities.js).
+  function loadOwnedQuote(req, res) {
+    const quote = db.prepare(`SELECT * FROM signshop_quotes WHERE id = ?`).get(req.params.id);
+    if (!quote) { res.status(404).json({ error: 'Quote not found' }); return null; }
+    if (req.user.role !== 'admin' && quote.created_by !== req.user.username) {
+      res.status(403).json({ error: 'forbidden' });
+      return null;
+    }
+    return quote;
+  }
+
   // Shared by /document (create/convert by type) and /convert (create/convert
   // by toType) — createOrConvertDocument already decides create-vs-convert
   // itself based on whether a prior morning_documents_map row exists, so both
@@ -53,11 +68,34 @@ module.exports = function registerMorning(app, db, deps) {
     const code = DOCUMENT_TYPE[typeName];
     if (!code) return res.status(400).json({ error: `unknown document type "${typeName}"` });
 
+    const quote = loadOwnedQuote(req, res);
+    if (!quote) return;
+
+    // Client email/VAT-ID become mandatory only for /convert (toType) — an
+    // order/invoice needs a real identified client on Morning's side. The
+    // initial /document "quote" issuance (the calculator's existing "הנפק
+    // ללקוח" button) predates this requirement and must keep working without
+    // it, so it's deliberately excluded here.
+    if (typeFieldName === 'toType') {
+      const email = (req.body.clientEmail ?? quote.client_email ?? '').toString().trim();
+      const vatId = (req.body.clientVatId ?? quote.client_vat_id ?? '').toString().trim();
+      if (!email || !vatId) {
+        return res.status(400).json({ error: 'client_email_and_vat_required' });
+      }
+      if (email !== quote.client_email || vatId !== quote.client_vat_id) {
+        db.prepare(`UPDATE signshop_quotes SET client_email = ?, client_vat_id = ? WHERE id = ?`)
+          .run(email, vatId, quote.id);
+        quote.client_email = email;
+        quote.client_vat_id = vatId;
+      }
+    }
+
     try {
       const result = await sync.createOrConvertDocument(db, {
         quoteId: req.params.id,
         targetType: code,
         actorUsername: req.user.username,
+        wantPaymentLink: !!req.body.wantPaymentLink,
       });
       res.json(result);
     } catch (err) {
@@ -77,6 +115,7 @@ module.exports = function registerMorning(app, db, deps) {
 
   // ── GET /api/morning/quotes/:id/history ───────────────────────────────────
   app.get('/api/morning/quotes/:id/history', requireAuth, (req, res) => {
+    if (!loadOwnedQuote(req, res)) return;
     res.json(sync.getHistory(db, req.params.id));
   });
 

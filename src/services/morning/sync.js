@@ -111,7 +111,7 @@ function buildIncomeRows(quote) {
   }));
 }
 
-async function createOrConvertDocument(db, { quoteId, targetType, actorUsername }) {
+async function createOrConvertDocument(db, { quoteId, targetType, actorUsername, wantPaymentLink }) {
   const action = 'sync';
   let quote;
   try {
@@ -139,6 +139,20 @@ async function createOrConvertDocument(db, { quoteId, targetType, actorUsername 
       client: { id: morningClientId },
       ...(isConvert ? { linkedDocumentIds: [prevMap.morning_document_id], linkType: 'link' } : {}),
     };
+
+    // A payment plugin turns the document's hosted url (captured below into
+    // document_url regardless) into a payment-enabled link. Best-effort: if
+    // the business has no active plugin for this document type, the document
+    // still issues fine, just without a "pay now" link on it.
+    if (wantPaymentLink) {
+      try {
+        const info = await request(db, 'GET', `/documents/info?type=${targetType}`);
+        const plugin = (info.plugins || []).find(p => p.active);
+        if (plugin) body.paymentRequestData = { plugins: [{ id: plugin.id }], maxPayments: 1 };
+      } catch (err) {
+        console.error(`[createOrConvertDocument] payment plugin lookup failed for quote #${quoteId}:`, err.message);
+      }
+    }
 
     const response = await request(db, 'POST', '/documents', body);
 

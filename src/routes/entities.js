@@ -223,6 +223,16 @@ module.exports = function registerEntities(app, db, deps) {
     for (const [k, v] of Object.entries(filters)) {
       if (quoteCols.includes(k)) { where.push(`${k} = ?`); params.push(v); }
     }
+    // Non-admins only ever see their own quotes — forced regardless of what
+    // the client's query string asked for, so this can't be bypassed by a
+    // direct API call that omits/spoofs created_by (the UI-level filtering
+    // in QuotesHistory.jsx was never a real access control).
+    if (req.user.role !== 'admin') {
+      const i = where.findIndex(c => c.startsWith('created_by'));
+      if (i !== -1) { where.splice(i, 1); params.splice(i, 1); }
+      where.push('created_by = ?');
+      params.push(req.user.username);
+    }
     let sql = `SELECT * FROM signshop_quotes`;
     if (where.length) sql += ` WHERE ${where.join(' AND ')}`;
     if (sort) {
