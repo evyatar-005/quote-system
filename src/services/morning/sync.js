@@ -48,9 +48,21 @@ async function ensureMorningClient(db, clientName, extra = {}) {
     }
   } else {
     // New client — include every contact detail we already collected on the
-    // quote form so Morning's record isn't just a bare name.
-    const created = await request(db, 'POST', '/clients', body);
-    morningClientId = created.id;
+    // quote form so Morning's record isn't just a bare name. taxId/email are
+    // never required on our side (an agent can issue a payment link without
+    // full client details), so a malformed value here (e.g. errorCode 1111 —
+    // "מספר עוסק / ת.פ אינו תקין") must not block getting the order out at
+    // all — retry once with just the fields Morning actually accepted.
+    try {
+      const created = await request(db, 'POST', '/clients', body);
+      morningClientId = created.id;
+    } catch (err) {
+      if (!body.taxId && !body.emails) throw err;
+      console.error(`[ensureMorningClient] client creation rejected details, retrying with name/phone/address only:`, err.message);
+      const minimalBody = buildClientBody(name, { phone: extra.phone, address: extra.address });
+      const created = await request(db, 'POST', '/clients', minimalBody);
+      morningClientId = created.id;
+    }
   }
 
   // INSERT OR IGNORE: another request may have raced and inserted this same

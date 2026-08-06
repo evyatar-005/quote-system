@@ -125,7 +125,12 @@ export default function MyQuotes() {
     const result = await convertMorningDocument(q.id, "order", { wantPaymentLink: true, ...extra });
     const docs = await getLatestMorningDocuments([q.id]);
     setMorningDocs((prev) => ({ ...prev, ...docs }));
-    const url = result?.url?.he || result?.url?.origin;
+    // `paymentUrl` is the hosted "pay now" page — only present when a payment
+    // plugin was attached and Morning issued the document with a payment
+    // button. `url` (a sibling field) is just the plain PDF download link and
+    // is never a payment page, even when a plugin was requested — do not fall
+    // back to it here, that was the earlier bug (agents got a download link).
+    const url = result?.paymentUrl;
     if (url) {
       setPaymentLinkPanel({ quoteNumber: q.quote_number, url });
     } else {
