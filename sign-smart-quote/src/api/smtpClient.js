@@ -66,6 +66,11 @@ export function sendSmtpTest() {
   return request('/api/smtp/test', { method: 'POST' });
 }
 
+/** Sends today's delivery-note report right now, ignoring the 17:00 schedule. Throws on failure. */
+export function sendDailyReportTest() {
+  return request('/api/smtp/test-daily-report', { method: 'POST' });
+}
+
 /**
  * Requests a password-reset email. Always resolves with a generic
  * { ok, message } — the backend never reveals whether the username exists.

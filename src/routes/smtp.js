@@ -2,6 +2,7 @@
 // routes/morning.js's config endpoints. Password is never returned in GET.
 
 const mail = require('../services/mail');
+const { sendDailyDeliveryReport } = require('../services/reports/dailyDeliveryReport');
 
 module.exports = function registerSmtp(app, db, deps) {
   const { requireAdmin } = deps;
@@ -21,12 +22,13 @@ module.exports = function registerSmtp(app, db, deps) {
       from_email: (row && row.from_email) || '',
       from_name: (row && row.from_name) || '',
       app_base_url: (row && row.app_base_url) || '',
+      report_recipient_email: (row && row.report_recipient_email) || '',
     });
   });
 
   // ── PUT /api/smtp/config ────────────────────────────────────────────────────
   app.put('/api/smtp/config', requireAdmin, (req, res) => {
-    const { host, port, secure, username, password, from_email, from_name, app_base_url } = req.body || {};
+    const { host, port, secure, username, password, from_email, from_name, app_base_url, report_recipient_email } = req.body || {};
     const existing = credRow.get();
     // Blank/omitted password means "leave it as-is" — same convention as
     // /api/morning/config, so an admin can edit other fields without re-pasting it.
@@ -38,11 +40,12 @@ module.exports = function registerSmtp(app, db, deps) {
       : (existing ? existing.password : null);
 
     db.prepare(
-      `INSERT INTO smtp_credentials (id, host, port, secure, username, password, from_email, from_name, app_base_url)
-       VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO smtp_credentials (id, host, port, secure, username, password, from_email, from_name, app_base_url, report_recipient_email)
+       VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET host=excluded.host, port=excluded.port, secure=excluded.secure,
          username=excluded.username, password=excluded.password, from_email=excluded.from_email,
-         from_name=excluded.from_name, app_base_url=excluded.app_base_url, updated_at=CURRENT_TIMESTAMP`
+         from_name=excluded.from_name, app_base_url=excluded.app_base_url,
+         report_recipient_email=excluded.report_recipient_email, updated_at=CURRENT_TIMESTAMP`
     ).run(
       host || null,
       port || 587,
@@ -51,7 +54,8 @@ module.exports = function registerSmtp(app, db, deps) {
       passwordToStore,
       from_email || null,
       from_name || null,
-      app_base_url || null
+      app_base_url || null,
+      report_recipient_email || null
     );
 
     console.log(`[PUT /api/smtp/config] host="${host || ''}" from_email="${from_email || ''}"`);
@@ -79,6 +83,22 @@ module.exports = function registerSmtp(app, db, deps) {
       res.json({ ok: true });
     } catch (err) {
       console.error('[POST /api/smtp/test] failed:', err.message);
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // ── POST /api/smtp/test-daily-report — sends today's delivery-note report
+  // right now, regardless of the 17:00 schedule, so it can be verified
+  // without waiting for it.
+  app.post('/api/smtp/test-daily-report', requireAdmin, async (req, res) => {
+    try {
+      const result = await sendDailyDeliveryReport(db);
+      if (!result.sent) {
+        return res.status(400).json({ error: 'לא הוגדרה כתובת מייל לדוח היומי' });
+      }
+      res.json({ ok: true, count: result.count });
+    } catch (err) {
+      console.error('[POST /api/smtp/test-daily-report] failed:', err.message);
       res.status(400).json({ error: err.message });
     }
   });

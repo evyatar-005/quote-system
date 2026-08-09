@@ -1,15 +1,16 @@
 import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Loader2, Save, Mail, Send } from "lucide-react";
+import { Loader2, Save, Mail, Send, FileText } from "lucide-react";
 import { toast } from "sonner";
-import { getSmtpConfig, saveSmtpConfig, sendSmtpTest } from "@/api/smtpClient";
+import { getSmtpConfig, saveSmtpConfig, sendSmtpTest, sendDailyReportTest } from "@/api/smtpClient";
 import CostSectionCard from "./CostSectionCard";
 
 export default function SmtpSettingsSection() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [testingReport, setTestingReport] = useState(false);
   // Shown inline rather than relying only on a toast: diagnosing a wrong SMTP
   // host/password is the whole point of the test button, and forgot-password
   // is deliberately silent about failures, so this is the only place the real
@@ -23,6 +24,7 @@ export default function SmtpSettingsSection() {
   const [fromEmail, setFromEmail] = useState("");
   const [fromName, setFromName] = useState("");
   const [appBaseUrl, setAppBaseUrl] = useState("");
+  const [reportRecipientEmail, setReportRecipientEmail] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -35,6 +37,7 @@ export default function SmtpSettingsSection() {
         setFromEmail(cfg.from_email || "");
         setFromName(cfg.from_name || "");
         setAppBaseUrl(cfg.app_base_url || "");
+        setReportRecipientEmail(cfg.report_recipient_email || "");
       } catch {
         toast.error("שגיאה בטעינת הגדרות SMTP");
       }
@@ -57,6 +60,7 @@ export default function SmtpSettingsSection() {
         from_email: fromEmail,
         from_name: fromName,
         app_base_url: appBaseUrl,
+        report_recipient_email: reportRecipientEmail,
       });
       setPassword("");
       setPasswordMasked(result?.password_masked || passwordMasked);
@@ -81,6 +85,20 @@ export default function SmtpSettingsSection() {
       toast.error(err?.message || "שליחת מייל הבדיקה נכשלה");
     }
     setTesting(false);
+  };
+
+  const handleTestReport = async () => {
+    setTestingReport(true);
+    setStatus(null);
+    try {
+      const result = await sendDailyReportTest();
+      setStatus({ ok: true, message: `דוח תעודות משלוח נשלח (${result.count} תעודות) — בדוק את תיבת הדואר` });
+      toast.success("דוח תעודות משלוח נשלח");
+    } catch (err) {
+      setStatus({ ok: false, message: err?.message || "שליחת דוח הבדיקה נכשלה" });
+      toast.error(err?.message || "שליחת דוח הבדיקה נכשלה");
+    }
+    setTestingReport(false);
   };
 
   if (loading) {
@@ -166,6 +184,18 @@ export default function SmtpSettingsSection() {
             כתובת ה-tunnel הפעילה, כדי שקישורי איפוס סיסמה במייל יעבדו נכון — כתובת ה-tunnel משתנה בכל הפעלה, לכן יש לעדכן כאן לפי הצורך.
           </p>
         </div>
+        <div className="space-y-1.5 sm:col-span-2">
+          <label className="text-sm font-semibold text-slate-600">כתובת מייל לדוח תעודות משלוח יומי</label>
+          <Input
+            dir="ltr"
+            value={reportRecipientEmail}
+            onChange={(e) => setReportRecipientEmail(e.target.value)}
+            placeholder="office@printela.co.il"
+          />
+          <p className="text-xs text-muted-foreground">
+            כל יום ב-17:00 תישלח לכתובת הזו רשימת תעודות המשלוח שנסגרו באותו יום, עם מספר כל תעודה והסכום שלה לפני מע״מ. השדה ריק = הדוח לא נשלח.
+          </p>
+        </div>
         <div className="sm:col-span-2">
           <p className="text-xs text-muted-foreground">
             סוג ההצפנה נקבע אוטומטית לפי הפורט — 465 מתחבר ב-SSL ישיר, ו-587 או 25 משתמשים ב-STARTTLS.
@@ -193,6 +223,10 @@ export default function SmtpSettingsSection() {
         <Button onClick={handleTest} disabled={testing} variant="outline" className="gap-2">
           {testing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
           {testing ? "שולח..." : "שלח מייל בדיקה"}
+        </Button>
+        <Button onClick={handleTestReport} disabled={testingReport} variant="outline" className="gap-2">
+          {testingReport ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+          {testingReport ? "שולח..." : "שלח דוח תעודות משלוח עכשיו"}
         </Button>
       </div>
     </CostSectionCard>

@@ -16,6 +16,7 @@ const registerAttachments = require('./routes/attachments');
 const registerSmtp     = require('./routes/smtp');
 const registerCutFile  = require('./routes/cutfile');
 const registerProduction = require('./routes/production');
+const { startDailyReportScheduler } = require('./services/reports/dailyDeliveryReport');
 
 const PORT    = process.env.PORT || 3000;
 const DB_PATH = path.join(__dirname, '../database.sqlite');
@@ -74,6 +75,10 @@ for (const col of [
 ]) {
   try { db.exec(col); } catch (_) {}
 }
+
+// Recipient for the 17:00 daily delivery-note report (src/services/reports/
+// dailyDeliveryReport.js) — distinct from from_email (the sender identity).
+try { db.exec('ALTER TABLE smtp_credentials ADD COLUMN report_recipient_email TEXT'); } catch (_) {}
 
 // Add stand/mechanism cost column to roll-up tiers if it doesn't exist yet.
 try { db.exec('ALTER TABLE signshop_rollup_tiers ADD COLUMN stand_cost REAL NOT NULL DEFAULT 0'); } catch (_) {}
@@ -147,6 +152,8 @@ registerAttachments(app, db, { requireAuth });
 registerSmtp(app, db, { requireAuth, requireAdmin });
 registerCutFile(app, db, { requireAuth });
 registerProduction(app, db, { requireOperations });
+
+startDailyReportScheduler(db);
 
 // ─── Version info — read by deploy/UPDATE.ps1's post-deploy smoke check and
 // by anyone wanting to confirm which release is live without RDP access ─────
