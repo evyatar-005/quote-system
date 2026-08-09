@@ -15,6 +15,10 @@ function buildClientBody(name, extra = {}) {
   if (extra.address) body.address = extra.address;
   if (extra.vatId) body.taxId = extra.vatId;
   if (extra.email) body.emails = [extra.email];
+  // Credit days (0 = מזומן/שוטף, 30/60/90 = שוטף+N) — Morning's own field on
+  // the client card, confirmed via a live GET /clients/:id (numeric
+  // `paymentTerms`), not documented in docs/morning-api-reference.md.
+  if (extra.paymentTerms != null && extra.paymentTerms !== '') body.paymentTerms = Number(extra.paymentTerms);
   return body;
 }
 
@@ -75,11 +79,15 @@ async function ensureMorningClient(db, clientName, extra = {}) {
 
 // Powers the client-search autocomplete on the quote form — looks up
 // existing Morning clients by name so an agent can pick one instead of
-// typing a new client from scratch.
+// typing a new client from scratch. An empty query omits the `name` filter
+// entirely (rather than short-circuiting to []) so focusing the field with
+// nothing typed yet still shows Morning's client list — a plain "browse"
+// mode, not just search-after-typing.
 async function searchClients(db, query) {
   const name = (query || '').trim();
-  if (!name) return [];
-  const found = await request(db, 'POST', '/clients/search', { name, pageSize: 10 });
+  const body = { pageSize: 10 };
+  if (name) body.name = name;
+  const found = await request(db, 'POST', '/clients/search', body);
   const items = (found && found.items) || [];
   return items.map(c => ({
     id: c.id,
@@ -88,7 +96,20 @@ async function searchClients(db, query) {
     address: c.address || '',
     vatId: c.taxId || '',
     email: (c.emails && c.emails[0]) || '',
+    paymentTerms: c.paymentTerms ?? 0,
   }));
+}
+
+// Explicit "create/update this client now" action for the calculator's
+// "לקוח חדש" flow — unlike ensureMorningClient (fire-and-forget side effect
+// of saving a quote), this is awaited directly by the caller so the agent
+// gets an immediate success/failure instead of finding out only later.
+// Shares the same search-then-create-or-update logic and morning_clients_map
+// cache as ensureMorningClient, so the two paths can never disagree about
+// which Morning client a given name maps to.
+async function createClient(db, { name, phone, address, vatId, email, paymentTerms } = {}) {
+  const morningClientId = await ensureMorningClient(db, name, { phone, address, vatId, email, paymentTerms });
+  return { id: morningClientId, name: (name || '').trim(), phone: phone || '', address: address || '', vatId: vatId || '', email: email || '', paymentTerms: paymentTerms != null ? Number(paymentTerms) : 0 };
 }
 
 function buildIncomeRows(quote) {
@@ -279,4 +300,4 @@ function getHistory(db, quoteId) {
   };
 }
 
-module.exports = { ensureMorningClient, createOrConvertDocument, createPaymentForm, getHistory, buildIncomeRows, searchClients, getLatestDocuments };
+module.exports = { ensureMorningClient, createOrConvertDocument, createPaymentForm, getHistory, buildIncomeRows, searchClients, createClient, getLatestDocuments };

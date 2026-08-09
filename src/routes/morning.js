@@ -149,4 +149,20 @@ module.exports = function registerMorning(app, db, deps) {
       res.status(400).json({ error: err.message });
     }
   });
+
+  // ── POST /api/morning/clients ─────────────────────────────────────────────
+  // Explicit "צור לקוח חדש" action from the calculator's client field —
+  // creates (or updates, if the name already resolves to an existing Morning
+  // client) a client record right away, including payment terms, instead of
+  // only ever registering one implicitly on quote save.
+  app.post('/api/morning/clients', requireAuth, async (req, res) => {
+    try {
+      const name = (req.body?.name || '').toString().trim();
+      if (!name) return res.status(400).json({ error: 'name required' });
+      const client = await sync.createClient(db, { ...req.body, name });
+      res.status(201).json(client);
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  });
 };

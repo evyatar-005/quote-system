@@ -109,10 +109,21 @@ export async function getMorningHistory(quoteId) {
   return request(`/api/morning/quotes/${quoteId}/history`);
 }
 
-/** Client-search autocomplete for the quote form. Throws on failure. */
+/** Client-search autocomplete for the quote form. `query` may be empty — omitting
+ * the `q` param entirely then lists Morning's clients (browse mode). Throws on failure. */
 export async function searchMorningClients(query) {
-  const { items } = await request(`/api/morning/clients/search?q=${encodeURIComponent(query)}`);
+  const q = (query || "").trim();
+  const { items } = await request(`/api/morning/clients/search${q ? `?q=${encodeURIComponent(q)}` : ""}`);
   return items;
+}
+
+/** Explicitly creates (or updates) a Morning client right away — used by the
+ * calculator's "לקוח חדש" flow. Throws on failure. */
+export async function createMorningClient({ name, phone, address, vatId, email, paymentTerms }) {
+  return request(`/api/morning/clients`, {
+    method: "POST",
+    body: { name, phone, address, vatId, email, paymentTerms },
+  });
 }
 
 /** Latest Morning document per quote id, batched for a list view. Throws on failure. */

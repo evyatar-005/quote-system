@@ -195,6 +195,10 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
   const [clientAddress, setClientAddress] = useState(hydration.clientAddress || "");
   const [clientVatId, setClientVatId] = useState(hydration.clientVatId || "");
   const [clientEmail, setClientEmail] = useState(hydration.clientEmail || "");
+  // Credit days synced to Morning's own paymentTerms field on the client card
+  // (0 = מזומן/שוטף) — client-level, distinct from installmentCount below,
+  // which is this quote's own cash/installments payment method.
+  const [clientPaymentTerms, setClientPaymentTerms] = useState(hydration.clientPaymentTerms ?? 0);
   // Assigned by the server on save/send — never typed by the agent — so it's
   // unmistakably a number issued by "ממשק סוכני מכירות" (see quoteCreate in
   // src/routes/entities.js).
@@ -488,7 +492,7 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
     items: items.map(({ id, tabKey }) => ({ id, tabKey })),
     formDataMap,
     itemLabels,
-    clientName, clientPhone, clientAddress, clientVatId, clientEmail,
+    clientName, clientPhone, clientAddress, clientVatId, clientEmail, clientPaymentTerms,
     morningClientId,
     documentTitle, agentNote,
     shipping, delivery, installmentCount,
@@ -500,6 +504,7 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
     client_address: clientAddress.trim(),
     client_vat_id: clientVatId.trim(),
     client_email: clientEmail.trim(),
+    client_payment_terms: clientPaymentTerms,
     morning_client_id: morningClientId || undefined,
     product_category: categoryOf(formDataMap[items[0]?.id]?.productType),
     payment_type: installmentCount > 1 ? `installments:${installmentCount}` : "cash",
@@ -653,6 +658,7 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
                     setClientAddress(c.address || "");
                     setClientVatId(c.vatId || "");
                     setClientEmail(c.email || "");
+                    setClientPaymentTerms(c.paymentTerms ?? 0);
                     setMorningClientId(c.id);
                   }}
                   placeholder="שם הלקוח — חפש לקוח קיים או הקלד חדש"
@@ -698,6 +704,19 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
                   dir="ltr"
                   className="w-full h-9 bg-transparent border-0 border-b-2 border-slate-300 px-0.5 py-1 text-base placeholder:text-slate-300 focus-visible:outline-none focus-visible:border-amber-400"
                 />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-slate-600">תנאי תשלום ללקוח</label>
+                <select
+                  value={clientPaymentTerms}
+                  onChange={(e) => setClientPaymentTerms(Number(e.target.value))}
+                  className="w-full h-9 bg-transparent border-0 border-b-2 border-slate-300 px-0.5 py-1 text-base focus-visible:outline-none focus-visible:border-amber-400"
+                >
+                  <option value={0}>מזומן / שוטף</option>
+                  <option value={30}>שוטף+30</option>
+                  <option value={60}>שוטף+60</option>
+                  <option value={90}>שוטף+90</option>
+                </select>
               </div>
             </div>
           </section>

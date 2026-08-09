@@ -204,6 +204,7 @@ module.exports = function registerEntities(app, db, deps) {
         address: body.client_address,
         vatId: body.client_vat_id,
         email: body.client_email,
+        paymentTerms: body.client_payment_terms,
       }).catch(err => console.error(`[quoteCreate] Morning client registration failed for quote #${lastInsertRowid}:`, err.message));
     }
 

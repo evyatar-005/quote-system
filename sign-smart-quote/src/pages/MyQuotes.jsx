@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { convertMorningDocument, createPaymentLink, getLatestMorningDocuments } from "@/api/morningClient";
 import QuoteDocument from "@/components/calculator/QuoteDocument";
 import DocumentIssuedModal from "@/components/DocumentIssuedModal";
+import { MORNING_ORDER_TYPE } from "@/lib/quoteLabels";
 
 const fmt = (val) =>
   val != null ? `₪ ${Number(val).toLocaleString("he-IL", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : "—";
@@ -30,6 +31,11 @@ const STATUS_COLORS = {
 // Morning document type codes — see docs/morning-api-reference.md / src/services/morning/mappings.js
 const MORNING_TYPE_LABELS = { 10: "הצעת מחיר", 100: "הזמנה", 300: "חשבון עסקה", 305: "חשבונית מס" };
 
+const TABS = [
+  { key: "all", label: "כל ההצעות" },
+  { key: "orders", label: "ההזמנות שלי" },
+];
+
 export default function MyQuotes() {
   const navigate = useNavigate();
   const [quotes, setQuotes] = useState([]);
@@ -39,6 +45,7 @@ export default function MyQuotes() {
   const [documentQuote, setDocumentQuote] = useState(null);
   const [paymentLinkPanel, setPaymentLinkPanel] = useState(null); // { quoteNumber, url }
   const [issuedDocument, setIssuedDocument] = useState(null); // { url, label }
+  const [tab, setTab] = useState("all");
 
   const loadQuotes = async () => {
     setLoading(true);
@@ -211,6 +218,10 @@ export default function MyQuotes() {
     }
   };
 
+  const visibleQuotes = tab === "orders"
+    ? quotes.filter((q) => morningDocs[q.id]?.morning_document_type === MORNING_ORDER_TYPE)
+    : quotes;
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900" dir="rtl">
       {/* Header */}
@@ -232,6 +243,22 @@ export default function MyQuotes() {
       </div>
 
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+        {/* Tabs — both read the same fetched `quotes`/`morningDocs`, so this is
+            a display filter only, no extra fetch. */}
+        <div className="flex items-center gap-2 border-b border-slate-200">
+          {TABS.map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => setTab(key)}
+              className={`px-4 py-2 text-sm -mb-px border-b-2 transition-colors ${
+                tab === key ? "border-amber-500 text-amber-600 font-semibold" : "border-transparent text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
         {paymentLinkPanel && (
           <div className="flex items-center justify-between gap-3 bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-3">
             <div className="min-w-0">
@@ -269,13 +296,15 @@ export default function MyQuotes() {
           <div className="flex justify-center py-20">
             <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
           </div>
-        ) : quotes.length === 0 ? (
-          <div className="text-center py-20 text-slate-400 text-sm">עדיין לא נשמרו הצעות</div>
+        ) : visibleQuotes.length === 0 ? (
+          <div className="text-center py-20 text-slate-400 text-sm">
+            {tab === "orders" ? "עדיין אין הזמנות" : "עדיין לא נשמרו הצעות"}
+          </div>
         ) : (
           <div className="space-y-2">
-            {quotes.map((q) => {
+            {visibleQuotes.map((q) => {
               const morningDoc = morningDocs[q.id];
-              const alreadyOrder = morningDoc && morningDoc.morning_document_type === 100;
+              const alreadyOrder = morningDoc && morningDoc.morning_document_type === MORNING_ORDER_TYPE;
               return (
                 <div key={q.id} className="bg-white border border-black rounded-2xl p-4">
                   <div className="flex items-start justify-between gap-4">
