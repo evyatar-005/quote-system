@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import { BarChart3 } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
+import NotificationBell from "@/components/NotificationBell";
 import MaterialCostsSection from "../components/admin/MaterialCostsSection";
 import LaborCostsSection from "../components/admin/LaborCostsSection";
 import StickerCostsSection from "../components/admin/StickerCostsSection";
@@ -231,20 +232,23 @@ export default function AdminDashboard() {
               <p className="text-sm text-muted-foreground">הגדרת עלויות ומחירונים</p>
             </div>
           </div>
-          <Button
-            onClick={handleSave}
-            disabled={saving}
-            className="gap-2 h-10 px-6 rounded-xl font-semibold shadow-lg shadow-primary/20 transition-all hover:shadow-xl hover:shadow-primary/30"
-          >
-            {saving ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : saved ? (
-              <Check className="w-4 h-4" />
-            ) : (
-              <Save className="w-4 h-4" />
-            )}
-            {saving ? "שומר..." : saved ? "נשמר!" : "שמור הגדרות"}
-          </Button>
+          <div className="flex items-center gap-3">
+            <NotificationBell />
+            <Button
+              onClick={handleSave}
+              disabled={saving}
+              className="gap-2 h-10 px-6 rounded-xl font-semibold shadow-lg shadow-primary/20 transition-all hover:shadow-xl hover:shadow-primary/30"
+            >
+              {saving ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : saved ? (
+                <Check className="w-4 h-4" />
+              ) : (
+                <Save className="w-4 h-4" />
+              )}
+              {saving ? "שומר..." : saved ? "נשמר!" : "שמור הגדרות"}
+            </Button>
+          </div>
         </div>
       </div>
 

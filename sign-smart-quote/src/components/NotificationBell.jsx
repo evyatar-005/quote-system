@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef } from "react";
-import { Bell, CheckCircle2, XCircle, Send, Loader2, X, Trash2 } from "lucide-react";
+import { Bell, CheckCircle2, XCircle, Send, Clock, Loader2, X, Trash2 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { issueQuoteToMorning } from "@/api/morningClient";
 import { toast } from "sonner";
 
-const TYPE_ICON = { approved: CheckCircle2, rejected: XCircle };
-const TYPE_COLOR = { approved: "text-emerald-400", rejected: "text-red-400" };
+// 'sent' = an agent sent a quote for review — lands on every admin, created
+// server-side by notifyAdminsOfSentQuote (src/services/notifyAdmins.js).
+const TYPE_ICON = { approved: CheckCircle2, rejected: XCircle, sent: Clock };
+const TYPE_COLOR = { approved: "text-emerald-400", rejected: "text-red-400", sent: "text-amber-400" };
 
 export default function NotificationBell() {
   const [open, setOpen] = useState(false);

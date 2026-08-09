@@ -214,7 +214,7 @@ CREATE TABLE IF NOT EXISTS notifications (
   recipient_username  TEXT NOT NULL,
   quote_id            INTEGER,
   quote_number        TEXT,
-  type                TEXT NOT NULL,     -- 'approved' | 'rejected'
+  type                TEXT NOT NULL,     -- 'approved' | 'rejected' | 'sent' (agent → admin, awaiting a discount decision)
   message             TEXT NOT NULL,
   is_read             INTEGER NOT NULL DEFAULT 0,
   created_at          TEXT DEFAULT CURRENT_TIMESTAMP

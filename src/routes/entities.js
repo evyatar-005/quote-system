@@ -7,6 +7,7 @@
 
 const { ensureMorningClient } = require('../services/morning/sync');
 const { resolveRecipe } = require('../services/production/resolveRecipe');
+const { notifyAdminsOfSentQuote } = require('../services/notifyAdmins');
 
 // Entities backed by a plain table (generic CRUD).
 const REGISTRY = {
@@ -208,7 +209,17 @@ module.exports = function registerEntities(app, db, deps) {
       }).catch(err => console.error(`[quoteCreate] Morning client registration failed for quote #${lastInsertRowid}:`, err.message));
     }
 
-    return quoteRowById(lastInsertRowid);
+    const created = quoteRowById(lastInsertRowid);
+
+    // A quote sent for review needs a sales manager to actually see it —
+    // never let a notification/email hiccup fail the quote save itself,
+    // same fire-and-forget convention as the Morning registration above.
+    if (created.status === 'sent') {
+      try { notifyAdminsOfSentQuote(db, created); }
+      catch (err) { console.error(`[quoteCreate] admin notify failed for quote #${lastInsertRowid}:`, err.message); }
+    }
+
+    return created;
   }
 
   function quoteRowById(id) {
