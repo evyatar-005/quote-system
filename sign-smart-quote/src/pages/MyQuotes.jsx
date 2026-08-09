@@ -134,7 +134,13 @@ export default function MyQuotes() {
     if (url) {
       setPaymentLinkPanel({ quoteNumber: q.quote_number, url });
     } else {
-      toast.success(`הזמנה ${q.quote_number} הונפקה במורנינג (ללא קישור תשלום — לא הוגדר פלאגין תשלום פעיל)`);
+      // _paymentLinkDebug (server-only diagnostic, see sync.js) says exactly
+      // why no link came back — surfaced here since there's no server access
+      // to check logs directly on the deploy machine.
+      toast.message(`הזמנה ${q.quote_number} הונפקה במורנינג — ללא קישור תשלום`, {
+        description: result?._paymentLinkDebug || "לא הוגדר פלאגין תשלום פעיל",
+        duration: 15000,
+      });
     }
   };
 
@@ -298,20 +304,26 @@ export default function MyQuotes() {
                       >
                         שכפל
                       </button>
-                      {alreadyOrder ? (
-                        <span className="text-xs px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-600">
+                      {alreadyOrder && (
+                        <span className="text-xs px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-600 whitespace-nowrap">
                           כבר הונפקה כהזמנה
                         </span>
-                      ) : (
-                        <button
-                          onClick={() => handleIssueOrder(q)}
-                          disabled={issuingIds.has(q.id)}
-                          className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50 transition-colors"
-                        >
-                          {issuingIds.has(q.id) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PackagePlus className="w-3.5 h-3.5" />}
-                          הנפק הזמנה
-                        </button>
                       )}
+                      {/* Always available, even for an already-issued order — an
+                          agent needs to re-pull the payment link to resend it,
+                          or the first issuance may have gone out without one
+                          (e.g. before the paymentPlugins field-name fix). Each
+                          click creates a new linked Morning document (the
+                          existing quote→order→invoice chaining behavior),
+                          it doesn't just "fetch" the prior one. */}
+                      <button
+                        onClick={() => handleIssueOrder(q)}
+                        disabled={issuingIds.has(q.id)}
+                        className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50 transition-colors"
+                      >
+                        {issuingIds.has(q.id) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PackagePlus className="w-3.5 h-3.5" />}
+                        {alreadyOrder ? "קישור תשלום" : "הנפק הזמנה"}
+                      </button>
                     </div>
                   </div>
                 </div>

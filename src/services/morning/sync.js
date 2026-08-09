@@ -156,17 +156,32 @@ async function createOrConvertDocument(db, { quoteId, targetType, actorUsername,
     // document_url regardless) into a payment-enabled link. Best-effort: if
     // the business has no active plugin for this document type, the document
     // still issues fine, just without a "pay now" link on it.
+    // paymentLinkDebug: surfaced to the frontend toast when no link results —
+    // this integration only runs on a remote deploy (C:\quote-system on a
+    // separate machine) with no server access from here, so this is the only
+    // way to see WHY a link didn't come back without remoting in.
+    let paymentLinkDebug = null;
     if (wantPaymentLink) {
       try {
         const info = await request(db, 'GET', `/documents/info?type=${targetType}`);
-        const plugin = (info.paymentPlugins || []).find(p => p.active);
-        if (plugin) body.paymentRequestData = { plugins: [{ id: plugin.id }], maxPayments: 1 };
+        const plugins = info.paymentPlugins || [];
+        const plugin = plugins.find(p => p.active);
+        if (plugin) {
+          body.paymentRequestData = { plugins: [{ id: plugin.id }], maxPayments: 1 };
+        } else {
+          paymentLinkDebug = `no active plugin among ${plugins.length} returned for type=${targetType} (statuses: ${plugins.map(p => `${p.description || p.type}:active=${p.active}`).join(', ') || 'none'})`;
+        }
       } catch (err) {
+        paymentLinkDebug = `plugin lookup failed: ${err.message}`;
         console.error(`[createOrConvertDocument] payment plugin lookup failed for quote #${quoteId}:`, err.message);
       }
     }
 
     const response = await request(db, 'POST', '/documents', body);
+    if (wantPaymentLink && !response.paymentUrl && !paymentLinkDebug) {
+      paymentLinkDebug = `paymentRequestData was sent but Morning returned no paymentUrl (document type ${targetType})`;
+    }
+    if (paymentLinkDebug) response._paymentLinkDebug = paymentLinkDebug;
 
     const documentUrl = response.url && (response.url.he || response.url.origin) || null;
     db.prepare(
