@@ -57,43 +57,60 @@ function linesOf(quote) {
   return out;
 }
 
-// One row per agent who has at least one approved quote in the period,
-// ordered highest-selling first — the sums an admin actually opens this
-// report to see.
+// One row per agent with at least one quote (any status) in the period,
+// ordered highest-selling first. quotesOffered = every quote created,
+// regardless of outcome; quotesClosed = the subset that reached 'approved'
+// (this app's "won" state) — revenue/totalBeforeVat only ever come from the
+// closed ones, same as before, so a pile of rejected quotes never inflates
+// the money figures, only the offered/closing-rate context around them.
 function fetchSalesByAgent(db, fromDate, toDate) {
   return db.prepare(`
     SELECT
       q.created_by AS username,
       COALESCE(u.full_name, q.created_by) AS agentName,
-      COUNT(*) AS quoteCount,
-      SUM(q.price_before_vat) AS totalBeforeVat,
-      SUM(q.price_with_vat) AS totalWithVat
+      COUNT(*) AS quotesOffered,
+      SUM(CASE WHEN q.status = 'approved' THEN 1 ELSE 0 END) AS quotesClosed,
+      SUM(CASE WHEN q.status = 'approved' THEN q.price_before_vat ELSE 0 END) AS totalBeforeVat,
+      SUM(CASE WHEN q.status = 'approved' THEN q.price_with_vat ELSE 0 END) AS totalWithVat
     FROM signshop_quotes q
     LEFT JOIN users u ON u.username = q.created_by
-    WHERE q.status = 'approved'
-      AND date(q.created_at) BETWEEN date(?) AND date(?)
+    WHERE date(q.created_at) BETWEEN date(?) AND date(?)
     GROUP BY q.created_by
     ORDER BY totalBeforeVat DESC
   `).all(fromDate, toDate);
 }
 
-// Per-product rollup across the same approved quotes, at the LINE level —
-// deliberately excludes VAT/shipping/installation, none of which live on a
-// line, so "which product earned most" isn't diluted by quote-level extras.
+// Per-product rollup across every quote (any status) in the period.
+// quotesOffered/quotesClosed count DISTINCT QUOTES that included this
+// product (a quote referencing the same product twice via extra-size rows
+// still counts once) — revenue/units stay LINE-level and closed-only, same
+// as before, deliberately excluding VAT/shipping/installation which don't
+// live on a line.
 function fetchSalesByProduct(db, fromDate, toDate) {
   const quotes = db.prepare(`
-    SELECT calculation_data FROM signshop_quotes
-    WHERE status = 'approved' AND date(created_at) BETWEEN date(?) AND date(?)
+    SELECT status, calculation_data FROM signshop_quotes
+    WHERE date(created_at) BETWEEN date(?) AND date(?)
   `).all(fromDate, toDate);
 
   const map = {};
+  const get = (type) => map[type] || (map[type] = { type, name: productLabel(type), revenue: 0, units: 0, quotesOffered: 0, quotesClosed: 0 });
+
   for (const q of quotes) {
+    const closed = q.status === 'approved';
+    const typesInThisQuote = new Set();
     for (const l of linesOf(q)) {
       const type = l.productType || '—';
-      if (!map[type]) map[type] = { type, name: productLabel(type), revenue: 0, units: 0, lines: 0 };
-      map[type].revenue += l.result?.sellingPriceAll || 0;
-      map[type].units += l.quantity || 1;
-      map[type].lines += 1;
+      typesInThisQuote.add(type);
+      if (closed) {
+        const p = get(type);
+        p.revenue += l.result?.sellingPriceAll || 0;
+        p.units += l.quantity || 1;
+      }
+    }
+    for (const type of typesInThisQuote) {
+      const p = get(type);
+      p.quotesOffered += 1;
+      if (closed) p.quotesClosed += 1;
     }
   }
   return Object.values(map).sort((a, b) => b.revenue - a.revenue);
@@ -103,29 +120,50 @@ function fmtMoney(n) {
   return `₪ ${Number(n || 0).toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+function closingRatePct(closed, offered) {
+  return offered > 0 ? `${Math.round((closed / offered) * 100)}%` : '—';
+}
+
 function agentSectionHtml(rows) {
   const max = Math.max(...rows.map((r) => r.totalBeforeVat || 0), 0);
-  const tableRows = rows.map((r) => tableRow([r.agentName, r.quoteCount, fmtMoney(r.totalBeforeVat), barCell(r.totalBeforeVat, max)]));
-  return tableShell(['סוכן', 'מס׳ הצעות', 'סה״כ (לפני מע״מ)', 'חלק יחסי'], tableRows, 'לא אושרו הצעות בתקופה זו.');
+  const tableRows = rows.map((r) => tableRow([
+    r.agentName, r.quotesOffered, r.quotesClosed, closingRatePct(r.quotesClosed, r.quotesOffered),
+    fmtMoney(r.totalBeforeVat), barCell(r.totalBeforeVat, max),
+  ]));
+  return tableShell(
+    ['סוכן', 'מס׳ הצעות', 'מס׳ סגירות', 'אחוז סגירה', 'סה״כ (לפני מע״מ)', 'חלק יחסי'],
+    tableRows,
+    'אין הצעות בתקופה זו.'
+  );
 }
 
 function productSectionHtml(rows) {
   const max = Math.max(...rows.map((r) => r.revenue || 0), 0);
-  const tableRows = rows.map((r) => tableRow([r.name, r.units, fmtMoney(r.revenue), barCell(r.revenue, max, '#2563eb')]));
-  return tableShell(['מוצר', 'יחידות', 'מחזור (לפני מע״מ)', 'חלק יחסי'], tableRows, 'אין נתוני מוצרים בתקופה זו.');
+  const tableRows = rows.map((r) => tableRow([
+    r.name, r.quotesOffered, r.quotesClosed, closingRatePct(r.quotesClosed, r.quotesOffered),
+    r.units, fmtMoney(r.revenue), barCell(r.revenue, max, '#2563eb'),
+  ]));
+  return tableShell(
+    ['מוצר', 'מס׳ הצעות', 'מס׳ סגירות', 'אחוז סגירה', 'יחידות (סגורות)', 'מחזור (לפני מע״מ)', 'חלק יחסי'],
+    tableRows,
+    'אין נתוני מוצרים בתקופה זו.'
+  );
 }
 
 function buildEmail(agentRows, productRows, frequencyLabel, fromDate, toDate) {
   const periodLabel = fromDate === toDate ? toDate : `${fromDate} — ${toDate}`;
-  const totalQuotes = agentRows.reduce((sum, r) => sum + r.quoteCount, 0);
+  const totalOffered = agentRows.reduce((sum, r) => sum + r.quotesOffered, 0);
+  const totalClosed = agentRows.reduce((sum, r) => sum + r.quotesClosed, 0);
   const totalBeforeVat = agentRows.reduce((sum, r) => sum + (r.totalBeforeVat || 0), 0);
-  const subject = `דוח מכירות ${frequencyLabel} — ${periodLabel} (${totalQuotes} הצעות)`;
+  const subject = `דוח מכירות ${frequencyLabel} — ${periodLabel} (${totalClosed}/${totalOffered} הצעות)`;
 
   const html = renderReportEmail({
     title: 'דוח מכירות',
     periodLabel: `${frequencyLabel} · ${periodLabel}`,
     kpis: [
-      { label: 'הצעות שאושרו', value: totalQuotes },
+      { label: 'הצעות שהוצאו', value: totalOffered },
+      { label: 'הצעות שנסגרו', value: totalClosed },
+      { label: 'אחוז סגירה', value: closingRatePct(totalClosed, totalOffered) },
       { label: 'סה״כ לפני מע״מ', value: fmtMoney(totalBeforeVat) },
     ],
     sections: [
@@ -136,9 +174,9 @@ function buildEmail(agentRows, productRows, frequencyLabel, fromDate, toDate) {
   });
 
   const text = `דוח מכירות ${frequencyLabel} — ${periodLabel}\n\n` +
-    `${totalQuotes} הצעות, סה"כ ${fmtMoney(totalBeforeVat)} לפני מע"מ\n\n` +
-    `לפי סוכן:\n` + agentRows.map((r) => `${r.agentName}: ${r.quoteCount} הצעות, ${fmtMoney(r.totalBeforeVat)}`).join('\n') +
-    `\n\nלפי מוצר:\n` + productRows.map((r) => `${r.name}: ${r.units} יחידות, ${fmtMoney(r.revenue)}`).join('\n');
+    `${totalClosed}/${totalOffered} הצעות נסגרו (${closingRatePct(totalClosed, totalOffered)}), סה"כ ${fmtMoney(totalBeforeVat)} לפני מע"מ\n\n` +
+    `לפי סוכן:\n` + agentRows.map((r) => `${r.agentName}: ${r.quotesClosed}/${r.quotesOffered} הצעות, ${fmtMoney(r.totalBeforeVat)}`).join('\n') +
+    `\n\nלפי מוצר:\n` + productRows.map((r) => `${r.name}: ${r.quotesClosed}/${r.quotesOffered} הצעות, ${r.units} יחידות, ${fmtMoney(r.revenue)}`).join('\n');
 
   return { subject, html, text };
 }
@@ -156,7 +194,7 @@ async function sendReport(db, cfg) {
   const { subject, html, text } = buildEmail(agentRows, productRows, FREQUENCY_LABELS[cfg.frequency] || cfg.frequency, fromDate, toDate);
   await mail.sendMail(db, { to: recipients.join(', '), subject, html, text });
   console.log(`[salesReport] sent sales for ${agentRows.length} agent(s)/${productRows.length} product(s), ${fromDate}..${toDate}, to ${recipients.join(', ')}`);
-  return { sent: true, count: agentRows.reduce((sum, r) => sum + r.quoteCount, 0) };
+  return { sent: true, count: agentRows.reduce((sum, r) => sum + r.quotesOffered, 0) };
 }
 
 module.exports = { REPORT_TYPE, sendReport, fetchSalesByAgent, fetchSalesByProduct };
