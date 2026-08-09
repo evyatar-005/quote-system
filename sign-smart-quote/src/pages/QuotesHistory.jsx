@@ -1,13 +1,11 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { Link } from "react-router-dom";
-import { ArrowRight, Search, FileText, Loader2, User, Calendar, TrendingUp, Trash2, CheckCircle2, XCircle, Settings, BarChart3, LogOut, ChevronDown, X, PackagePlus, Eye } from "lucide-react";
+import { ArrowRight, Search, Loader2, User, Calendar, TrendingUp, Trash2, CheckCircle2, XCircle, ChevronDown, X, PackagePlus, Eye } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import QuoteDetailsModal from "@/components/QuoteDetailsModal";
 import { convertMorningDocument, getLatestMorningDocuments } from "@/api/morningClient";
 import { toast } from "sonner";
-import { useAuth } from "@/lib/AuthContext";
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import printellaLogo from "@/assets/printella-logo.png";
 import { fmt, STATUS_LABELS, STATUS_COLORS, CATEGORY_LABELS, CATEGORY_COLORS, MORNING_TYPE_LABELS, toLocalDateStr } from "@/lib/quoteLabels";
 
@@ -20,7 +18,6 @@ const DATE_PRESETS = [
 ];
 
 export default function QuotesHistory() {
-  const { logout } = useAuth();
   const [quotes, setQuotes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -229,38 +226,13 @@ export default function QuotesHistory() {
               <span className="text-sm font-semibold text-foreground">{user.full_name}</span>
             )}
           </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-primary transition-colors px-3 py-1.5 rounded-lg border border-black hover:border-primary/40">
-                <Settings className="w-4 h-4" />
-                תפריט
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="bg-white border-black">
-              <DropdownMenuItem asChild>
-                <Link to="/quotes-archive" className="flex items-center gap-2 cursor-pointer">
-                  <FileText className="w-4 h-4" />
-                  היסטוריית הצעות כללית
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link to="/" className="flex items-center gap-2 cursor-pointer">
-                  <Settings className="w-4 h-4" />
-                  מחירים ועלויות
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link to="/costs" className="flex items-center gap-2 cursor-pointer">
-                  <BarChart3 className="w-4 h-4" />
-                  מחשבון
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={logout} className="flex items-center gap-2 cursor-pointer">
-                <LogOut className="w-4 h-4" />
-                התנתקות
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <Link
+            to="/"
+            className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-primary transition-colors px-3 py-1.5 rounded-lg border border-black hover:border-primary/40"
+          >
+            <ArrowRight className="w-4 h-4" />
+            חזרה לתפריט הראשי
+          </Link>
         </div>
       </div>
 
@@ -269,17 +241,19 @@ export default function QuotesHistory() {
         <div className="space-y-3">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-semibold text-slate-500 shrink-0">טווח זמן:</span>
-            {DATE_PRESETS.map(({ key, label }) => (
-              <button
-                key={key}
-                onClick={() => setDatePreset(key)}
-                className={`h-10 flex items-center justify-center px-4 text-sm rounded-lg border transition-colors ${
-                  datePreset === key ? "border-primary bg-primary/10 text-primary font-semibold" : "border-black text-slate-500 hover:border-slate-500"
-                }`}
+            <div className="relative">
+              <select
+                value={datePreset}
+                onChange={(e) => setDatePreset(e.target.value)}
+                dir="rtl"
+                className="h-10 rounded-lg border border-black bg-white pl-3 pr-8 text-sm text-slate-700 appearance-none"
               >
-                {label}
-              </button>
-            ))}
+                {DATE_PRESETS.map(({ key, label }) => (
+                  <option key={key} value={key}>{label}</option>
+                ))}
+              </select>
+              <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
             {agentStats.length > 0 && (
               <>
                 <span className="text-sm font-semibold text-slate-500 shrink-0 mr-2">סינון לפי סוכנים:</span>
