@@ -63,7 +63,7 @@ export default function ReportsSection() {
           description={def.description}
           icon={def.icon}
           periodNote={def.periodNote}
-          config={configs[def.type]}
+          schedules={configs[def.type] || []}
         />
       ))}
     </div>

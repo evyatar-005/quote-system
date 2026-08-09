@@ -1,29 +1,31 @@
-// Shared config/scheduling primitives for every scheduled email report (one
-// row per report_type in scheduled_reports). Each report module (e.g.
-// deliveryNotesReport.js, salesReport.js) only implements "what to fetch and
-// how to render it" — recipients, frequency/time resolution, and the actual
-// clock-driven dispatch all live here so adding a new report type never means
-// re-implementing scheduling.
+// Shared config/scheduling primitives for every scheduled email report. A
+// report_type (e.g. 'delivery_notes', 'sales') can have SEVERAL independent
+// schedules at once — a daily digest and a monthly rollup of the same report
+// are two separate rows in report_schedules, each with its own recipients/
+// frequency/time/enabled state. Each report module (deliveryNotesReport.js,
+// salesReport.js) only implements "what to fetch and how to render it" —
+// recipients, frequency/time resolution, and the clock-driven dispatch all
+// live here so adding a new report type never means re-implementing scheduling.
 
 function pad(n) { return String(n).padStart(2, '0'); }
 function dateToStr(d) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
 
-function getReportConfig(db, reportType) {
-  return db.prepare(`SELECT * FROM scheduled_reports WHERE report_type = ?`).get(reportType) || null;
+function listSchedules(db, reportType) {
+  return db.prepare(`SELECT * FROM report_schedules WHERE report_type = ? ORDER BY id`).all(reportType);
 }
 
-function listReportConfigs(db) {
-  return db.prepare(`SELECT * FROM scheduled_reports`).all();
+function listAllSchedules(db) {
+  return db.prepare(`SELECT * FROM report_schedules`).all();
 }
 
-function saveReportConfig(db, reportType, { enabled, recipients, frequency, time, weekday, dayOfMonth }) {
-  db.prepare(
-    `INSERT INTO scheduled_reports (report_type, enabled, recipients, frequency, time, weekday, day_of_month)
-     VALUES (@report_type, @enabled, @recipients, @frequency, @time, @weekday, @day_of_month)
-     ON CONFLICT(report_type) DO UPDATE SET enabled=excluded.enabled, recipients=excluded.recipients,
-       frequency=excluded.frequency, time=excluded.time, weekday=excluded.weekday,
-       day_of_month=excluded.day_of_month, updated_at=CURRENT_TIMESTAMP`
-  ).run({
+function getSchedule(db, id) {
+  return db.prepare(`SELECT * FROM report_schedules WHERE id = ?`).get(id) || null;
+}
+
+// id === null/undefined creates a new schedule; otherwise updates the
+// existing one (and must belong to reportType — checked by the route).
+function saveSchedule(db, id, reportType, { enabled, recipients, frequency, time, weekday, dayOfMonth }) {
+  const values = {
     report_type: reportType,
     enabled: enabled ? 1 : 0,
     recipients: recipients || null,
@@ -31,8 +33,24 @@ function saveReportConfig(db, reportType, { enabled, recipients, frequency, time
     time: time || '17:00',
     weekday: weekday ?? 0,
     day_of_month: dayOfMonth ?? 1,
-  });
-  return getReportConfig(db, reportType);
+  };
+  if (id) {
+    db.prepare(
+      `UPDATE report_schedules SET enabled=@enabled, recipients=@recipients, frequency=@frequency,
+         time=@time, weekday=@weekday, day_of_month=@day_of_month, updated_at=CURRENT_TIMESTAMP
+       WHERE id=@id AND report_type=@report_type`
+    ).run({ ...values, id });
+    return getSchedule(db, id);
+  }
+  const { lastInsertRowid } = db.prepare(
+    `INSERT INTO report_schedules (report_type, enabled, recipients, frequency, time, weekday, day_of_month)
+     VALUES (@report_type, @enabled, @recipients, @frequency, @time, @weekday, @day_of_month)`
+  ).run(values);
+  return getSchedule(db, lastInsertRowid);
+}
+
+function deleteSchedule(db, id, reportType) {
+  db.prepare(`DELETE FROM report_schedules WHERE id = ? AND report_type = ?`).run(id, reportType);
 }
 
 // Comma/newline/semicolon-separated list, as typed into the admin UI's
@@ -73,42 +91,72 @@ function isScheduledDay(now, frequency, weekday, dayOfMonth) {
   return true; // daily
 }
 
-// One shared minute-tick drives every registered report — no per-report
-// setInterval, and no node-cron dependency (a plain clock check is simple,
-// restart-safe: a missed run just doesn't happen, which is fine for an
-// operational report, and doesn't need a new package for "at a fixed time,
-// on some days"). `reportRunners` maps report_type -> async (db, cfg) => {}.
+// Runs `runner(db, schedule)` and writes the outcome to last_sent_at/
+// last_run_status/last_run_error — the ONE code path both the automatic
+// scheduler tick and the manual "שלח עכשיו לבדיקה" route go through, so the
+// two callers can never leave this state out of sync with each other.
+// last_sent_at only advances on an actual send (result.sent === true) — "no
+// recipients configured" is a real, visible error state, not a silent no-op.
+async function runAndRecord(db, schedule, runner) {
+  try {
+    const result = await runner(db, schedule);
+    if (result.sent) {
+      db.prepare(
+        `UPDATE report_schedules SET last_sent_at=CURRENT_TIMESTAMP, last_run_status='success', last_run_error=NULL WHERE id=?`
+      ).run(schedule.id);
+    } else {
+      db.prepare(
+        `UPDATE report_schedules SET last_run_status='error', last_run_error='אין נמענים מוגדרים' WHERE id=?`
+      ).run(schedule.id);
+    }
+    return result;
+  } catch (err) {
+    db.prepare(
+      `UPDATE report_schedules SET last_run_status='error', last_run_error=? WHERE id=?`
+    ).run(err.message, schedule.id);
+    throw err;
+  }
+}
+
+// One shared minute-tick drives every schedule of every report — no
+// per-schedule setInterval, and no node-cron dependency (a plain clock check
+// is simple, restart-safe: a missed run just doesn't happen, which is fine
+// for an operational report). `reportRunners` maps report_type -> async
+// (db, schedule) => {sent, count?}.
 function startReportScheduler(db, reportRunners) {
-  const lastSentKeys = {};
+  const lastSentKeys = {}; // schedule id -> `${date}` already sent
   setInterval(() => {
     const now = new Date();
-    for (const cfg of listReportConfigs(db)) {
-      if (!cfg.enabled) continue;
-      const runner = reportRunners[cfg.report_type];
+    for (const schedule of listAllSchedules(db)) {
+      if (!schedule.enabled) continue;
+      const runner = reportRunners[schedule.report_type];
       if (!runner) continue;
 
-      const [hour, minute] = (cfg.time || '17:00').split(':').map(Number);
+      const [hour, minute] = (schedule.time || '17:00').split(':').map(Number);
       if (now.getHours() !== hour || now.getMinutes() !== minute) continue;
-      if (!isScheduledDay(now, cfg.frequency, cfg.weekday, cfg.day_of_month)) continue;
+      if (!isScheduledDay(now, schedule.frequency, schedule.weekday, schedule.day_of_month)) continue;
 
-      // Keyed by date (not just report_type) so a restart later the same day
-      // can't re-trigger, but a genuinely new day/period always can.
-      const key = `${cfg.report_type}:${dateToStr(now)}`;
-      if (lastSentKeys[cfg.report_type] === key) continue;
-      lastSentKeys[cfg.report_type] = key;
+      // Keyed by schedule id + date so a restart later the same day can't
+      // re-trigger, but a genuinely new day/period always can.
+      const key = dateToStr(now);
+      if (lastSentKeys[schedule.id] === key) continue;
+      lastSentKeys[schedule.id] = key;
 
-      runner(db, cfg).catch((err) => {
-        console.error(`[scheduledReports] ${cfg.report_type} failed:`, err.message);
+      runAndRecord(db, schedule, runner).catch((err) => {
+        console.error(`[scheduledReports] schedule #${schedule.id} (${schedule.report_type}) failed:`, err.message);
       });
     }
   }, 60 * 1000);
 }
 
 module.exports = {
-  getReportConfig,
-  listReportConfigs,
-  saveReportConfig,
+  listSchedules,
+  listAllSchedules,
+  getSchedule,
+  saveSchedule,
+  deleteSchedule,
   parseRecipients,
   computeDateRange,
+  runAndRecord,
   startReportScheduler,
 };

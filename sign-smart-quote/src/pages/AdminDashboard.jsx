@@ -1,13 +1,12 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { Button } from "@/components/ui/button";
-import { Save, Settings2, Loader2, Check } from "lucide-react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Save, Settings2, Loader2, Check, LogOut, ChevronDown } from "lucide-react";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Database, Calculator, Mail } from "lucide-react";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
-import { BarChart3, Menu } from "lucide-react";
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { BarChart3 } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 import MaterialCostsSection from "../components/admin/MaterialCostsSection";
 import LaborCostsSection from "../components/admin/LaborCostsSection";
@@ -33,11 +32,26 @@ import MondaySettingsSection from "../components/admin/MondaySettingsSection";
 import SmtpSettingsSection from "../components/admin/SmtpSettingsSection";
 import ReportsSection from "../components/admin/ReportsSection";
 import AboutSection from "../components/admin/AboutSection";
-import LogoutButton from "@/components/LogoutButton";
 import CollapsibleSection from "../components/admin/CollapsibleSection";
 import UsersManagementSection from "../components/admin/UsersManagementSection";
 import { ShieldAlert, Users, Receipt, Info, MessageCircle, LayoutGrid, Scissors, PenTool, PieChart } from "lucide-react";
 
+// Formerly the horizontal TabsList atop the content area — now selected from
+// the "הגדרות" submenu in the sidebar instead, so this is just the list of
+// (value, label, icon, brand hue) driving both the submenu rows and which
+// TabsContent panel is active.
+const SETTINGS_TABS = [
+  { value: "selling-prices", label: "קביעת מחירי מכירה", icon: Calculator, activeClass: "text-brand-gold" },
+  { value: "costs", label: "קביעת עלויות", icon: Database, activeClass: "text-brand-teal" },
+  { value: "minimum-prices", label: "מחירי מינימום", icon: ShieldAlert, activeClass: "text-brand-pink" },
+  { value: "users", label: "משתמשים", icon: Users, activeClass: "text-brand-purple" },
+  { value: "morning", label: "מורנינג", icon: Receipt, activeClass: "text-brand-green" },
+  { value: "greenapi", label: "GreenAPI", icon: MessageCircle, activeClass: "text-emerald-600" },
+  { value: "monday", label: "Monday", icon: LayoutGrid, activeClass: "text-orange-600" },
+  { value: "smtp", label: "SMTP", icon: Mail, activeClass: "text-sky-600" },
+  { value: "reports", label: "דוחות", icon: PieChart, activeClass: "text-indigo-600" },
+  { value: "about", label: "אודות", icon: Info, activeClass: "text-slate-600" },
+];
 
 const DEFAULT_CONFIG = {
   config_name: "default",
@@ -146,6 +160,7 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [activeTab, setActiveTab] = useState("selling-prices");
 
   useEffect(() => {
     loadConfig();
@@ -216,39 +231,6 @@ export default function AdminDashboard() {
               <p className="text-sm text-muted-foreground">הגדרת עלויות ומחירונים</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            {/* Two distinct screens: /quotes is the review queue (approve/reject/
-                convert), /quotes-archive is the read-only general history. */}
-            <Link to="/quotes">
-              <Button variant="outline" className="gap-2 h-10 px-4 rounded-xl">
-                הצעות לבדיקה
-              </Button>
-            </Link>
-            <Link to="/quotes-archive">
-              <Button variant="outline" className="gap-2 h-10 px-4 rounded-xl">
-                היסטוריית הצעות כללית
-              </Button>
-            </Link>
-            <Link to="/cutting">
-              <Button variant="outline" className="gap-2 h-10 px-4 rounded-xl">
-                <Scissors className="w-4 h-4" />
-                ניצולת לוחות
-              </Button>
-            </Link>
-            <Link to="/cutfile">
-              <Button variant="outline" className="gap-2 h-10 px-4 rounded-xl">
-                <PenTool className="w-4 h-4" />
-                קו חיתוך אוטומטי
-              </Button>
-            </Link>
-            <Link to="/costs">
-              <Button variant="outline" className="gap-2 h-10 px-4 rounded-xl">
-                <BarChart3 className="w-4 h-4" />
-                ממשק סוכן מכירות
-              </Button>
-            </Link>
-            <LogoutButton />
-          </div>
           <Button
             onClick={handleSave}
             disabled={saving}
@@ -266,45 +248,28 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* Content */}
-      <div className="w-full mx-auto px-4 sm:px-8 py-8">
-        <Tabs defaultValue="selling-prices" dir="rtl">
-          {/* Each tab gets its own muted brand hue (from the Printela palette)
-              so the four domains — pricing / costs / minimums / users — read
-              as visually distinct areas, not just interchangeable tabs. */}
-          <TabsList className="grid w-full grid-cols-4 sm:grid-cols-10 max-w-6xl mb-6">
-            <TabsTrigger value="selling-prices" className="gap-2 data-[state=active]:text-brand-gold">
-              <Calculator className="w-4 h-4" /> קביעת מחירי מכירה
-            </TabsTrigger>
-            <TabsTrigger value="costs" className="gap-2 data-[state=active]:text-brand-teal">
-              <Database className="w-4 h-4" /> קביעת עלויות
-            </TabsTrigger>
-            <TabsTrigger value="minimum-prices" className="gap-2 data-[state=active]:text-brand-pink">
-              <ShieldAlert className="w-4 h-4" /> מחירי מינימום
-            </TabsTrigger>
-            <TabsTrigger value="users" className="gap-2 data-[state=active]:text-brand-purple">
-              <Users className="w-4 h-4" /> משתמשים
-            </TabsTrigger>
-            <TabsTrigger value="morning" className="gap-2 data-[state=active]:text-brand-green">
-              <Receipt className="w-4 h-4" /> מורנינג
-            </TabsTrigger>
-            <TabsTrigger value="greenapi" className="gap-2 data-[state=active]:text-emerald-600">
-              <MessageCircle className="w-4 h-4" /> GreenAPI
-            </TabsTrigger>
-            <TabsTrigger value="monday" className="gap-2 data-[state=active]:text-orange-600">
-              <LayoutGrid className="w-4 h-4" /> Monday
-            </TabsTrigger>
-            <TabsTrigger value="smtp" className="gap-2 data-[state=active]:text-sky-600">
-              <Mail className="w-4 h-4" /> SMTP
-            </TabsTrigger>
-            <TabsTrigger value="reports" className="gap-2 data-[state=active]:text-indigo-600">
-              <PieChart className="w-4 h-4" /> דוחות
-            </TabsTrigger>
-            <TabsTrigger value="about" className="gap-2 data-[state=active]:text-slate-600">
-              <Info className="w-4 h-4" /> אודות
-            </TabsTrigger>
-          </TabsList>
+      {/* Content — nav sidebar sits first in DOM order, which under dir="rtl"
+          places it on the screen's right side (RTL's "start" edge) without
+          needing an explicit order/reverse class. */}
+      <div className="w-full mx-auto px-4 sm:px-8 py-8 flex flex-col lg:flex-row gap-8 items-start">
+        <aside className="w-full lg:w-56 shrink-0 lg:sticky lg:top-24 space-y-6">
+          <NavGroup title="מכירות">
+            <NavItem to="/quotes" label="הצעות לבדיקה" />
+            <NavItem to="/quotes-archive" label="אנליטיקה" />
+          </NavGroup>
+          <NavGroup title="תפעול">
+            <NavItem to="/cutting" icon={Scissors} label="ניצולת לוחות" />
+            <NavItem to="/cutfile" icon={PenTool} label="קו חיתוך אוטומטי" />
+          </NavGroup>
+          <NavGroup title="ממשקים שונים">
+            <NavItem to="/costs" icon={BarChart3} label="ממשק סוכן מכירות" />
+            <SettingsNavItem activeTab={activeTab} onSelect={setActiveTab} />
+            <LogoutNavItem />
+          </NavGroup>
+        </aside>
 
+        <div className="flex-1 min-w-0 w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} dir="rtl">
           <TabsContent value="selling-prices" className="space-y-6 mt-0">
             <SalesPriceTable config={config} onConfigChange={handleFieldChange} />
           </TabsContent>
@@ -373,6 +338,7 @@ export default function AdminDashboard() {
             </CollapsibleSection>
           </TabsContent>
         </Tabs>
+        </div>
       </div>
 
       {/* Bottom save bar on mobile */}
@@ -393,5 +359,83 @@ export default function AdminDashboard() {
         </Button>
       </div>
     </div>
+  );
+}
+
+// One labelled group of nav items in the sidebar — a subtitle plus its rows,
+// with no visual chrome of its own so the groups read as a single flowing
+// list broken up by section, not as separate boxes.
+function NavGroup({ title, children }) {
+  return (
+    <div className="space-y-1.5">
+      <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider px-2">{title}</h3>
+      <div className="space-y-1">{children}</div>
+    </div>
+  );
+}
+
+function NavItem({ to, icon: Icon, label }) {
+  return (
+    <Link to={to}>
+      <Button variant="ghost" className="w-full justify-start gap-2 h-10 px-3 rounded-xl font-normal">
+        {Icon && <Icon className="w-4 h-4" />}
+        {label}
+      </Button>
+    </Link>
+  );
+}
+
+// The former horizontal TabsList, now a collapsible submenu in the sidebar —
+// closed by default so the settings sub-items don't dominate the group;
+// opens to reveal every SETTINGS_TABS row, each selecting that tab's panel
+// via the same activeTab state the Tabs component is controlled by.
+function SettingsNavItem({ activeTab, onSelect }) {
+  const [open, setOpen] = useState(false);
+  const active = SETTINGS_TABS.find((t) => t.value === activeTab);
+
+  return (
+    <div>
+      <Button
+        variant="ghost"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full justify-start gap-2 h-10 px-3 rounded-xl font-normal"
+      >
+        <Settings2 className="w-4 h-4" />
+        <span className="flex-1 text-right">הגדרות</span>
+        <ChevronDown className={`w-4 h-4 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
+      </Button>
+      {open && (
+        <div className="mt-1 mr-3 pr-3 border-r border-slate-200 space-y-1">
+          {SETTINGS_TABS.map(({ value, label, icon: Icon, activeClass }) => (
+            <Button
+              key={value}
+              variant="ghost"
+              onClick={() => onSelect(value)}
+              className={`w-full justify-start gap-2 h-9 px-3 rounded-xl font-normal text-sm ${
+                value === active?.value ? `${activeClass} font-semibold` : ""
+              }`}
+            >
+              <Icon className="w-3.5 h-3.5" />
+              {label}
+            </Button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Styled to match NavItem exactly (icon + label, full width) rather than
+// reusing LogoutButton — that component also shows the signed-in user's
+// name next to the button, which wraps awkwardly in the sidebar's narrow
+// column at desktop widths (its "hidden sm:inline" is keyed off viewport
+// width, not this column's width).
+function LogoutNavItem() {
+  const { logout } = useAuth();
+  return (
+    <Button variant="ghost" onClick={logout} className="w-full justify-start gap-2 h-10 px-3 rounded-xl font-normal">
+      <LogOut className="w-4 h-4" />
+      התנתקות
+    </Button>
   );
 }

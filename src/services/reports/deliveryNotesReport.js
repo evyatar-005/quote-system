@@ -4,7 +4,8 @@
 
 const { request } = require('../morning/client');
 const mail = require('../mail');
-const { getReportConfig, parseRecipients, computeDateRange } = require('./scheduledReports');
+const { parseRecipients, computeDateRange } = require('./scheduledReports');
+const { renderReportEmail, tableShell, tableRow, barCell } = require('./emailTemplate');
 
 const REPORT_TYPE = 'delivery_notes';
 const DELIVERY_NOTE_TYPE = 200;
@@ -40,32 +41,33 @@ async function fetchClosedDeliveryNotes(db, fromDate, toDate) {
   return items;
 }
 
+function fmt(n) {
+  return `₪ ${Number(n || 0).toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 function buildEmail(items, frequencyLabel, fromDate, toDate) {
   const total = items.reduce((sum, it) => sum + it.amount, 0);
-  const fmt = (n) => `₪ ${Number(n).toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const periodLabel = fromDate === toDate ? toDate : `${fromDate} — ${toDate}`;
   const subject = `דוח תעודות משלוח ${frequencyLabel} — ${periodLabel} (${items.length})`;
 
-  const rows = items
-    .map((it) => `<tr><td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;">${it.number}</td><td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;">${it.clientName}</td><td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;">${fmt(it.amount)}</td></tr>`)
-    .join('');
+  const max = Math.max(...items.map((it) => it.amount || 0), 0);
+  const rows = items.map((it) => tableRow([it.number, it.clientName, fmt(it.amount), barCell(it.amount, max)]));
+  const tableHtml = tableShell(
+    ['מס׳ תעודה', 'לקוח', 'סכום (לפני מע״מ)', 'חלק יחסי'],
+    rows,
+    'לא נסגרו תעודות משלוח בתקופה זו.'
+  );
 
-  const html = `
-    <div dir="rtl" style="font-family: Arial, sans-serif; font-size: 15px; color: #1e293b;">
-      <p>שלום,</p>
-      <p>בתקופה ${periodLabel} נסגרו <strong>${items.length}</strong> תעודות משלוח, בסך כולל (לפני מע״מ) של <strong>${fmt(total)}</strong>.</p>
-      ${items.length ? `
-      <table style="border-collapse:collapse; margin-top:12px;">
-        <thead>
-          <tr style="background:#f8fafc;">
-            <th style="padding:6px 10px; text-align:right;">מס׳ תעודה</th>
-            <th style="padding:6px 10px; text-align:right;">לקוח</th>
-            <th style="padding:6px 10px; text-align:right;">סכום (לפני מע״מ)</th>
-          </tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>` : '<p>לא נסגרו תעודות משלוח בתקופה זו.</p>'}
-    </div>`;
+  const html = renderReportEmail({
+    title: 'דוח תעודות משלוח',
+    periodLabel: `${frequencyLabel} · ${periodLabel}`,
+    kpis: [
+      { label: 'תעודות שנסגרו', value: items.length },
+      { label: 'סה״כ לפני מע״מ', value: fmt(total) },
+    ],
+    sections: [{ heading: 'לפי תעודה', tableHtml }],
+    footerNote: 'נשלח אוטומטית ממערכת הצעות מחיר.',
+  });
 
   const text = `דוח תעודות משלוח ${frequencyLabel} — ${periodLabel}\n\n` +
     `${items.length} תעודות, סה"כ ${fmt(total)} לפני מע"מ\n\n` +
@@ -92,12 +94,4 @@ async function sendReport(db, cfg) {
   return { sent: true, count: items.length };
 }
 
-// Convenience for the "send now" endpoint — loads the current saved config
-// itself so the caller doesn't need to.
-async function sendNow(db) {
-  const cfg = getReportConfig(db, REPORT_TYPE);
-  if (!cfg) return { sent: false };
-  return sendReport(db, cfg);
-}
-
-module.exports = { REPORT_TYPE, sendReport, sendNow, fetchClosedDeliveryNotes };
+module.exports = { REPORT_TYPE, sendReport, fetchClosedDeliveryNotes };

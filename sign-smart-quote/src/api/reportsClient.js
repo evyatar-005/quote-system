@@ -1,4 +1,5 @@
 // Scheduled email reports (admin) — talks to our own backend (src/routes/reports.js).
+// A report_type can have several independent schedules at once.
 
 const TOKEN_KEY = 'auth_token';
 
@@ -50,17 +51,34 @@ async function request(path, { method = 'GET', body } = {}) {
   }
 }
 
-/** { [reportType]: { enabled, recipients, frequency, time, weekday, day_of_month } } for every known report. Throws on failure. */
+/** { [reportType]: Schedule[] } for every known report. Throws on failure. */
 export function getReportsConfig() {
   return request('/api/reports/config');
 }
 
-/** Saves one report type's schedule/recipients. Throws on failure. */
-export function saveReportConfig(reportType, config) {
-  return request(`/api/reports/config/${reportType}`, { method: 'PUT', body: config });
+/** Creates a new schedule for this report type. Throws on failure. */
+export function createSchedule(reportType, schedule) {
+  return request(`/api/reports/config/${reportType}`, { method: 'POST', body: schedule });
 }
 
-/** Sends this report right now using its currently saved config. Throws on failure. */
-export function sendReportTest(reportType) {
-  return request(`/api/reports/test/${reportType}`, { method: 'POST' });
+/** Creates a schedule, or updates it if `schedule.id` is already set. Throws on failure. */
+export function saveReportConfig(reportType, schedule) {
+  return schedule.id
+    ? updateSchedule(reportType, schedule.id, schedule)
+    : createSchedule(reportType, schedule);
+}
+
+/** Updates an existing schedule. Throws on failure. */
+export function updateSchedule(reportType, id, schedule) {
+  return request(`/api/reports/config/${reportType}/${id}`, { method: 'PUT', body: schedule });
+}
+
+/** Deletes a schedule. Throws on failure. */
+export function deleteSchedule(reportType, id) {
+  return request(`/api/reports/config/${reportType}/${id}`, { method: 'DELETE' });
+}
+
+/** Sends this schedule's report right now, using its currently saved config. Throws on failure. */
+export function sendReportTest(reportType, id) {
+  return request(`/api/reports/test/${reportType}/${id}`, { method: 'POST' });
 }

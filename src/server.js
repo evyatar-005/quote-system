@@ -35,6 +35,37 @@ console.log('[db] Connected to', DB_PATH);
 // Ensure SignCalc Pro tables exist (all IF NOT EXISTS — safe on a live DB) and
 // seed placeholders only when empty. Never wipes existing data.
 db.exec(fs.readFileSync(path.join(__dirname, 'db/schema.sql'), 'utf8'));
+
+// report_schedules was created (via schema.sql's IF NOT EXISTS) before these
+// columns existed on any DB that already booted once during this feature's
+// development — bolt them on the same defensive way as every other
+// incrementally-added column in this file.
+for (const col of [
+  'ALTER TABLE report_schedules ADD COLUMN last_sent_at TEXT',
+  'ALTER TABLE report_schedules ADD COLUMN last_run_status TEXT',
+  'ALTER TABLE report_schedules ADD COLUMN last_run_error TEXT',
+]) {
+  try { db.exec(col); } catch (_) {}
+}
+
+// One-time migration: v1 of scheduled reports (scheduled_reports, one row per
+// report_type) → v2 (report_schedules, many rows per report_type). Only runs
+// if there's old data AND nothing has been migrated yet, so it's safe to run
+// on every boot without duplicating rows.
+try {
+  const oldRows = db.prepare(`SELECT * FROM scheduled_reports`).all();
+  const alreadyMigrated = db.prepare(`SELECT COUNT(*) c FROM report_schedules`).get().c > 0;
+  if (oldRows.length && !alreadyMigrated) {
+    const insert = db.prepare(
+      `INSERT INTO report_schedules (report_type, enabled, recipients, frequency, time, weekday, day_of_month)
+       VALUES (@report_type, @enabled, @recipients, @frequency, @time, @weekday, @day_of_month)`
+    );
+    for (const row of oldRows) insert.run(row);
+    console.log(`[db] migrated ${oldRows.length} scheduled_reports row(s) into report_schedules`);
+  }
+} catch (err) {
+  console.error('[db] scheduled_reports -> report_schedules migration failed:', err.message);
+}
 seedSignshop(db);
 seedProduction(db);
 

@@ -1,9 +1,11 @@
-// Scheduled email reports (admin) — config CRUD + on-demand "send now" per
-// report type. The scheduler itself (src/services/reports/scheduledReports.js
-// startReportScheduler) is wired up once in server.js, not here; this file is
-// only the HTTP surface for viewing/editing config and triggering a test send.
+// Scheduled email reports (admin) — config CRUD (one report_type can have
+// several independent schedules) + on-demand "send now" per schedule. The
+// scheduler itself (src/services/reports/scheduledReports.js
+// startReportScheduler) is wired up once in server.js, not here; this file
+// is only the HTTP surface for viewing/editing schedules and triggering a
+// test send.
 
-const { listReportConfigs, saveReportConfig } = require('../services/reports/scheduledReports');
+const { listSchedules, getSchedule, saveSchedule, deleteSchedule, runAndRecord } = require('../services/reports/scheduledReports');
 const deliveryNotesReport = require('../services/reports/deliveryNotesReport');
 const salesReport = require('../services/reports/salesReport');
 
@@ -19,51 +21,63 @@ module.exports = function registerReports(app, db, deps) {
   const { requireAdmin } = deps;
 
   // ── GET /api/reports/config ────────────────────────────────────────────────
-  // One row per known report type, defaults filled in for types never saved yet.
+  // { [reportType]: Schedule[] } — one array per known report type, empty if
+  // none configured yet.
   app.get('/api/reports/config', requireAdmin, (req, res) => {
-    const saved = Object.fromEntries(listReportConfigs(db).map((r) => [r.report_type, r]));
     const result = {};
-    for (const type of Object.keys(REPORT_RUNNERS)) {
-      const row = saved[type];
-      result[type] = {
-        enabled: !!(row && row.enabled),
-        recipients: (row && row.recipients) || '',
-        frequency: (row && row.frequency) || 'daily',
-        time: (row && row.time) || '17:00',
-        weekday: row && row.weekday != null ? row.weekday : 0,
-        day_of_month: row && row.day_of_month != null ? row.day_of_month : 1,
-      };
-    }
+    for (const type of Object.keys(REPORT_RUNNERS)) result[type] = listSchedules(db, type);
     res.json(result);
   });
 
-  // ── PUT /api/reports/config/:type ──────────────────────────────────────────
-  app.put('/api/reports/config/:type', requireAdmin, (req, res) => {
+  // ── POST /api/reports/config/:type ─────────────────────────────────────────
+  // Creates a new schedule for this report type.
+  app.post('/api/reports/config/:type', requireAdmin, (req, res) => {
     const { type } = req.params;
     if (!REPORT_RUNNERS[type]) return res.status(404).json({ error: `unknown report type "${type}"` });
     const { enabled, recipients, frequency, time, weekday, day_of_month } = req.body || {};
-    const row = saveReportConfig(db, type, {
-      enabled, recipients, frequency, time, weekday, dayOfMonth: day_of_month,
-    });
-    console.log(`[PUT /api/reports/config/${type}] enabled=${!!row.enabled} frequency=${row.frequency}`);
+    const schedule = saveSchedule(db, null, type, { enabled, recipients, frequency, time, weekday, dayOfMonth: day_of_month });
+    console.log(`[POST /api/reports/config/${type}] created schedule #${schedule.id}`);
+    res.status(201).json(schedule);
+  });
+
+  // ── PUT /api/reports/config/:type/:id ──────────────────────────────────────
+  app.put('/api/reports/config/:type/:id', requireAdmin, (req, res) => {
+    const { type, id } = req.params;
+    if (!REPORT_RUNNERS[type]) return res.status(404).json({ error: `unknown report type "${type}"` });
+    const { enabled, recipients, frequency, time, weekday, day_of_month } = req.body || {};
+    const schedule = saveSchedule(db, Number(id), type, { enabled, recipients, frequency, time, weekday, dayOfMonth: day_of_month });
+    if (!schedule) return res.status(404).json({ error: 'schedule not found' });
+    console.log(`[PUT /api/reports/config/${type}/${id}] enabled=${!!schedule.enabled} frequency=${schedule.frequency}`);
+    res.json(schedule);
+  });
+
+  // ── DELETE /api/reports/config/:type/:id ───────────────────────────────────
+  app.delete('/api/reports/config/:type/:id', requireAdmin, (req, res) => {
+    const { type, id } = req.params;
+    if (!REPORT_RUNNERS[type]) return res.status(404).json({ error: `unknown report type "${type}"` });
+    deleteSchedule(db, Number(id), type);
     res.json({ ok: true });
   });
 
-  // ── POST /api/reports/test/:type ───────────────────────────────────────────
-  // Sends using whatever's currently saved for this type — save first, then
-  // test, same two-step flow as the SMTP test-send button.
-  app.post('/api/reports/test/:type', requireAdmin, async (req, res) => {
-    const { type } = req.params;
+  // ── POST /api/reports/test/:type/:id ───────────────────────────────────────
+  // Sends using whatever's currently saved for this schedule — save first,
+  // then test, same two-step flow as the SMTP test-send button. Goes through
+  // runAndRecord so a manual test updates last_sent_at/last_run_status the
+  // same way an automatic scheduled run would.
+  app.post('/api/reports/test/:type/:id', requireAdmin, async (req, res) => {
+    const { type, id } = req.params;
     const runner = REPORT_RUNNERS[type];
     if (!runner) return res.status(404).json({ error: `unknown report type "${type}"` });
+    const schedule = getSchedule(db, Number(id));
+    if (!schedule || schedule.report_type !== type) return res.status(404).json({ error: 'schedule not found' });
     try {
-      const result = await runner.sendNow(db);
+      const result = await runAndRecord(db, schedule, runner.sendReport);
       if (!result.sent) {
         return res.status(400).json({ error: 'לא הוגדרו נמענים לדוח זה' });
       }
       res.json({ ok: true, count: result.count });
     } catch (err) {
-      console.error(`[POST /api/reports/test/${type}] failed:`, err.message);
+      console.error(`[POST /api/reports/test/${type}/${id}] failed:`, err.message);
       res.status(400).json({ error: err.message });
     }
   });

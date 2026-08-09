@@ -1,69 +1,35 @@
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
-import { Loader2, Save, Send, ChevronDown } from "lucide-react";
-import { toast } from "sonner";
-import { saveReportConfig, sendReportTest } from "@/api/reportsClient";
-import RecipientsEditor, { parseRecipients } from "./RecipientsEditor";
-import ScheduleFields from "./ScheduleFields";
+import { ChevronDown, Plus } from "lucide-react";
+import ScheduleEditor from "./ScheduleEditor";
 
-// One card = one report type's full config (enabled/recipients/schedule) +
-// save/test actions. Generic on purpose — delivery-notes and sales (and any
-// future report) all share the exact same shape, so this is the only place
-// that shape's UI is implemented.
-export default function ReportCard({ reportType, icon, title, description, periodNote, config }) {
-  const [open, setOpen] = useState(!!config.enabled);
-  const [enabled, setEnabled] = useState(!!config.enabled);
-  const [recipients, setRecipients] = useState(parseRecipients(config.recipients));
-  const [frequency, setFrequency] = useState(config.frequency);
-  const [time, setTime] = useState(config.time);
-  const [weekday, setWeekday] = useState(config.weekday);
-  const [dayOfMonth, setDayOfMonth] = useState(config.day_of_month);
-  const [saving, setSaving] = useState(false);
-  const [testing, setTesting] = useState(false);
-  const [status, setStatus] = useState(null); // { ok, message }
+// One card = one report type, holding however many independent schedules it
+// has (a daily digest AND a monthly rollup of the same report are two
+// separate ScheduleEditor rows, not one config overwriting the other — see
+// the plan this replaced). Generic on purpose — delivery-notes, sales, and
+// any future report type all share this exact shape.
+export default function ReportCard({ reportType, icon, title, description, periodNote, schedules: initialSchedules }) {
+  const [open, setOpen] = useState(initialSchedules.length > 0);
+  const [schedules, setSchedules] = useState(initialSchedules);
+  // Local-only placeholder ids for not-yet-saved rows, so React has a stable
+  // key before the server assigns a real one.
+  const [newRowKeys, setNewRowKeys] = useState([]);
 
-  const scheduleFieldChange = (patch) => {
-    if ('frequency' in patch) setFrequency(patch.frequency);
-    if ('time' in patch) setTime(patch.time);
-    if ('weekday' in patch) setWeekday(patch.weekday);
-    if ('dayOfMonth' in patch) setDayOfMonth(patch.dayOfMonth);
+  const activeCount = schedules.filter((s) => s.enabled).length;
+
+  const addSchedule = () => setNewRowKeys((prev) => [...prev, `new-${Date.now()}-${prev.length}`]);
+
+  const handleSaved = (newRowKey, saved) => {
+    if (newRowKey) setNewRowKeys((prev) => prev.filter((k) => k !== newRowKey));
+    setSchedules((prev) => {
+      const exists = prev.some((s) => s.id === saved.id);
+      return exists ? prev.map((s) => (s.id === saved.id ? saved : s)) : [...prev, saved];
+    });
   };
 
-  const handleSave = async () => {
-    setSaving(true);
-    setStatus(null);
-    try {
-      await saveReportConfig(reportType, {
-        enabled,
-        recipients: recipients.join(", "),
-        frequency,
-        time,
-        weekday: Number(weekday),
-        day_of_month: Number(dayOfMonth),
-      });
-      setStatus({ ok: true, message: "ההגדרות נשמרו" });
-      toast.success(`הגדרות ${title} נשמרו`);
-    } catch (err) {
-      setStatus({ ok: false, message: err?.message || "שגיאה בשמירה" });
-      toast.error(err?.message || "שגיאה בשמירה");
-    }
-    setSaving(false);
-  };
-
-  const handleTest = async () => {
-    setTesting(true);
-    setStatus(null);
-    try {
-      const result = await sendReportTest(reportType);
-      setStatus({ ok: true, message: `נשלח בהצלחה (${result.count})` });
-      toast.success(`דוח ${title} נשלח`);
-    } catch (err) {
-      setStatus({ ok: false, message: err?.message || "שליחת הבדיקה נכשלה" });
-      toast.error(err?.message || "שליחת הבדיקה נכשלה");
-    }
-    setTesting(false);
+  const handleRemoved = (newRowKey, id) => {
+    if (newRowKey) setNewRowKeys((prev) => prev.filter((k) => k !== newRowKey));
+    if (id) setSchedules((prev) => prev.filter((s) => s.id !== id));
   };
 
   return (
@@ -80,10 +46,12 @@ export default function ReportCard({ reportType, icon, title, description, perio
                   <CardTitle className="text-base font-semibold">{title}</CardTitle>
                   <span
                     className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                      enabled ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-400"
+                      activeCount > 0 ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-400"
                     }`}
                   >
-                    {enabled ? "פעיל" : "כבוי"}
+                    {schedules.length === 0
+                      ? "אין תזמונים"
+                      : `${schedules.length} תזמונים, ${activeCount} פעילים`}
                   </span>
                 </div>
                 <p className="text-sm text-muted-foreground mt-0.5">{description}</p>
@@ -95,49 +63,36 @@ export default function ReportCard({ reportType, icon, title, description, perio
       </button>
 
       {open && (
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between bg-slate-50 rounded-xl px-4 py-3">
-            <div>
-              <div className="text-sm font-semibold text-slate-700">שליחה מתוזמנת</div>
-              <p className="text-xs text-muted-foreground mt-0.5">כשכבוי, הדוח אפשר לשלוח רק ידנית עם כפתור הבדיקה למטה.</p>
-            </div>
-            <Switch checked={enabled} onCheckedChange={setEnabled} />
-          </div>
-
-          <RecipientsEditor recipients={recipients} onChange={setRecipients} />
-
-          <ScheduleFields
-            frequency={frequency}
-            time={time}
-            weekday={weekday}
-            dayOfMonth={dayOfMonth}
-            onChange={scheduleFieldChange}
-          />
-
+        <CardContent className="space-y-3">
           {periodNote && <p className="text-xs text-muted-foreground">{periodNote}</p>}
 
-          {status && (
-            <div
-              className={
-                status.ok
-                  ? "text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2"
-                  : "text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2"
-              }
-            >
-              {status.message}
-            </div>
-          )}
+          {schedules.map((schedule) => (
+            <ScheduleEditor
+              key={schedule.id}
+              reportType={reportType}
+              schedule={schedule}
+              onSaved={(saved) => handleSaved(null, saved)}
+              onRemoved={() => handleRemoved(null, schedule.id)}
+            />
+          ))}
 
-          <div className="flex gap-3">
-            <Button onClick={handleSave} disabled={saving} className="gap-2">
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              {saving ? "שומר..." : "שמור"}
-            </Button>
-            <Button onClick={handleTest} disabled={testing} variant="outline" className="gap-2">
-              {testing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-              {testing ? "שולח..." : "שלח עכשיו לבדיקה"}
-            </Button>
-          </div>
+          {newRowKeys.map((key) => (
+            <ScheduleEditor
+              key={key}
+              reportType={reportType}
+              schedule={null}
+              onSaved={(saved) => handleSaved(key, saved)}
+              onRemoved={() => handleRemoved(key, null)}
+            />
+          ))}
+
+          <button
+            type="button"
+            onClick={addSchedule}
+            className="w-full flex items-center justify-center gap-1.5 text-sm text-slate-500 hover:text-amber-600 border-2 border-dashed border-slate-200 hover:border-amber-300 rounded-xl py-2.5 transition-colors"
+          >
+            <Plus className="w-4 h-4" /> הוסף תזמון
+          </button>
         </CardContent>
       )}
     </Card>
