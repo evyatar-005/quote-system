@@ -214,16 +214,16 @@ async function createPaymentForm(db, quoteId) {
     // it does not actually filter by type), so query it once and pick the
     // document type from the CHOSEN PLUGIN'S OWN settings.docType — pairing a
     // plugin with any other type is what would actually cause a mismatch.
-    // Prefer a plain קבלה (400, e.g. a card terminal) over a חשבונית מס/קבלה
-    // (320, e.g. PayPal) when more than one plugin is active, since a plain
-    // receipt is the safer default against an order that isn't itself a tax
-    // invoice yet.
+    // PayPal (Green Invoice plugin type 12010) is explicitly excluded per
+    // request — only a direct credit-card terminal should be offered here.
+    const PAYPAL_PLUGIN_TYPE = 12010;
     const info = await request(db, 'GET', '/documents/info?type=400');
-    const activePlugins = (info.paymentPlugins || []).filter(p => p.active && p.settings?.docType);
+    const activePlugins = (info.paymentPlugins || [])
+      .filter(p => p.active && p.settings?.docType && p.type !== PAYPAL_PLUGIN_TYPE);
     const plugin =
       activePlugins.find(p => p.settings.docType === 400) ||
       activePlugins[0];
-    if (!plugin) throw new Error('No active Morning payment plugin found on this account');
+    if (!plugin) throw new Error('No active (non-PayPal) Morning payment plugin found on this account');
     const paymentType = plugin.settings.docType;
     const pluginId = plugin.id;
 
