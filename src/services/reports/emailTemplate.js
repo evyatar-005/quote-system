@@ -12,6 +12,21 @@ const MUTED = '#64748b';
 const BORDER = '#e2e8f0';
 const PANEL = '#f8fafc';
 
+// "9 באוגוסט" instead of "2026-08-09" — no year (redundant for an
+// operational report someone reads the same week), and day-before-month-name
+// reads correctly right-to-left on its own. A raw "YYYY-MM-DD — YYYY-MM-DD"
+// range, by contrast, is exactly the kind of LTR-punctuation string the bidi
+// algorithm reorders unpredictably inside an RTL paragraph (the "later"
+// date can visually end up first) — this format avoids that failure mode
+// entirely rather than fighting it with dir="ltr" spans.
+function formatDateHe(isoDateStr) {
+  return new Date(`${isoDateStr}T00:00:00`).toLocaleDateString('he-IL', { day: 'numeric', month: 'long' });
+}
+
+function formatDateRangeHe(fromDate, toDate) {
+  return fromDate === toDate ? formatDateHe(toDate) : `${formatDateHe(fromDate)} – ${formatDateHe(toDate)}`;
+}
+
 // A single stat box — big number, small label underneath. `kpis` is an
 // array of these, laid out as one <table> row of equal-width cells so it
 // reads as a clean row of cards in every client, including Outlook.
@@ -93,4 +108,4 @@ function renderReportEmail({ title, periodLabel, kpis, sections, footerNote }) {
     </div>`;
 }
 
-module.exports = { renderReportEmail, tableShell, tableRow, barCell };
+module.exports = { renderReportEmail, tableShell, tableRow, barCell, formatDateHe, formatDateRangeHe };

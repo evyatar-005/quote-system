@@ -9,7 +9,7 @@
 
 const mail = require('../mail');
 const { parseRecipients, computeDateRange } = require('./scheduledReports');
-const { renderReportEmail, tableShell, tableRow, barCell } = require('./emailTemplate');
+const { renderReportEmail, tableShell, tableRow, barCell, formatDateRangeHe } = require('./emailTemplate');
 
 const REPORT_TYPE = 'sales';
 const FREQUENCY_LABELS = { daily: 'יומי', weekly: 'שבועי', monthly: 'חודשי' };
@@ -159,7 +159,7 @@ function buildEmail(agentRows, productRows, frequencyLabel, fromDate, toDate) {
 
   const html = renderReportEmail({
     title: 'דוח מכירות',
-    periodLabel: `${frequencyLabel} · ${periodLabel}`,
+    periodLabel: `${frequencyLabel} · ${formatDateRangeHe(fromDate, toDate)}`,
     kpis: [
       { label: 'הצעות שהוצאו', value: totalOffered },
       { label: 'הצעות שנסגרו', value: totalClosed },

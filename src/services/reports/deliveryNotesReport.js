@@ -5,7 +5,7 @@
 const { request } = require('../morning/client');
 const mail = require('../mail');
 const { parseRecipients, computeDateRange } = require('./scheduledReports');
-const { renderReportEmail, tableShell, tableRow, barCell } = require('./emailTemplate');
+const { renderReportEmail, tableShell, tableRow, barCell, formatDateRangeHe } = require('./emailTemplate');
 
 const REPORT_TYPE = 'delivery_notes';
 const DELIVERY_NOTE_TYPE = 200;
@@ -60,7 +60,7 @@ function buildEmail(items, frequencyLabel, fromDate, toDate) {
 
   const html = renderReportEmail({
     title: 'דוח תעודות משלוח',
-    periodLabel: `${frequencyLabel} · ${periodLabel}`,
+    periodLabel: `${frequencyLabel} · ${formatDateRangeHe(fromDate, toDate)}`,
     kpis: [
       { label: 'תעודות שנסגרו', value: items.length },
       { label: 'סה״כ לפני מע״מ', value: fmt(total) },
