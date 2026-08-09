@@ -205,16 +205,33 @@ async function createPaymentForm(db, quoteId) {
       email: quote.client_email,
     });
 
+    // Omitting pluginId is supposed to fall back to "the business's default
+    // payment plugin" per the docs, but in practice this account has no
+    // plugin actually marked default (errorCode 2600 "לא נמצא מסוף סליקה
+    // פעיל" even with two plugins active) — so the plugin must be resolved
+    // and passed explicitly. Each plugin only works with the specific
+    // document type it was configured for (its own settings.docType), so try
+    // the types this account's plugins are known to support, in order, and
+    // use whichever one actually has an active plugin.
+    let paymentType = null;
+    let pluginId = null;
+    for (const candidateType of [400, 320, 305, 300]) {
+      const info = await request(db, 'GET', `/documents/info?type=${candidateType}`);
+      const plugin = (info.paymentPlugins || []).find(p => p.active);
+      if (plugin) { paymentType = candidateType; pluginId = plugin.id; break; }
+    }
+    if (!pluginId) throw new Error('No active Morning payment plugin found for any supported document type');
+
     const body = {
       description: `תשלום עבור הזמנה ${quote.quote_number}`,
-      type: 400, // קבלה — a generic "payment received" document, matches this
-                 // integration's active plugins; created only once paid.
+      type: paymentType,
       amount: quote.price_with_vat || 0,
       currency: CURRENCY,
       vatType: VAT_TYPE_DEFAULT,
       lang: LANG,
       client: { id: morningClientId },
       maxPayments: 1,
+      pluginId,
     };
 
     const response = await request(db, 'POST', '/payments/form', body);
