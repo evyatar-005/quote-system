@@ -31,11 +31,25 @@ const LOG_DIR = path.join(REPO_ROOT, '..', 'quote-system-logs');
 // wrote them would recognize. Missing/unparsable file → empty map, so an
 // un-annotated tag just falls back to its own name instead of breaking the
 // update-check endpoint.
-function loadChangelog() {
+//
+// Read via `git show <ref>:path` rather than fs.readFileSync: this endpoint
+// only runs `git fetch --tags`, which updates refs but never touches the
+// working tree, so the on-disk file still reflects whatever version this
+// server last deployed. A tag added after that deploy (which is exactly the
+// case when an update is available) would be missing from the stale disk
+// copy — showing a bare tag with no Hebrew description even though the
+// description exists on GitHub. Reading the blob at the latest fetched tag
+// instead always reflects what's actually pending.
+async function loadChangelog(ref) {
   try {
-    return JSON.parse(fs.readFileSync(CHANGELOG_PATH, 'utf8'));
+    const raw = await git(`show ${ref}:deploy/changelog-he.json`);
+    return JSON.parse(raw);
   } catch (_) {
-    return {};
+    try {
+      return JSON.parse(fs.readFileSync(CHANGELOG_PATH, 'utf8'));
+    } catch (_) {
+      return {};
+    }
   }
 }
 
@@ -85,7 +99,7 @@ module.exports = function registerUpdate(app, db, deps) {
       // order, so v1.0.9 correctly sorts before v1.0.10.
       let commits = [];
       if (updateAvailable && currentTag) {
-        const changelog = loadChangelog();
+        const changelog = await loadChangelog(latestTag);
         const allTags = await git('tag --sort=version:refname').then(out => out ? out.split('\n') : []);
         const afterCurrent = allTags.slice(allTags.indexOf(currentTag) + 1);
         const latestIdx = afterCurrent.indexOf(latestTag);
