@@ -4,6 +4,7 @@ import { PRODUCT_NAMES, PRODUCT_CODES, EXTRAS_OPTIONS, categoryOf, productImage 
 import { base44 } from "@/api/base44Client";
 import { issueQuoteToMorning } from "@/api/morningClient";
 import ClientSearchField from "./ClientSearchField";
+import DocumentIssuedModal from "@/components/DocumentIssuedModal";
 import { Plus, Trash2, ShoppingCart, BarChart3, Tag, Lightbulb, Shapes, Layers, Save, Send, FileOutput, Loader2, CheckCircle2, Paperclip, FileText, Image as ImageIcon, X, Pencil } from "lucide-react";
 import { toast } from "sonner";
 
@@ -203,6 +204,9 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [issuing, setIssuing] = useState(false);
+  // Popup confirming a Morning document was created, with an immediate
+  // download link — set from handleIssue below, cleared by closing the modal.
+  const [issuedDocument, setIssuedDocument] = useState(null); // { url, label }
   // Auto today's date (client-side) — shown top-left like a Morning quote.
   const quoteDate = new Date().toLocaleDateString("he-IL");
 
@@ -616,6 +620,8 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
       const result = await issueQuoteToMorning(created);
       if (result.issued) {
         toast.success(`ההצעה ${created.quote_number} הונפקה ללקוח`);
+        const url = result.document?.url && (result.document.url.he || result.document.url.origin);
+        if (url) setIssuedDocument({ url, label: `הצעת מחיר ${created.quote_number}` });
       } else {
         toast.message(`ההצעה ${created.quote_number} נשמרה`, {
           description: "החיבור למורנינג עדיין לא מוגדר — ההנפקה בפועל תתחיל לעבוד ברגע שיהיה חשבון/מפתח API של מורנינג.",
@@ -1052,6 +1058,14 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
         </div>
         </div>
       </div>
+
+      {issuedDocument && (
+        <DocumentIssuedModal
+          documentUrl={issuedDocument.url}
+          documentLabel={issuedDocument.label}
+          onClose={() => setIssuedDocument(null)}
+        />
+      )}
     </div>
   );
 }

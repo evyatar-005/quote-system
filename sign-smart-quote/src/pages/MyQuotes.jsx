@@ -6,6 +6,7 @@ import {
   Loader2,
   Calendar,
   Copy,
+  Download,
   PackagePlus,
   X,
   BarChart3,
@@ -14,6 +15,7 @@ import {
 import { toast } from "sonner";
 import { convertMorningDocument, createPaymentLink, getLatestMorningDocuments } from "@/api/morningClient";
 import QuoteDocument from "@/components/calculator/QuoteDocument";
+import DocumentIssuedModal from "@/components/DocumentIssuedModal";
 
 const fmt = (val) =>
   val != null ? `₪ ${Number(val).toLocaleString("he-IL", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : "—";
@@ -36,6 +38,7 @@ export default function MyQuotes() {
   const [issuingIds, setIssuingIds] = useState(() => new Set());
   const [documentQuote, setDocumentQuote] = useState(null);
   const [paymentLinkPanel, setPaymentLinkPanel] = useState(null); // { quoteNumber, url }
+  const [issuedDocument, setIssuedDocument] = useState(null); // { url, label }
 
   const loadQuotes = async () => {
     setLoading(true);
@@ -129,7 +132,9 @@ export default function MyQuotes() {
   // for a standalone payment form link, which creates its own receipt only
   // once the customer actually pays.
   const runConvert = async (q, extra) => {
-    await convertMorningDocument(q.id, "order", extra);
+    const doc = await convertMorningDocument(q.id, "order", extra);
+    const docUrl = doc?.url && (doc.url.he || doc.url.origin);
+    if (docUrl) setIssuedDocument({ url: docUrl, label: `הזמנה ${q.quote_number}` });
     const docs = await getLatestMorningDocuments([q.id]);
     setMorningDocs((prev) => ({ ...prev, ...docs }));
     try {
@@ -298,6 +303,16 @@ export default function MyQuotes() {
                             {morningDoc.morning_document_number || morningDoc.morning_document_id}
                           </span>
                         )}
+                        {morningDoc?.document_url && (
+                          <a
+                            href={morningDoc.document_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex items-center gap-1 text-amber-600 hover:text-amber-700 hover:underline"
+                          >
+                            <Download className="w-3 h-3" /> הורד מסמך מורנינג
+                          </a>
+                        )}
                       </div>
                     </div>
 
@@ -355,6 +370,14 @@ export default function MyQuotes() {
           notes={documentQuote.notes}
           paymentType={documentQuote.payment_type}
           onClose={() => setDocumentQuote(null)}
+        />
+      )}
+
+      {issuedDocument && (
+        <DocumentIssuedModal
+          documentUrl={issuedDocument.url}
+          documentLabel={issuedDocument.label}
+          onClose={() => setIssuedDocument(null)}
         />
       )}
     </div>
