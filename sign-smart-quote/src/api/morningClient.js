@@ -76,23 +76,32 @@ export async function issueQuoteToMorning(quote) {
  * `toType`. Throws on failure — the manager-side caller in
  * QuoteDetailsModal.jsx catches it and shows a toast.
  *
- * `options` lets callers (e.g. MyQuotes.jsx's "הנפק הזמנה" flow) pass
- * `clientEmail`/`clientVatId` (required by the server for `toType: 'order'`
- * conversions when missing from the quote row) and `wantPaymentLink` (asks
- * the server to attach a Morning payment plugin to the resulting document).
- * Each key is only included in the body when explicitly provided, keeping
- * this backward compatible with the original 2-arg call shape.
+ * `options` lets callers pass `clientEmail`/`clientVatId` (optional — enriches
+ * Morning's client card when supplied, never required). Each key is only
+ * included in the body when explicitly provided, keeping this backward
+ * compatible with the original 2-arg call shape.
  */
-export async function convertMorningDocument(quoteId, toType, { clientEmail, clientVatId, wantPaymentLink } = {}) {
+export async function convertMorningDocument(quoteId, toType, { clientEmail, clientVatId } = {}) {
   return request(`/api/morning/quotes/${quoteId}/convert`, {
     method: 'POST',
     body: {
       toType,
       ...(clientEmail !== undefined ? { clientEmail } : {}),
       ...(clientVatId !== undefined ? { clientVatId } : {}),
-      ...(wantPaymentLink !== undefined ? { wantPaymentLink } : {}),
     },
   });
+}
+
+/**
+ * Generates a standalone Morning payment link for this quote (POST
+ * /payments/form on the backend) — independent of any order/quote document
+ * already issued; Morning only creates its own receipt once the customer
+ * actually pays, so this never converts or closes an existing order. Throws
+ * on failure (e.g. no payment plugin configured on the Morning account).
+ */
+export async function createPaymentLink(quoteId) {
+  const { url } = await request(`/api/morning/quotes/${quoteId}/payment-link`, { method: 'POST' });
+  return url;
 }
 
 /** Full document + audit-log history for one quote. Throws on failure. */

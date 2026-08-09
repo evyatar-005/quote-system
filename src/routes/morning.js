@@ -92,7 +92,6 @@ module.exports = function registerMorning(app, db, deps) {
         quoteId: req.params.id,
         targetType: code,
         actorUsername: req.user.username,
-        wantPaymentLink: !!req.body.wantPaymentLink,
       });
       res.json(result);
     } catch (err) {
@@ -108,6 +107,22 @@ module.exports = function registerMorning(app, db, deps) {
   // ── POST /api/morning/quotes/:id/convert ──────────────────────────────────
   app.post('/api/morning/quotes/:id/convert', requireAuth, (req, res) => {
     handleDocumentRequest(req, res, 'toType');
+  });
+
+  // ── POST /api/morning/quotes/:id/payment-link ─────────────────────────────
+  // Independent of /document and /convert — generates a standalone Morning
+  // payment form (POST /payments/form) that only creates its own receipt once
+  // the customer actually pays, never touching whatever order/quote document
+  // already exists for this quote. See sync.createPaymentForm for why this
+  // had to be separate from attaching paymentRequestData to a document.
+  app.post('/api/morning/quotes/:id/payment-link', requireAuth, async (req, res) => {
+    if (!loadOwnedQuote(req, res)) return;
+    try {
+      const url = await sync.createPaymentForm(db, req.params.id);
+      res.json({ url });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
   });
 
   // ── GET /api/morning/quotes/:id/history ───────────────────────────────────

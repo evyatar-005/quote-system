@@ -12,7 +12,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { toast } from "sonner";
-import { convertMorningDocument, getLatestMorningDocuments } from "@/api/morningClient";
+import { convertMorningDocument, createPaymentLink, getLatestMorningDocuments } from "@/api/morningClient";
 import QuoteDocument from "@/components/calculator/QuoteDocument";
 
 const fmt = (val) =>
@@ -121,24 +121,23 @@ export default function MyQuotes() {
     }
   };
 
+  // Issuing the order and generating a payment link are two independent
+  // Morning operations (see sync.js/createPaymentForm) — a payment button
+  // can't be attached to an order document at all on this account, and doing
+  // so would close the order anyway, blocking the delivery note issued from
+  // it afterward. So: issue/convert the order as before, then separately ask
+  // for a standalone payment form link, which creates its own receipt only
+  // once the customer actually pays.
   const runConvert = async (q, extra) => {
-    const result = await convertMorningDocument(q.id, "order", { wantPaymentLink: true, ...extra });
+    await convertMorningDocument(q.id, "order", extra);
     const docs = await getLatestMorningDocuments([q.id]);
     setMorningDocs((prev) => ({ ...prev, ...docs }));
-    // `paymentUrl` is the hosted "pay now" page — only present when a payment
-    // plugin was attached and Morning issued the document with a payment
-    // button. `url` (a sibling field) is just the plain PDF download link and
-    // is never a payment page, even when a plugin was requested — do not fall
-    // back to it here, that was the earlier bug (agents got a download link).
-    const url = result?.paymentUrl;
-    if (url) {
+    try {
+      const url = await createPaymentLink(q.id);
       setPaymentLinkPanel({ quoteNumber: q.quote_number, url });
-    } else {
-      // _paymentLinkDebug (server-only diagnostic, see sync.js) says exactly
-      // why no link came back — surfaced here since there's no server access
-      // to check logs directly on the deploy machine.
-      toast.message(`הזמנה ${q.quote_number} הונפקה במורנינג — ללא קישור תשלום`, {
-        description: result?._paymentLinkDebug || "לא הוגדר פלאגין תשלום פעיל",
+    } catch (err) {
+      toast.message(`הזמנה ${q.quote_number} הונפקה במורנינג — יצירת קישור תשלום נכשלה`, {
+        description: err?.message || "שגיאה לא ידועה",
         duration: 15000,
       });
     }
@@ -156,6 +155,21 @@ export default function MyQuotes() {
         await runConvert(q);
       } catch (err) {
         toast.error(err?.message || "שגיאה בהנפקת ההזמנה");
+      }
+    });
+  };
+
+  // For an order already issued, re-pulling a payment link should NOT
+  // re-convert/re-issue the order (that would create a redundant new linked
+  // Morning document each time) — just ask for a fresh standalone link.
+  const handlePullPaymentLink = async (q) => {
+    if (issuingIds.has(q.id)) return;
+    await withIssuing(q.id, async () => {
+      try {
+        const url = await createPaymentLink(q.id);
+        setPaymentLinkPanel({ quoteNumber: q.quote_number, url });
+      } catch (err) {
+        toast.error(err?.message || "שגיאה ביצירת קישור תשלום");
       }
     });
   };
@@ -317,7 +331,7 @@ export default function MyQuotes() {
                           existing quote→order→invoice chaining behavior),
                           it doesn't just "fetch" the prior one. */}
                       <button
-                        onClick={() => handleIssueOrder(q)}
+                        onClick={() => (alreadyOrder ? handlePullPaymentLink(q) : handleIssueOrder(q))}
                         disabled={issuingIds.has(q.id)}
                         className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50 transition-colors"
                       >

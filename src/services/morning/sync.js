@@ -123,7 +123,7 @@ function buildIncomeRows(quote) {
   }));
 }
 
-async function createOrConvertDocument(db, { quoteId, targetType, actorUsername, wantPaymentLink }) {
+async function createOrConvertDocument(db, { quoteId, targetType, actorUsername }) {
   const action = 'sync';
   let quote;
   try {
@@ -152,36 +152,7 @@ async function createOrConvertDocument(db, { quoteId, targetType, actorUsername,
       ...(isConvert ? { linkedDocumentIds: [prevMap.morning_document_id], linkType: 'link' } : {}),
     };
 
-    // A payment plugin turns the document's hosted url (captured below into
-    // document_url regardless) into a payment-enabled link. Best-effort: if
-    // the business has no active plugin for this document type, the document
-    // still issues fine, just without a "pay now" link on it.
-    // paymentLinkDebug: surfaced to the frontend toast when no link results —
-    // this integration only runs on a remote deploy (C:\quote-system on a
-    // separate machine) with no server access from here, so this is the only
-    // way to see WHY a link didn't come back without remoting in.
-    let paymentLinkDebug = null;
-    if (wantPaymentLink) {
-      try {
-        const info = await request(db, 'GET', `/documents/info?type=${targetType}`);
-        const plugins = info.paymentPlugins || [];
-        const plugin = plugins.find(p => p.active);
-        if (plugin) {
-          body.paymentRequestData = { plugins: [{ id: plugin.id }], maxPayments: 1 };
-        } else {
-          paymentLinkDebug = `no active plugin among ${plugins.length} returned for type=${targetType} (statuses: ${plugins.map(p => `${p.description || p.type}:active=${p.active}`).join(', ') || 'none'})`;
-        }
-      } catch (err) {
-        paymentLinkDebug = `plugin lookup failed: ${err.message}`;
-        console.error(`[createOrConvertDocument] payment plugin lookup failed for quote #${quoteId}:`, err.message);
-      }
-    }
-
     const response = await request(db, 'POST', '/documents', body);
-    if (wantPaymentLink && !response.paymentUrl && !paymentLinkDebug) {
-      paymentLinkDebug = `paymentRequestData was sent but Morning returned no paymentUrl (document type ${targetType})`;
-    }
-    if (paymentLinkDebug) response._paymentLinkDebug = paymentLinkDebug;
 
     const documentUrl = response.url && (response.url.he || response.url.origin) || null;
     db.prepare(
@@ -210,6 +181,59 @@ async function createOrConvertDocument(db, { quoteId, targetType, actorUsername,
   }
 }
 
+// A standalone payment link via POST /payments/form — NOT the paymentRequestData
+// attached to a document in createOrConvertDocument above. That mechanism only
+// works on document types the account's payment plugins are actually configured
+// for (a receipt/tax-invoice-receipt here, confirmed against this business's
+// real active plugins — never an "order"/100), and worse, converting/attaching
+// a payment button to an existing order document would close it, blocking the
+// delivery note (תעודת משלוח) and everything else normally issued from an open
+// order. This endpoint is fully independent of any existing document: Morning
+// only creates the underlying receipt once the customer actually pays, so the
+// order this is generated alongside is never touched.
+async function createPaymentForm(db, quoteId) {
+  const action = 'payment_form';
+  let quote;
+  try {
+    quote = db.prepare(`SELECT * FROM signshop_quotes WHERE id = ?`).get(quoteId);
+    if (!quote) throw new Error('Quote not found');
+
+    const morningClientId = await ensureMorningClient(db, quote.client_name, {
+      phone: quote.client_phone,
+      address: quote.client_address,
+      vatId: quote.client_vat_id,
+      email: quote.client_email,
+    });
+
+    const body = {
+      description: `תשלום עבור הזמנה ${quote.quote_number}`,
+      type: 400, // קבלה — a generic "payment received" document, matches this
+                 // integration's active plugins; created only once paid.
+      amount: quote.price_with_vat || 0,
+      currency: CURRENCY,
+      vatType: VAT_TYPE_DEFAULT,
+      lang: LANG,
+      client: { id: morningClientId },
+      maxPayments: 1,
+    };
+
+    const response = await request(db, 'POST', '/payments/form', body);
+
+    db.prepare(
+      `INSERT INTO morning_sync_log (quote_id, action, request_json, response_json, success, created_by)
+       VALUES (?, ?, ?, ?, 1, NULL)`
+    ).run(quoteId, action, JSON.stringify(body), JSON.stringify(response));
+
+    return response.url;
+  } catch (err) {
+    db.prepare(
+      `INSERT INTO morning_sync_log (quote_id, action, success, error_message)
+       VALUES (?, ?, 0, ?)`
+    ).run(quoteId || null, action, err.message);
+    throw err;
+  }
+}
+
 // Latest Morning document per quote — powers the QuotesHistory list (one row
 // per quote), which needs the "convert to order" button and the document
 // number/PDF link without opening each quote's full history individually.
@@ -233,4 +257,4 @@ function getHistory(db, quoteId) {
   };
 }
 
-module.exports = { ensureMorningClient, createOrConvertDocument, getHistory, buildIncomeRows, searchClients, getLatestDocuments };
+module.exports = { ensureMorningClient, createOrConvertDocument, createPaymentForm, getHistory, buildIncomeRows, searchClients, getLatestDocuments };
