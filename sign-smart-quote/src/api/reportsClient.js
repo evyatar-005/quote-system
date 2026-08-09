@@ -1,5 +1,4 @@
-// SMTP config (admin) + password-reset flow — talks to our own backend
-// (src/routes/smtp.js, src/routes/auth.js forgot/reset endpoints).
+// Scheduled email reports (admin) — talks to our own backend (src/routes/reports.js).
 
 const TOKEN_KEY = 'auth_token';
 
@@ -13,7 +12,7 @@ const getToken = () => {
 
 // Mirrors base44Client.js's `request` helper — kept local here since
 // base44Client doesn't export its internal helper (same convention as
-// morningClient.js).
+// morningClient.js/smtpClient.js).
 async function request(path, { method = 'GET', body } = {}) {
   const headers = {};
   const token = getToken();
@@ -51,30 +50,17 @@ async function request(path, { method = 'GET', body } = {}) {
   }
 }
 
-/** Current SMTP credentials/config (admin only). Throws on failure. */
-export function getSmtpConfig() {
-  return request('/api/smtp/config');
+/** { [reportType]: { enabled, recipients, frequency, time, weekday, day_of_month } } for every known report. Throws on failure. */
+export function getReportsConfig() {
+  return request('/api/reports/config');
 }
 
-/** Saves SMTP credentials/config (admin only). Throws on failure. */
-export function saveSmtpConfig(config) {
-  return request('/api/smtp/config', { method: 'PUT', body: config });
+/** Saves one report type's schedule/recipients. Throws on failure. */
+export function saveReportConfig(reportType, config) {
+  return request(`/api/reports/config/${reportType}`, { method: 'PUT', body: config });
 }
 
-/** Sends a real test email to the calling admin. Throws on failure. */
-export function sendSmtpTest() {
-  return request('/api/smtp/test', { method: 'POST' });
-}
-
-/**
- * Requests a password-reset email. Always resolves with a generic
- * { ok, message } — the backend never reveals whether the username exists.
- */
-export function forgotPassword(email) {
-  return request('/api/auth/forgot-password', { method: 'POST', body: { email } });
-}
-
-/** Sets a new password from a reset-email token. Throws on failure (invalid/expired token). */
-export function resetPassword(token, newPassword) {
-  return request('/api/auth/reset-password', { method: 'POST', body: { token, newPassword } });
+/** Sends this report right now using its currently saved config. Throws on failure. */
+export function sendReportTest(reportType) {
+  return request(`/api/reports/test/${reportType}`, { method: 'POST' });
 }

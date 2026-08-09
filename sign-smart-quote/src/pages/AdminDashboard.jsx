@@ -31,11 +31,12 @@ import MorningSettingsSection from "../components/admin/MorningSettingsSection";
 import GreenApiSettingsSection from "../components/admin/GreenApiSettingsSection";
 import MondaySettingsSection from "../components/admin/MondaySettingsSection";
 import SmtpSettingsSection from "../components/admin/SmtpSettingsSection";
+import ReportsSection from "../components/admin/ReportsSection";
 import AboutSection from "../components/admin/AboutSection";
 import LogoutButton from "@/components/LogoutButton";
 import CollapsibleSection from "../components/admin/CollapsibleSection";
 import UsersManagementSection from "../components/admin/UsersManagementSection";
-import { ShieldAlert, Users, Receipt, Info, MessageCircle, LayoutGrid, Scissors, PenTool } from "lucide-react";
+import { ShieldAlert, Users, Receipt, Info, MessageCircle, LayoutGrid, Scissors, PenTool, PieChart } from "lucide-react";
 
 
 const DEFAULT_CONFIG = {
@@ -271,7 +272,7 @@ export default function AdminDashboard() {
           {/* Each tab gets its own muted brand hue (from the Printela palette)
               so the four domains — pricing / costs / minimums / users — read
               as visually distinct areas, not just interchangeable tabs. */}
-          <TabsList className="grid w-full grid-cols-4 sm:grid-cols-9 max-w-6xl mb-6">
+          <TabsList className="grid w-full grid-cols-4 sm:grid-cols-10 max-w-6xl mb-6">
             <TabsTrigger value="selling-prices" className="gap-2 data-[state=active]:text-brand-gold">
               <Calculator className="w-4 h-4" /> קביעת מחירי מכירה
             </TabsTrigger>
@@ -295,6 +296,9 @@ export default function AdminDashboard() {
             </TabsTrigger>
             <TabsTrigger value="smtp" className="gap-2 data-[state=active]:text-sky-600">
               <Mail className="w-4 h-4" /> SMTP
+            </TabsTrigger>
+            <TabsTrigger value="reports" className="gap-2 data-[state=active]:text-indigo-600">
+              <PieChart className="w-4 h-4" /> דוחות
             </TabsTrigger>
             <TabsTrigger value="about" className="gap-2 data-[state=active]:text-slate-600">
               <Info className="w-4 h-4" /> אודות
@@ -327,6 +331,10 @@ export default function AdminDashboard() {
 
           <TabsContent value="smtp" className="space-y-6 mt-0">
             <SmtpSettingsSection />
+          </TabsContent>
+
+          <TabsContent value="reports" className="space-y-6 mt-0">
+            <ReportsSection />
           </TabsContent>
 
           <TabsContent value="about" className="space-y-6 mt-0">

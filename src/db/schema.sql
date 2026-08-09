@@ -330,6 +330,24 @@ CREATE TABLE IF NOT EXISTS smtp_credentials (
   updated_at   TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
+-- One row per scheduled email report (src/services/reports/) — report_type is
+-- the only key, e.g. 'delivery_notes' | 'sales'. Deliberately generic (not
+-- specific columns per report on smtp_credentials, which is how the first,
+-- single-report version worked) so adding a new report type later is a new
+-- row, not a schema change. recipients is comma/newline/semicolon-separated,
+-- parsed by parseRecipients() — never a JSON array, to keep the admin UI's
+-- plain-text paste-a-list workflow trivial.
+CREATE TABLE IF NOT EXISTS scheduled_reports (
+  report_type  TEXT PRIMARY KEY,
+  enabled      INTEGER NOT NULL DEFAULT 0,
+  recipients   TEXT,
+  frequency    TEXT NOT NULL DEFAULT 'daily',  -- daily | weekly | monthly
+  time         TEXT NOT NULL DEFAULT '17:00',
+  weekday      INTEGER NOT NULL DEFAULT 0,      -- 0=Sunday..6=Saturday, weekly only
+  day_of_month INTEGER NOT NULL DEFAULT 1,      -- 1-31, monthly only (clamped to month length)
+  updated_at   TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
 -- ════════════════════════════════════════════════════════════════════════════
 -- Production recipes (תפ"י) — phase 1: recipe = ORDERED template of steps per
 -- product_type, no timing/hours yet. Instance ("worksheet") = frozen copy of

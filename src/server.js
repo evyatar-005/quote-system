@@ -16,7 +16,10 @@ const registerAttachments = require('./routes/attachments');
 const registerSmtp     = require('./routes/smtp');
 const registerCutFile  = require('./routes/cutfile');
 const registerProduction = require('./routes/production');
-const { startDailyReportScheduler } = require('./services/reports/dailyDeliveryReport');
+const registerReports  = require('./routes/reports');
+const { startReportScheduler } = require('./services/reports/scheduledReports');
+const deliveryNotesReport = require('./services/reports/deliveryNotesReport');
+const salesReport = require('./services/reports/salesReport');
 
 const PORT    = process.env.PORT || 3000;
 const DB_PATH = path.join(__dirname, '../database.sqlite');
@@ -76,16 +79,6 @@ for (const col of [
   try { db.exec(col); } catch (_) {}
 }
 
-// Delivery-note report config (src/services/reports/dailyDeliveryReport.js).
-// report_recipient_email holds a comma/newline-separated list, despite the
-// singular name kept from before multi-recipient support existed — renaming
-// the column would just be churn against a value the app always parses
-// through parseRecipients() anyway.
-try { db.exec('ALTER TABLE smtp_credentials ADD COLUMN report_recipient_email TEXT'); } catch (_) {}
-try { db.exec(`ALTER TABLE smtp_credentials ADD COLUMN report_frequency TEXT NOT NULL DEFAULT 'daily'`); } catch (_) {}
-try { db.exec(`ALTER TABLE smtp_credentials ADD COLUMN report_time TEXT NOT NULL DEFAULT '17:00'`); } catch (_) {}
-try { db.exec('ALTER TABLE smtp_credentials ADD COLUMN report_weekday INTEGER NOT NULL DEFAULT 0'); } catch (_) {}
-try { db.exec('ALTER TABLE smtp_credentials ADD COLUMN report_day_of_month INTEGER NOT NULL DEFAULT 1'); } catch (_) {}
 
 // Add stand/mechanism cost column to roll-up tiers if it doesn't exist yet.
 try { db.exec('ALTER TABLE signshop_rollup_tiers ADD COLUMN stand_cost REAL NOT NULL DEFAULT 0'); } catch (_) {}
@@ -157,10 +150,14 @@ registerGreenApi(app, db, { requireAuth, requireAdmin });
 registerMonday(app, db, { requireAuth, requireAdmin });
 registerAttachments(app, db, { requireAuth });
 registerSmtp(app, db, { requireAuth, requireAdmin });
+registerReports(app, db, { requireAuth, requireAdmin });
 registerCutFile(app, db, { requireAuth });
 registerProduction(app, db, { requireOperations });
 
-startDailyReportScheduler(db);
+startReportScheduler(db, {
+  [deliveryNotesReport.REPORT_TYPE]: deliveryNotesReport.sendReport,
+  [salesReport.REPORT_TYPE]: salesReport.sendReport,
+});
 
 // ─── Version info — read by deploy/UPDATE.ps1's post-deploy smoke check and
 // by anyone wanting to confirm which release is live without RDP access ─────
