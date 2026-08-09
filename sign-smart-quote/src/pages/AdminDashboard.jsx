@@ -5,7 +5,7 @@ import { Save, Settings2, Loader2, Check, LogOut, ChevronDown } from "lucide-rea
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Database, Calculator, Mail } from "lucide-react";
 import { toast } from "sonner";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { BarChart3 } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 import NotificationBell from "@/components/NotificationBell";
@@ -35,7 +35,7 @@ import ReportsSection from "../components/admin/ReportsSection";
 import AboutSection from "../components/admin/AboutSection";
 import CollapsibleSection from "../components/admin/CollapsibleSection";
 import UsersManagementSection from "../components/admin/UsersManagementSection";
-import { ShieldAlert, Users, Receipt, Info, MessageCircle, LayoutGrid, Scissors, PenTool, PieChart } from "lucide-react";
+import { ShieldAlert, Users, Receipt, Info, MessageCircle, LayoutGrid, Scissors, PenTool, PieChart, ClipboardList, LineChart } from "lucide-react";
 
 // Formerly the horizontal TabsList atop the content area — now selected from
 // the "הגדרות" submenu in the sidebar instead, so this is just the list of
@@ -51,7 +51,6 @@ const SETTINGS_TABS = [
   { value: "monday", label: "Monday", icon: LayoutGrid, activeClass: "text-orange-600" },
   { value: "smtp", label: "SMTP", icon: Mail, activeClass: "text-sky-600" },
   { value: "reports", label: "דוחות", icon: PieChart, activeClass: "text-indigo-600" },
-  { value: "about", label: "אודות", icon: Info, activeClass: "text-slate-600" },
 ];
 
 const DEFAULT_CONFIG = {
@@ -161,7 +160,10 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [activeTab, setActiveTab] = useState("selling-prices");
+  // Lets other screens' sidebar deep-link straight into a settings tab
+  // (e.g. "/?tab=about") instead of only ever landing on selling-prices.
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "selling-prices");
 
   useEffect(() => {
     loadConfig();
@@ -258,8 +260,8 @@ export default function AdminDashboard() {
       <div className="w-full mx-auto px-4 sm:px-8 py-8 flex flex-col lg:flex-row gap-8 items-start">
         <aside className="w-full lg:w-56 shrink-0 lg:sticky lg:top-24 space-y-6">
           <NavGroup title="מכירות">
-            <NavItem to="/quotes" label="הצעות לבדיקה" />
-            <NavItem to="/quotes-archive" label="אנליטיקה" />
+            <NavItem to="/quotes" icon={ClipboardList} label="הצעות לבדיקה" />
+            <NavItem to="/quotes-archive" icon={LineChart} label="אנליטיקה" />
           </NavGroup>
           <NavGroup title="תפעול">
             <NavItem to="/cutting" icon={Scissors} label="ניצולת לוחות" />
@@ -269,6 +271,7 @@ export default function AdminDashboard() {
             <NavItem to="/costs" icon={BarChart3} label="ממשק סוכן מכירות" />
             <SettingsNavItem activeTab={activeTab} onSelect={setActiveTab} />
             <LogoutNavItem />
+            <AboutNavItem active={activeTab === "about"} onSelect={setActiveTab} />
           </NavGroup>
         </aside>
 
@@ -440,6 +443,23 @@ function LogoutNavItem() {
     <Button variant="ghost" onClick={logout} className="w-full justify-start gap-2 h-10 px-3 rounded-xl font-normal">
       <LogOut className="w-4 h-4" />
       התנתקות
+    </Button>
+  );
+}
+
+// Pulled out of the הגדרות submenu and placed after Logout — "אודות" isn't a
+// config screen an admin edits, so it doesn't belong grouped with the ones
+// that are. Still drives the same activeTab state as every other panel, just
+// via its own top-level row instead of the collapsible settings list.
+function AboutNavItem({ active, onSelect }) {
+  return (
+    <Button
+      variant="ghost"
+      onClick={() => onSelect("about")}
+      className={`w-full justify-start gap-2 h-10 px-3 rounded-xl font-normal ${active ? "text-slate-600 font-semibold" : ""}`}
+    >
+      <Info className="w-4 h-4" />
+      אודות
     </Button>
   );
 }

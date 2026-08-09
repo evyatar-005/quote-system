@@ -1,15 +1,13 @@
 import { useState, useEffect, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
-import { Link } from "react-router-dom";
-import { Search, Loader2, User, Calendar, Settings, BarChart3, LogOut, ChevronDown, X, Eye, FileText, ClipboardList, List as ListIcon, PackageSearch } from "lucide-react";
+import { Search, Loader2, User, Calendar, BarChart3, ChevronDown, X, Eye, FileText, List as ListIcon, PackageSearch } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import QuoteDetailsModal from "@/components/QuoteDetailsModal";
 import QuotesAnalytics from "@/components/quotes/QuotesAnalytics";
 import ProductAnalytics from "@/components/quotes/ProductAnalytics";
 import { getLatestMorningDocuments } from "@/api/morningClient";
-import { useAuth } from "@/lib/AuthContext";
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import printellaLogo from "@/assets/printella-logo.png";
+import ManagerSidebar from "@/components/layout/ManagerSidebar";
 import {
   fmt, STATUS_LABELS, STATUS_COLORS, CATEGORY_LABELS, CATEGORY_COLORS,
   MORNING_TYPE_LABELS, MORNING_ORDER_TYPE, toLocalDateStr,
@@ -90,7 +88,6 @@ function Filter({ label, value, onChange, children, className = "" }) {
 }
 
 export default function QuotesArchive() {
-  const { logout } = useAuth();
   const [quotes, setQuotes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
@@ -234,52 +231,21 @@ export default function QuotesArchive() {
 
   return (
     <div className="min-h-screen bg-background text-foreground" dir="rtl">
-      {/* Header */}
+      {/* Header — no top nav menu here anymore; ManagerSidebar below is the
+          single, always-visible navigation for every manager screen. */}
       <div className="sticky top-0 z-20 bg-background/90 backdrop-blur-xl border-b border-black">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <img src={printellaLogo} alt="Printella" className="h-24 object-contain" />
-            <div>
-              <h1 className="text-lg font-bold">היסטוריית הצעות כללית</h1>
-              {user?.full_name && <span className="text-sm text-slate-500">{user.full_name}</span>}
-            </div>
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center gap-3">
+          <img src={printellaLogo} alt="Printella" className="h-24 object-contain" />
+          <div>
+            <h1 className="text-lg font-bold">היסטוריית הצעות כללית</h1>
+            {user?.full_name && <span className="text-sm text-slate-500">{user.full_name}</span>}
           </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-primary transition-colors px-3 py-1.5 rounded-lg border border-black hover:border-primary/40">
-                <Settings className="w-4 h-4" />
-                תפריט
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="bg-white border-black">
-              <DropdownMenuItem asChild>
-                <Link to="/quotes" className="flex items-center gap-2 cursor-pointer">
-                  <ClipboardList className="w-4 h-4" />
-                  הצעות לבדיקה
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link to="/" className="flex items-center gap-2 cursor-pointer">
-                  <Settings className="w-4 h-4" />
-                  מחירים ועלויות
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link to="/costs" className="flex items-center gap-2 cursor-pointer">
-                  <BarChart3 className="w-4 h-4" />
-                  מחשבון
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={logout} className="flex items-center gap-2 cursor-pointer">
-                <LogOut className="w-4 h-4" />
-                התנתקות
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+      <div className="w-full mx-auto px-4 sm:px-8 py-8 flex flex-col lg:flex-row gap-8 items-start">
+        <ManagerSidebar />
+        <div className="flex-1 min-w-0 w-full max-w-5xl space-y-6">
         {/* Every filter is a labelled dropdown on one wrapping row, so the whole
             filter set reads as a single control strip instead of stacked rows. */}
         <div className="space-y-3">
@@ -505,6 +471,7 @@ export default function QuotesArchive() {
         )}
         </>
         )}
+        </div>
       </div>
 
       {selectedQuote && (

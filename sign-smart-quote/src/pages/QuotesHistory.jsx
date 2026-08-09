@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { Link } from "react-router-dom";
-import { ArrowRight, Search, Loader2, User, Calendar, TrendingUp, Trash2, CheckCircle2, XCircle, ChevronDown, X, PackagePlus, Eye } from "lucide-react";
+import { Search, Loader2, User, Calendar, TrendingUp, Trash2, CheckCircle2, XCircle, ChevronDown, X, PackagePlus, Eye } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import QuoteDetailsModal from "@/components/QuoteDetailsModal";
 import { convertMorningDocument, getLatestMorningDocuments } from "@/api/morningClient";
 import { toast } from "sonner";
 import printellaLogo from "@/assets/printella-logo.png";
+import ManagerSidebar from "@/components/layout/ManagerSidebar";
 import { fmt, STATUS_LABELS, STATUS_COLORS, CATEGORY_LABELS, CATEGORY_COLORS, MORNING_TYPE_LABELS, toLocalDateStr } from "@/lib/quoteLabels";
 
 const DATE_PRESETS = [
@@ -89,7 +89,14 @@ export default function QuotesHistory() {
     return { from: null, to: null }; // "all"
   })();
 
-  const byDate = quotes.filter((q) => {
+  // This screen is the review QUEUE — only quotes an agent actually sent for
+  // review (status='sent') belong here. Once a manager decides (approved/
+  // rejected), the quote leaves this list on the next render — that's the
+  // point of a queue. Full history of every quote, any status, lives in
+  // "היסטוריית הצעות כללית" (/quotes-archive) instead.
+  const reviewQueue = quotes.filter((q) => q.status === "sent");
+
+  const byDate = reviewQueue.filter((q) => {
     if (!dateRange.from && !dateRange.to) return true;
     const created = new Date(q.created_date);
     if (dateRange.from && created < dateRange.from) return false;
@@ -136,8 +143,6 @@ export default function QuotesHistory() {
     setQuotes((prev) => prev.map((x) => (x.id === q.id ? { ...x, viewed_at: viewedAt } : x)));
     base44.entities.Quote.update(q.id, { viewed_at: viewedAt });
   };
-
-  const totalApproved = filtered.filter(q => q.status === "approved").reduce((sum, q) => sum + (q.price_with_vat || 0), 0);
 
   const updateStatus = async (id, status) => {
     await base44.entities.Quote.update(id, { status });
@@ -199,44 +204,38 @@ export default function QuotesHistory() {
     });
   };
 
-  // Selected agent's own stats within the current date range — count, total
-  // value, average, and conversion rate (approved ÷ total) so the manager can
-  // see not just volume but how often this agent's quotes actually close.
+  // Selected agent's own stats within the current date range — how much of
+  // theirs is sitting in the queue, and how much of that the manager hasn't
+  // even opened yet.
   const selectedAgentStats = selectedAgent ? (() => {
     const mine = byDate.filter((q) => q.created_by === selectedAgent);
-    const approvedCount = mine.filter((q) => q.status === "approved").length;
+    const unread = mine.filter((q) => !q.viewed_at).length;
     const total = mine.reduce((s, q) => s + (q.price_with_vat || 0), 0);
     return {
       name: sellers[selectedAgent] || selectedAgent,
       count: mine.length,
       total,
       avg: mine.length > 0 ? total / mine.length : 0,
-      conversionPct: mine.length > 0 ? (approvedCount / mine.length) * 100 : 0,
+      unread,
     };
   })() : null;
 
   return (
     <div className="min-h-screen bg-background text-foreground" dir="rtl">
-      {/* Header */}
+      {/* Header — no back button here anymore; ManagerSidebar below is the
+          single, always-visible navigation for every manager screen. */}
       <div className="sticky top-0 z-20 bg-background/90 backdrop-blur-xl border-b border-black">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <img src={printellaLogo} alt="Printella" className="h-24 object-contain" />
-            {user?.full_name && (
-              <span className="text-sm font-semibold text-foreground">{user.full_name}</span>
-            )}
-          </div>
-          <Link
-            to="/"
-            className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-primary transition-colors px-3 py-1.5 rounded-lg border border-black hover:border-primary/40"
-          >
-            <ArrowRight className="w-4 h-4" />
-            חזרה לתפריט הראשי
-          </Link>
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center gap-3">
+          <img src={printellaLogo} alt="Printella" className="h-24 object-contain" />
+          {user?.full_name && (
+            <span className="text-sm font-semibold text-foreground">{user.full_name}</span>
+          )}
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+      <div className="w-full mx-auto px-4 sm:px-8 py-8 flex flex-col lg:flex-row gap-8 items-start">
+        <ManagerSidebar />
+        <div className="flex-1 min-w-0 w-full max-w-5xl space-y-6">
         {/* Date filter */}
         <div className="space-y-3">
           <div className="flex items-center gap-2 flex-wrap">
@@ -295,20 +294,22 @@ export default function QuotesHistory() {
           )}
         </div>
 
-        {/* Stats */}
+        {/* Stats — every card here is about the QUEUE itself (things still
+            awaiting a decision); "approved" no longer means anything on this
+            screen since an approved quote leaves the queue immediately. */}
         <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">סיכום הצעות לטווח זמן</h3>
         <div className="grid grid-cols-3 gap-3">
           <div className="bg-white border border-black rounded-2xl p-4 text-center">
             <div className="text-2xl font-bold text-foreground tabular-nums">{byDate.length}</div>
-            <div className="text-sm text-slate-500 mt-1">סה״כ הצעות</div>
+            <div className="text-sm text-slate-500 mt-1">ממתינות לבדיקה</div>
           </div>
           <div className="bg-white border border-black rounded-2xl p-4 text-center">
-            <div className="text-2xl font-bold text-emerald-600 tabular-nums">{byDate.filter(q => q.status === "approved").length}</div>
-            <div className="text-sm text-slate-500 mt-1">הצעות שאושרו</div>
+            <div className="text-2xl font-bold text-emerald-600 tabular-nums">{unreadCount}</div>
+            <div className="text-sm text-slate-500 mt-1">טרם נפתחו</div>
           </div>
           <div className="bg-white border border-black rounded-2xl p-4 text-center">
-            <div className="text-2xl font-bold text-primary tabular-nums">{fmt(byDate.filter(q => q.status === "approved").reduce((s, q) => s + (q.price_with_vat || 0), 0))}</div>
-            <div className="text-sm text-slate-500 mt-1">סה״כ עסקאות שאושרו</div>
+            <div className="text-2xl font-bold text-primary tabular-nums">{fmt(byDate.reduce((s, q) => s + (q.price_with_vat || 0), 0))}</div>
+            <div className="text-sm text-slate-500 mt-1">סה״כ שווי ממתין</div>
           </div>
         </div>
 
@@ -345,8 +346,8 @@ export default function QuotesHistory() {
                   <div className="text-xs text-slate-500 mt-1">ממוצע להצעה</div>
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-emerald-600 tabular-nums">{selectedAgentStats.conversionPct.toFixed(0)}%</div>
-                  <div className="text-xs text-slate-500 mt-1">אחוז המרה (אושרו)</div>
+                  <div className="text-2xl font-bold text-emerald-600 tabular-nums">{selectedAgentStats.unread}</div>
+                  <div className="text-xs text-slate-500 mt-1">טרם נפתחו</div>
                 </div>
               </div>
             ) : (
@@ -472,21 +473,19 @@ export default function QuotesHistory() {
                       <div className="text-sm text-slate-400">כולל מע״מ</div>
                     </div>
                     {/* אישור/דחייה רק דרך הכפתורים — הם היחידים ששולחים התראה
-                        לסוכן. הרשימה הזו נועדה רק לתיקון מנהלי בין טיוטה/נשלחה,
-                        לא לקבל החלטה סופית "בשקט" בלי שהסוכן ידע. */}
-                    {(q.status === "approved" || q.status === "rejected") ? (
-                      <span className={`text-xs px-2 py-1.5 rounded-lg ${STATUS_COLORS[q.status]}`}>{STATUS_LABELS[q.status]}</span>
-                    ) : (
-                      <select
-                        value={q.status || "draft"}
-                        onChange={(e) => updateStatus(q.id, e.target.value)}
-                        title="תיקון מנהלי בין טיוטה לנשלחה — לאישור/דחייה בפועל יש להשתמש בכפתורים"
-                        className={`text-xs px-2 py-1.5 rounded-lg border-0 outline-none cursor-pointer ${STATUS_COLORS[q.status || "draft"]} bg-transparent`}
-                      >
-                        <option value="draft" className="bg-white text-foreground">{STATUS_LABELS.draft}</option>
-                        <option value="sent" className="bg-white text-foreground">{STATUS_LABELS.sent}</option>
-                      </select>
-                    )}
+                        לסוכן. הרשימה הזו נועדה רק להחזיר הצעה לטיוטה (החוצה
+                        מהתור, בחזרה לסוכן), לא לקבל החלטה סופית "בשקט" בלי
+                        שהסוכן ידע. אין כאן ענף "אושרה/נדחתה" — ברגע שהצעה
+                        מקבלת החלטה היא כבר לא status='sent' ויוצאת מהתור. */}
+                    <select
+                      value={q.status}
+                      onChange={(e) => updateStatus(q.id, e.target.value)}
+                      title="החזרת ההצעה לטיוטה — לאישור/דחייה בפועל יש להשתמש בכפתורים"
+                      className={`text-xs px-2 py-1.5 rounded-lg border-0 outline-none cursor-pointer ${STATUS_COLORS[q.status]} bg-transparent`}
+                    >
+                      <option value="draft" className="bg-white text-foreground">{STATUS_LABELS.draft}</option>
+                      <option value="sent" className="bg-white text-foreground">{STATUS_LABELS.sent}</option>
+                    </select>
                     <button
                       onClick={() => decideQuote(q, "approved")}
                       disabled={pendingIds.has(q.id)}
@@ -527,6 +526,7 @@ export default function QuotesHistory() {
             ))}
           </div>
         )}
+        </div>
       </div>
 
       {selectedQuote && (
