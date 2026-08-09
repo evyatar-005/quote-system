@@ -1,9 +1,11 @@
 import { useState, useEffect, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { Link } from "react-router-dom";
-import { Search, Loader2, User, Calendar, Settings, BarChart3, LogOut, ChevronDown, X, Eye, FileText, ClipboardList } from "lucide-react";
+import { Search, Loader2, User, Calendar, Settings, BarChart3, LogOut, ChevronDown, X, Eye, FileText, ClipboardList, List as ListIcon, PackageSearch } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import QuoteDetailsModal from "@/components/QuoteDetailsModal";
+import QuotesAnalytics from "@/components/quotes/QuotesAnalytics";
+import ProductAnalytics from "@/components/quotes/ProductAnalytics";
 import { getLatestMorningDocuments } from "@/api/morningClient";
 import { useAuth } from "@/lib/AuthContext";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
@@ -15,7 +17,7 @@ import {
 // calculation_data stores the fine-grained productType (pvc_white, rollup_magnetic…),
 // not the coarse product_category — so names come from the calculator's canonical
 // PRODUCT_NAMES map, and the badge colour from the category that type rolls up to.
-import { PRODUCT_NAMES, categoryOf } from "@/components/calculator/CalculatorForm";
+import { PRODUCT_NAMES, PRODUCT_CODES, categoryOf } from "@/components/calculator/CalculatorForm";
 
 // General quote history — read-only. Distinct from /quotes (QuotesHistory),
 // which is the manager's daily review queue: same underlying rows, but this
@@ -57,8 +59,35 @@ const productTypesOf = (quote) => {
 };
 
 const productLabel = (type) => PRODUCT_NAMES[type] || CATEGORY_LABELS[type] || type;
+const productSku = (type) => PRODUCT_CODES[type] || "";
+// "005-1" sorts before "005-10" and after "003-6" — compare the numeric parts,
+// not the raw string, so the מק"ט order in the picker matches the catalogue.
+const compareSku = (a, b) =>
+  productSku(a).localeCompare(productSku(b), "en", { numeric: true }) ||
+  productLabel(a).localeCompare(productLabel(b), "he");
 const productBadgeClass = (type) =>
   CATEGORY_COLORS[categoryOf(type)] || CATEGORY_COLORS[type] || "bg-slate-100 text-slate-500";
+
+// One labelled dropdown in the filter strip. Label sits above the control so
+// every filter is the same height and they line up on a wrapping row.
+function Filter({ label, value, onChange, children, className = "" }) {
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-xs font-semibold text-slate-500">{label}</span>
+      <div className="relative">
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          dir="rtl"
+          className={`h-10 rounded-lg border border-black bg-white pl-3 pr-8 text-sm text-slate-700 appearance-none ${className}`}
+        >
+          {children}
+        </select>
+        <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+      </div>
+    </label>
+  );
+}
 
 export default function QuotesArchive() {
   const { logout } = useAuth();
@@ -69,6 +98,7 @@ export default function QuotesArchive() {
   const [morningDocs, setMorningDocs] = useState({});
   const [selectedQuote, setSelectedQuote] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
+  const [tab, setTab] = useState("list");
 
   // Filters
   const [search, setSearch] = useState("");
@@ -78,9 +108,7 @@ export default function QuotesArchive() {
   const [selectedAgent, setSelectedAgent] = useState(null);
   const [docKind, setDocKind] = useState("all");
   const [statusFilter, setStatusFilter] = useState("");
-  const [minAmount, setMinAmount] = useState("");
-  const [maxAmount, setMaxAmount] = useState("");
-  const [selectedProducts, setSelectedProducts] = useState(() => new Set());
+  const [selectedProduct, setSelectedProduct] = useState("");
 
   useEffect(() => {
     base44.auth.me().then(setUser);
@@ -155,12 +183,25 @@ export default function QuotesArchive() {
     }, {})
   ).sort((a, b) => b.total - a.total);
 
+  // The agent PICKER is built from every quote, not just the ones in range —
+  // otherwise choosing a date range with no results makes the dropdown vanish
+  // while `selectedAgent` stays set, leaving an invisible filter applied with
+  // no control to clear it. Counts still reflect the current range (0 is a
+  // legitimate, informative answer).
+  const agentOptions = [...new Set(quotes.map((q) => q.created_by).filter(Boolean))]
+    .map((key) => ({
+      key,
+      name: sellers[key] || key,
+      count: agentStats.find((a) => a.key === key)?.count || 0,
+    }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "he"));
+
   // Product checklist is built from what's actually present in range, so it never
   // offers a filter that can only return zero rows.
   const availableProducts = useMemo(() => {
     const seen = new Set();
     for (const q of byDate) for (const t of productTypesOf(q)) seen.add(t);
-    return [...seen].sort((a, b) => productLabel(a).localeCompare(productLabel(b), "he"));
+    return [...seen].sort(compareSku);
   }, [byDate]);
 
   const filtered = byDate.filter((q) => {
@@ -169,15 +210,8 @@ export default function QuotesArchive() {
     if (docKind === "order" && !isOrder(q)) return false;
     if (docKind === "quote" && isOrder(q)) return false;
 
-    const amount = q.price_with_vat || 0;
-    if (minAmount !== "" && amount < parseFloat(minAmount)) return false;
-    if (maxAmount !== "" && amount > parseFloat(maxAmount)) return false;
-
-    // OR semantics: keep the quote if it contains at least one ticked product.
-    if (selectedProducts.size > 0) {
-      const types = productTypesOf(q);
-      if (!types.some((t) => selectedProducts.has(t))) return false;
-    }
+    // Matches anywhere in the quote, not just the first item.
+    if (selectedProduct && !productTypesOf(q).includes(selectedProduct)) return false;
 
     const s = search.toLowerCase();
     return (
@@ -188,16 +222,9 @@ export default function QuotesArchive() {
     );
   });
 
-  const toggleProduct = (type) =>
-    setSelectedProducts((prev) => {
-      const next = new Set(prev);
-      next.has(type) ? next.delete(type) : next.add(type);
-      return next;
-    });
-
   const resetFilters = () => {
     setSearch(""); setDatePreset("all"); setSelectedAgent(null); setDocKind("all");
-    setStatusFilter(""); setMinAmount(""); setMaxAmount(""); setSelectedProducts(new Set());
+    setStatusFilter(""); setSelectedProduct("");
   };
 
   const orderCount = filtered.filter(isOrder).length;
@@ -253,21 +280,55 @@ export default function QuotesArchive() {
       </div>
 
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-        {/* Date + agent */}
+        {/* Every filter is a labelled dropdown on one wrapping row, so the whole
+            filter set reads as a single control strip instead of stacked rows. */}
         <div className="space-y-3">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-semibold text-slate-500 shrink-0">טווח זמן:</span>
-            {DATE_PRESETS.map(({ key, label }) => (
-              <button
-                key={key}
-                onClick={() => setDatePreset(key)}
-                className={`h-10 flex items-center justify-center px-4 text-sm rounded-lg border transition-colors ${
-                  datePreset === key ? "border-primary bg-primary/10 text-primary font-semibold" : "border-black text-slate-500 hover:border-slate-500"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
+          <div className="flex items-end gap-3 flex-wrap">
+            <Filter label="טווח זמן" value={datePreset} onChange={setDatePreset}>
+              {DATE_PRESETS.map(({ key, label }) => (
+                <option key={key} value={key}>{label}</option>
+              ))}
+            </Filter>
+
+            {agentOptions.length > 0 && (
+              <Filter label="סוכן" value={selectedAgent || ""} onChange={(v) => setSelectedAgent(v || null)}>
+                <option value="">כל הסוכנים</option>
+                {agentOptions.map((a) => (
+                  <option key={a.key} value={a.key}>{a.name} ({a.count})</option>
+                ))}
+              </Filter>
+            )}
+
+            <Filter label="סוג מסמך" value={docKind} onChange={setDocKind}>
+              {DOC_KIND_FILTERS.map(({ key, label }) => (
+                <option key={key} value={key}>{label}</option>
+              ))}
+            </Filter>
+
+            <Filter label="סטטוס מסמך" value={statusFilter} onChange={setStatusFilter}>
+              <option value="">כל הסטטוסים</option>
+              {Object.entries(STATUS_LABELS).map(([key, label]) => (
+                <option key={key} value={key}>{label}</option>
+              ))}
+            </Filter>
+
+            {availableProducts.length > 0 && (
+              <Filter label="מכילה פריט" value={selectedProduct} onChange={setSelectedProduct} className="w-[15rem]">
+                <option value="">כל הפריטים</option>
+                {availableProducts.map((type) => (
+                  <option key={type} value={type}>
+                    {productSku(type) ? `${productSku(type)} · ${productLabel(type)}` : productLabel(type)}
+                  </option>
+                ))}
+              </Filter>
+            )}
+
+            <button
+              onClick={resetFilters}
+              className="h-10 px-3 text-sm rounded-lg border border-black text-slate-500 hover:border-slate-500 flex items-center gap-1.5"
+            >
+              <X className="w-3.5 h-3.5" /> נקה סינונים
+            </button>
           </div>
 
           {datePreset === "custom" && (
@@ -277,90 +338,38 @@ export default function QuotesArchive() {
               <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="h-10 rounded-lg border border-black bg-white px-3 text-sm text-slate-700" dir="ltr" />
             </div>
           )}
-
-          <div className="flex items-center gap-2 flex-wrap">
-            {agentStats.length > 0 && (
-              <>
-                <span className="text-sm font-semibold text-slate-500 shrink-0">סוכן:</span>
-                <div className="relative">
-                  <select
-                    value={selectedAgent || ""}
-                    onChange={(e) => setSelectedAgent(e.target.value || null)}
-                    dir="rtl"
-                    className="h-10 rounded-lg border border-black bg-white pl-3 pr-8 text-sm text-slate-700 appearance-none"
-                  >
-                    <option value="">כל הסוכנים</option>
-                    {agentStats.map((a) => (
-                      <option key={a.key} value={a.key}>{a.name} ({a.count})</option>
-                    ))}
-                  </select>
-                  <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
-                </div>
-              </>
-            )}
-
-            <span className="text-sm font-semibold text-slate-500 shrink-0 mr-2">סוג:</span>
-            {DOC_KIND_FILTERS.map(({ key, label }) => (
-              <button
-                key={key}
-                onClick={() => setDocKind(key)}
-                className={`h-10 px-3 text-sm rounded-lg border transition-colors ${
-                  docKind === key ? "border-primary bg-primary/10 text-primary font-semibold" : "border-black text-slate-500 hover:border-slate-500"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-
-            <span className="text-sm font-semibold text-slate-500 shrink-0 mr-2">סטטוס:</span>
-            <div className="relative">
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                dir="rtl"
-                className="h-10 rounded-lg border border-black bg-white pl-3 pr-8 text-sm text-slate-700 appearance-none"
-              >
-                <option value="">כל הסטטוסים</option>
-                {Object.entries(STATUS_LABELS).map(([key, label]) => (
-                  <option key={key} value={key}>{label}</option>
-                ))}
-              </select>
-              <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
-            </div>
-          </div>
-
-          {/* Amount range */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-semibold text-slate-500 shrink-0">סכום (₪, כולל מע״מ):</span>
-            <input type="number" min={0} value={minAmount} onChange={(e) => setMinAmount(e.target.value)} placeholder="מ-" className="h-10 w-28 rounded-lg border border-black bg-white px-3 text-sm text-slate-700" />
-            <span className="text-slate-500 text-sm">עד</span>
-            <input type="number" min={0} value={maxAmount} onChange={(e) => setMaxAmount(e.target.value)} placeholder="עד" className="h-10 w-28 rounded-lg border border-black bg-white px-3 text-sm text-slate-700" />
-            <button onClick={resetFilters} className="h-10 px-3 text-sm rounded-lg border border-black text-slate-500 hover:border-slate-500 flex items-center gap-1.5 mr-auto">
-              <X className="w-3.5 h-3.5" /> נקה סינונים
-            </button>
-          </div>
-
-          {/* Contains-products checklist */}
-          {availableProducts.length > 0 && (
-            <div className="flex items-start gap-2 flex-wrap">
-              <span className="text-sm font-semibold text-slate-500 shrink-0 pt-2">מכילה פריטים:</span>
-              <div className="flex items-center gap-2 flex-wrap">
-                {availableProducts.map((type) => (
-                  <label
-                    key={type}
-                    className={`flex items-center gap-1.5 h-10 px-3 text-sm rounded-lg border cursor-pointer transition-colors ${
-                      selectedProducts.has(type) ? "border-primary bg-primary/10 text-primary font-semibold" : "border-black text-slate-500 hover:border-slate-500"
-                    }`}
-                  >
-                    <input type="checkbox" checked={selectedProducts.has(type)} onChange={() => toggleProduct(type)} className="accent-primary" />
-                    {productLabel(type)}
-                  </label>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
 
+        {/* "רשימת הצעות" reads the top filter bar (`filtered`). "אנליטיקה" and
+            "ניתוח מוצרים" both read the full unfiltered `quotes` set and own
+            their own time filter instead — a per-agent comparison report
+            would be meaningless if the top bar's "סוכן" filter (meant for
+            browsing the list) silently collapsed it down to one agent. */}
+        <div className="flex items-center gap-2 border-b border-slate-200">
+          {[
+            { key: "list", label: "רשימת הצעות", Icon: ListIcon },
+            { key: "analytics", label: "אנליטיקה", Icon: BarChart3 },
+            { key: "products", label: "ניתוח מוצרים", Icon: PackageSearch },
+          ].map(({ key, label, Icon }) => (
+            <button
+              key={key}
+              onClick={() => setTab(key)}
+              className={`flex items-center gap-1.5 px-4 py-2 text-sm -mb-px border-b-2 transition-colors ${
+                tab === key ? "border-primary text-primary font-semibold" : "border-transparent text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              <Icon className="w-4 h-4" />
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {tab === "analytics" ? (
+          <QuotesAnalytics quotes={quotes} sellers={sellers} morningDocs={morningDocs} />
+        ) : tab === "products" ? (
+          <ProductAnalytics quotes={quotes} morningDocs={morningDocs} />
+        ) : (
+        <>
         {/* Search */}
         <div className="relative">
           <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -444,9 +453,9 @@ export default function QuotesArchive() {
                       {q.parent_quote_number && (
                         <span className="text-xs bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full">תיקון ל-{q.parent_quote_number}</span>
                       )}
-                      {productTypesOf(q).map((type) => (
+                      {productTypesOf(q).sort(compareSku).map((type) => (
                         <span key={type} className={`text-xs px-2 py-0.5 rounded-full ${productBadgeClass(type)}`}>
-                          {productLabel(type)}
+                          {productSku(type) ? `${productSku(type)} · ${productLabel(type)}` : productLabel(type)}
                         </span>
                       ))}
                       {isOrder(q) && (
@@ -493,6 +502,8 @@ export default function QuotesArchive() {
               </div>
             ))}
           </div>
+        )}
+        </>
         )}
       </div>
 

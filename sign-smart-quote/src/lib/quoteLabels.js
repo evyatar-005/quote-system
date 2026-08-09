@@ -48,3 +48,32 @@ export function toLocalDateStr(d) {
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
+
+// Shared date-range presets — used by the archive's top filter bar and by
+// every independent per-chart time filter in the analytics tabs.
+export const DATE_PRESETS = [
+  { key: "today", label: "היום" },
+  { key: "7d", label: "7 ימים אחרונים" },
+  { key: "30d", label: "30 יום אחרונים" },
+  { key: "month", label: "החודש" },
+  { key: "year", label: "השנה" },
+  { key: "all", label: "הכל" },
+  { key: "custom", label: "טווח מותאם" },
+];
+
+export function computeDateRange(preset, customFrom, customTo) {
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (preset === "today") return { from: startOfToday, to: null };
+  if (preset === "7d") return { from: new Date(startOfToday.getTime() - 6 * 86400000), to: null };
+  if (preset === "30d") return { from: new Date(startOfToday.getTime() - 29 * 86400000), to: null };
+  if (preset === "month") return { from: new Date(now.getFullYear(), now.getMonth(), 1), to: null };
+  if (preset === "year") return { from: new Date(now.getFullYear(), 0, 1), to: null };
+  if (preset === "custom") {
+    return {
+      from: customFrom ? new Date(`${customFrom}T00:00:00`) : null,
+      to: customTo ? new Date(`${customTo}T23:59:59`) : null,
+    };
+  }
+  return { from: null, to: null }; // "all"
+}
