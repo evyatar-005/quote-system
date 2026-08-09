@@ -76,9 +76,16 @@ for (const col of [
   try { db.exec(col); } catch (_) {}
 }
 
-// Recipient for the 17:00 daily delivery-note report (src/services/reports/
-// dailyDeliveryReport.js) — distinct from from_email (the sender identity).
+// Delivery-note report config (src/services/reports/dailyDeliveryReport.js).
+// report_recipient_email holds a comma/newline-separated list, despite the
+// singular name kept from before multi-recipient support existed — renaming
+// the column would just be churn against a value the app always parses
+// through parseRecipients() anyway.
 try { db.exec('ALTER TABLE smtp_credentials ADD COLUMN report_recipient_email TEXT'); } catch (_) {}
+try { db.exec(`ALTER TABLE smtp_credentials ADD COLUMN report_frequency TEXT NOT NULL DEFAULT 'daily'`); } catch (_) {}
+try { db.exec(`ALTER TABLE smtp_credentials ADD COLUMN report_time TEXT NOT NULL DEFAULT '17:00'`); } catch (_) {}
+try { db.exec('ALTER TABLE smtp_credentials ADD COLUMN report_weekday INTEGER NOT NULL DEFAULT 0'); } catch (_) {}
+try { db.exec('ALTER TABLE smtp_credentials ADD COLUMN report_day_of_month INTEGER NOT NULL DEFAULT 1'); } catch (_) {}
 
 // Add stand/mechanism cost column to roll-up tiers if it doesn't exist yet.
 try { db.exec('ALTER TABLE signshop_rollup_tiers ADD COLUMN stand_cost REAL NOT NULL DEFAULT 0'); } catch (_) {}

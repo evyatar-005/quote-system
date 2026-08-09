@@ -1,10 +1,23 @@
 import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Loader2, Save, Mail, Send, FileText } from "lucide-react";
+import { Loader2, Save, Mail, Send, FileText, X, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { getSmtpConfig, saveSmtpConfig, sendSmtpTest, sendDailyReportTest } from "@/api/smtpClient";
 import CostSectionCard from "./CostSectionCard";
+
+const WEEKDAY_LABELS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
+
+// Same split rule as the backend's parseRecipients (dailyDeliveryReport.js) —
+// comma/semicolon/newline separated, trimmed, de-duplicated, blanks dropped.
+function parseRecipients(raw) {
+  if (!raw) return [];
+  const seen = new Set();
+  return raw
+    .split(/[,;\n]/)
+    .map((s) => s.trim())
+    .filter((s) => s && !seen.has(s) && seen.add(s));
+}
 
 export default function SmtpSettingsSection() {
   const [loading, setLoading] = useState(true);
@@ -24,7 +37,20 @@ export default function SmtpSettingsSection() {
   const [fromEmail, setFromEmail] = useState("");
   const [fromName, setFromName] = useState("");
   const [appBaseUrl, setAppBaseUrl] = useState("");
-  const [reportRecipientEmail, setReportRecipientEmail] = useState("");
+  const [recipients, setRecipients] = useState([]); // string[] — the actual list edited in the UI
+  const [recipientInput, setRecipientInput] = useState("");
+  const [reportFrequency, setReportFrequency] = useState("daily");
+  const [reportTime, setReportTime] = useState("17:00");
+  const [reportWeekday, setReportWeekday] = useState(0);
+  const [reportDayOfMonth, setReportDayOfMonth] = useState(1);
+
+  const addRecipient = () => {
+    const email = recipientInput.trim();
+    if (!email) return;
+    setRecipients((prev) => (prev.includes(email) ? prev : [...prev, email]));
+    setRecipientInput("");
+  };
+  const removeRecipient = (email) => setRecipients((prev) => prev.filter((r) => r !== email));
 
   useEffect(() => {
     (async () => {
@@ -37,7 +63,11 @@ export default function SmtpSettingsSection() {
         setFromEmail(cfg.from_email || "");
         setFromName(cfg.from_name || "");
         setAppBaseUrl(cfg.app_base_url || "");
-        setReportRecipientEmail(cfg.report_recipient_email || "");
+        setRecipients(parseRecipients(cfg.report_recipient_email));
+        setReportFrequency(cfg.report_frequency || "daily");
+        setReportTime(cfg.report_time || "17:00");
+        setReportWeekday(cfg.report_weekday ?? 0);
+        setReportDayOfMonth(cfg.report_day_of_month ?? 1);
       } catch {
         toast.error("שגיאה בטעינת הגדרות SMTP");
       }
@@ -60,7 +90,11 @@ export default function SmtpSettingsSection() {
         from_email: fromEmail,
         from_name: fromName,
         app_base_url: appBaseUrl,
-        report_recipient_email: reportRecipientEmail,
+        report_recipient_email: recipients.join(", "),
+        report_frequency: reportFrequency,
+        report_time: reportTime,
+        report_weekday: Number(reportWeekday),
+        report_day_of_month: Number(reportDayOfMonth),
       });
       setPassword("");
       setPasswordMasked(result?.password_masked || passwordMasked);
@@ -184,23 +218,114 @@ export default function SmtpSettingsSection() {
             כתובת ה-tunnel הפעילה, כדי שקישורי איפוס סיסמה במייל יעבדו נכון — כתובת ה-tunnel משתנה בכל הפעלה, לכן יש לעדכן כאן לפי הצורך.
           </p>
         </div>
-        <div className="space-y-1.5 sm:col-span-2">
-          <label className="text-sm font-semibold text-slate-600">כתובת מייל לדוח תעודות משלוח יומי</label>
-          <Input
-            dir="ltr"
-            value={reportRecipientEmail}
-            onChange={(e) => setReportRecipientEmail(e.target.value)}
-            placeholder="office@printela.co.il"
-          />
-          <p className="text-xs text-muted-foreground">
-            כל יום ב-17:00 תישלח לכתובת הזו רשימת תעודות המשלוח שנסגרו באותו יום, עם מספר כל תעודה והסכום שלה לפני מע״מ. השדה ריק = הדוח לא נשלח.
-          </p>
-        </div>
         <div className="sm:col-span-2">
           <p className="text-xs text-muted-foreground">
             סוג ההצפנה נקבע אוטומטית לפי הפורט — 465 מתחבר ב-SSL ישיר, ו-587 או 25 משתמשים ב-STARTTLS.
           </p>
         </div>
+      </div>
+
+      <div className="border-t border-slate-100 pt-4 space-y-4">
+        <div className="flex items-center gap-2">
+          <FileText className="w-4 h-4 text-slate-500" />
+          <h4 className="text-sm font-semibold text-slate-700">דוח תעודות משלוח מתוזמן</h4>
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-sm font-semibold text-slate-600">נמענים</label>
+          <div className="flex flex-wrap gap-2">
+            {recipients.map((email) => (
+              <span
+                key={email}
+                className="flex items-center gap-1.5 text-xs bg-slate-100 text-slate-700 rounded-full pl-1 pr-3 py-1"
+                dir="ltr"
+              >
+                {email}
+                <button
+                  type="button"
+                  onClick={() => removeRecipient(email)}
+                  className="p-0.5 rounded-full hover:bg-slate-200 text-slate-500"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <Input
+              dir="ltr"
+              value={recipientInput}
+              onChange={(e) => setRecipientInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") { e.preventDefault(); addRecipient(); }
+              }}
+              placeholder="office@printela.co.il"
+              className="flex-1"
+            />
+            <Button type="button" variant="outline" onClick={addRecipient} className="gap-1.5 shrink-0">
+              <Plus className="w-4 h-4" /> הוסף
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            אפשר להוסיף כמה כתובות שרוצים. רשימה ריקה = הדוח לא נשלח.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-4">
+          <div className="space-y-1.5">
+            <label className="text-sm font-semibold text-slate-600">תדירות</label>
+            <select
+              value={reportFrequency}
+              onChange={(e) => setReportFrequency(e.target.value)}
+              className="w-full h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm"
+            >
+              <option value="daily">יומי</option>
+              <option value="weekly">שבועי</option>
+              <option value="monthly">חודשי</option>
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-semibold text-slate-600">שעת שליחה</label>
+            <Input
+              type="time"
+              dir="ltr"
+              value={reportTime}
+              onChange={(e) => setReportTime(e.target.value)}
+            />
+          </div>
+          {reportFrequency === "weekly" && (
+            <div className="space-y-1.5">
+              <label className="text-sm font-semibold text-slate-600">יום בשבוע</label>
+              <select
+                value={reportWeekday}
+                onChange={(e) => setReportWeekday(e.target.value)}
+                className="w-full h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm"
+              >
+                {WEEKDAY_LABELS.map((label, i) => (
+                  <option key={i} value={i}>{label}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          {reportFrequency === "monthly" && (
+            <div className="space-y-1.5">
+              <label className="text-sm font-semibold text-slate-600">יום בחודש</label>
+              <Input
+                type="number"
+                dir="ltr"
+                min={1}
+                max={31}
+                value={reportDayOfMonth}
+                onChange={(e) => setReportDayOfMonth(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">בחודשים קצרים יותר (כמו פברואר) יישלח ביום האחרון של החודש.</p>
+            </div>
+          )}
+        </div>
+
+        <p className="text-xs text-muted-foreground">
+          דוח יומי מסכם את היום הנוכחי, שבועי את 7 הימים האחרונים, וחודשי את 30 הימים האחרונים — לכל תעודת משלוח שנסגרה בתקופה: מספר תעודה, לקוח, וסכום לפני מע״מ.
+        </p>
       </div>
 
       {status && (

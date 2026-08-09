@@ -23,12 +23,19 @@ module.exports = function registerSmtp(app, db, deps) {
       from_name: (row && row.from_name) || '',
       app_base_url: (row && row.app_base_url) || '',
       report_recipient_email: (row && row.report_recipient_email) || '',
+      report_frequency: (row && row.report_frequency) || 'daily',
+      report_time: (row && row.report_time) || '17:00',
+      report_weekday: row && row.report_weekday != null ? row.report_weekday : 0,
+      report_day_of_month: row && row.report_day_of_month != null ? row.report_day_of_month : 1,
     });
   });
 
   // ── PUT /api/smtp/config ────────────────────────────────────────────────────
   app.put('/api/smtp/config', requireAdmin, (req, res) => {
-    const { host, port, secure, username, password, from_email, from_name, app_base_url, report_recipient_email } = req.body || {};
+    const {
+      host, port, secure, username, password, from_email, from_name, app_base_url,
+      report_recipient_email, report_frequency, report_time, report_weekday, report_day_of_month,
+    } = req.body || {};
     const existing = credRow.get();
     // Blank/omitted password means "leave it as-is" — same convention as
     // /api/morning/config, so an admin can edit other fields without re-pasting it.
@@ -40,12 +47,15 @@ module.exports = function registerSmtp(app, db, deps) {
       : (existing ? existing.password : null);
 
     db.prepare(
-      `INSERT INTO smtp_credentials (id, host, port, secure, username, password, from_email, from_name, app_base_url, report_recipient_email)
-       VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO smtp_credentials (id, host, port, secure, username, password, from_email, from_name, app_base_url,
+         report_recipient_email, report_frequency, report_time, report_weekday, report_day_of_month)
+       VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET host=excluded.host, port=excluded.port, secure=excluded.secure,
          username=excluded.username, password=excluded.password, from_email=excluded.from_email,
          from_name=excluded.from_name, app_base_url=excluded.app_base_url,
-         report_recipient_email=excluded.report_recipient_email, updated_at=CURRENT_TIMESTAMP`
+         report_recipient_email=excluded.report_recipient_email, report_frequency=excluded.report_frequency,
+         report_time=excluded.report_time, report_weekday=excluded.report_weekday,
+         report_day_of_month=excluded.report_day_of_month, updated_at=CURRENT_TIMESTAMP`
     ).run(
       host || null,
       port || 587,
@@ -55,7 +65,11 @@ module.exports = function registerSmtp(app, db, deps) {
       from_email || null,
       from_name || null,
       app_base_url || null,
-      report_recipient_email || null
+      report_recipient_email || null,
+      report_frequency || 'daily',
+      report_time || '17:00',
+      report_weekday ?? 0,
+      report_day_of_month ?? 1
     );
 
     console.log(`[PUT /api/smtp/config] host="${host || ''}" from_email="${from_email || ''}"`);
