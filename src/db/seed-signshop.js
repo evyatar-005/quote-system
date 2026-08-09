@@ -103,6 +103,22 @@ const CONFIG_SEED = [
   // Glass (extra clear) — production time: pre-print + print only, no cutting (bought pre-sized)
   ['glass_pre_print_time_minutes',     10,  'זכוכית אקסטרה קליר — קדם הדפסה (דקות)'],
   ['glass_print_time_minutes',         15,  'זכוכית אקסטרה קליר — זמן הדפסה (דקות)'],
+  // Double-sided tape ("דבק דו-צדדי") — optional extra, priced independently
+  // per product family (flat ₪/unit, cost + selling price), same pattern as
+  // every other per-family price in the system. See useCalculator.jsx
+  // applyTapeExtra — every family that reads these two keys automatically
+  // gets the extra wired into every calculator, so there's no single-screen
+  // wiring gap like there was in the past.
+  ['tape_cost_lokobond',                5,    'עלות דבק דו-צדדי — לוקובונד (₪/יחידה)'],
+  ['tape_selling_price_lokobond',       0,    'מחיר תוספת דבק דו-צדדי — לוקובונד (₪/יחידה)'],
+  ['tape_cost_foamex',                  5,    'עלות דבק דו-צדדי — פיויסי (₪/יחידה)'],
+  ['tape_selling_price_foamex',         0,    'מחיר תוספת דבק דו-צדדי — פיויסי (₪/יחידה)'],
+  ['tape_cost_perspex_board',           5,    'עלות דבק דו-צדדי — פרספקס (₪/יחידה)'],
+  ['tape_selling_price_perspex_board',  0,    'מחיר תוספת דבק דו-צדדי — פרספקס (₪/יחידה)'],
+  ['tape_cost_kapa',                    5,    'עלות דבק דו-צדדי — קאפה (₪/יחידה)'],
+  ['tape_selling_price_kapa',           0,    'מחיר תוספת דבק דו-צדדי — קאפה (₪/יחידה)'],
+  ['tape_cost_lightbox',                5,    'עלות דבק דו-צדדי — ארגז מואר (₪/יחידה)'],
+  ['tape_selling_price_lightbox',       0,    'מחיר תוספת דבק דו-צדדי — ארגז מואר (₪/יחידה)'],
 ];
 
 // ── Logo selling tiers: product_type, thickness_mm, price_per_sqm, min_price ──

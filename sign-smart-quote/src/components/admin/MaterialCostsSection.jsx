@@ -96,6 +96,18 @@ const GROUPS = [
       { key: "kapa_shelf_custom_cost", label: "עלות מדף בעיצוב אישי (₪/יחידה)", suffix: "₪" },
     ],
   },
+  {
+    // תוספת "דבק דו-צדדי" — עלות נקבעת בנפרד לכל מוצר, כמו כל תוספת אחרת
+    // (מחיר המכירה המקביל נמצא בלשונית "קביעת מחירי מכירה" של אותו מוצר).
+    title: "תוספת דבק דו-צדדי",
+    fields: [
+      { key: "tape_cost_lokobond", label: "עלות — שילוט לוקובונד (₪/יחידה)", suffix: "₪" },
+      { key: "tape_cost_foamex", label: "עלות — שילוט פיויסי (₪/יחידה)", suffix: "₪" },
+      { key: "tape_cost_perspex_board", label: "עלות — שילוט פרספקס (₪/יחידה)", suffix: "₪" },
+      { key: "tape_cost_kapa", label: "עלות — קאפה (₪/יחידה)", suffix: "₪" },
+      { key: "tape_cost_lightbox", label: "עלות — ארגז מואר (₪/יחידה)", suffix: "₪" },
+    ],
+  },
 ];
 
 export default function MaterialCostsSection({ config, onChange }) {

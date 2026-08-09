@@ -8,7 +8,8 @@
 // `result` is the calculator's live pricing result for that line — when
 // present, result.extrasBreakdown is an array of { key, label } for whichever
 // EXTRAS_OPTIONS the agent selected (spacers, hidden_spacers, paint_single,
-// paint_double — see CalculatorForm.jsx EXTRAS_OPTIONS), and result.cutType /
+// paint_double, double_sided_tape — see CalculatorForm.jsx EXTRAS_OPTIONS),
+// and result.cutType /
 // result.diecut flags the straight/diecut choice where relevant.
 //
 // recipe = a production_recipes row plus its production_recipe_steps rows
@@ -65,6 +66,11 @@ function autoInclude(step, item) {
   if (/spacers|ספייסר|קידוח/.test(cond)) {
     return (extras.includes('spacers') || extras.includes('hidden_spacers'))
       ? { included: true, autoReason: 'נבחרו ספייסרים בהצעה' }
+      : { included: false, autoReason: null };
+  }
+  if (/double_sided_tape|דבק דו.?צדדי|tape_3m/i.test(cond)) {
+    return extras.includes('double_sided_tape')
+      ? { included: true, autoReason: 'נבחר דבק דו-צדדי בהצעה' }
       : { included: false, autoReason: null };
   }
   if (/דייקאט|diecut/i.test(cond)) {

@@ -139,7 +139,25 @@ export const EXTRAS_OPTIONS = [
   { key: "hidden_spacers", label: "ספייסרים נסתרים" },
   { key: "paint_single", label: "צביעה בחדר צבע - גוון יחיד" },
   { key: "paint_double", label: "צביעה בחדר צבע - 2 גוונים" },
+  { key: "double_sided_tape", label: "דבק דו-צדדי" },
 ];
+
+// Which extras each product category actually offers. Spacers/paint stay
+// logo-only (that's their whole pricing model — per-element / per-area
+// surcharge tiers that only make sense for the logo family). Double-sided
+// tape is priced independently per family (its own cost + selling-price
+// config keys, see useCalculator.jsx applyTapeExtra), so it's offered
+// wherever sales asked for it — adding a category here is the ONLY place
+// needed to expose it in every calculator that renders CalculatorForm
+// (agent calculator + admin test tool both share this component).
+const TAPE_OPTION = EXTRAS_OPTIONS.find((o) => o.key === "double_sided_tape");
+export const EXTRAS_BY_CATEGORY = {
+  logo: EXTRAS_OPTIONS,
+  lokobond: [TAPE_OPTION],
+  foamex: [TAPE_OPTION],
+  perspexBoard: [TAPE_OPTION],
+  kapa: [TAPE_OPTION],
+};
 
 const LOGO_PRODUCTS = {
   pvc_white: 'לוגו PVC לבן', pvc_black: 'לוגו PVC שחור',
@@ -442,6 +460,7 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
   const isFixedPrice = isKapa || isRollup || isGlass || isNumbers;
   const category = categoryOf(values.productType);
   const isLogo = category === "logo";
+  const categoryExtras = EXTRAS_BY_CATEGORY[category] || [];
   const isSticker = STICKER_TYPES.includes(values.productType);
   // Elements (for מ"א calc) apply to logo + foamex — anything with real dimensions
   // that isn't a sticker, lokobond, PVC carpet, or a fixed-price kapa/rollup/glass row.
@@ -1010,8 +1029,8 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
         </div>
       )}
 
-      {/* Extras row: התקנה/אזור (מדבקות), תוספות (לוגו), מדפים (קאפה), אלמנטים (לוגו/פיויסי) */}
-      {(isSticker || isLogo || isKapa || showElementsField) && (
+      {/* Extras row: התקנה/אזור (מדבקות), תוספות (לוגו + כל קטגוריה עם תוספות משלה), מדפים (קאפה), אלמנטים (לוגו/פיויסי) */}
+      {(isSticker || isLogo || isKapa || showElementsField || categoryExtras.length > 0) && (
         <div className="flex flex-wrap items-start gap-3">
           {isSticker && (
             <>
@@ -1094,7 +1113,7 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
             </Field>
           )}
 
-          {isLogo && (
+          {categoryExtras.length > 0 && (
             <div className="flex flex-col gap-1 min-w-[220px] flex-1">
               <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">תוספות</label>
               <div className="relative" ref={extrasRef}>
@@ -1110,7 +1129,7 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
                 </button>
                 {extrasOpen && (
                   <div className="absolute z-50 mt-1 w-full rounded-xl border-2 border-black bg-white shadow-lg overflow-hidden">
-                    {EXTRAS_OPTIONS.map(opt => {
+                    {categoryExtras.map(opt => {
                       const selected = (values.extras || []).includes(opt.key);
                       return (
                         <div

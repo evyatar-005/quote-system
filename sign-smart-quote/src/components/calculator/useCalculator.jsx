@@ -33,6 +33,25 @@ function clampAgentPricePerSqm(startingPrice, agentMinPrice, requested) {
   return Math.min(startingPrice, Math.max(floor, req));
 }
 
+// "דבק דו-צדדי" (double-sided tape) — an optional extra, priced independently
+// per product family (not a percentage or per-area formula — a flat ₪ amount
+// per unit for both cost and selling price, set separately for every family
+// in the admin, exactly like every other price in the system). Reused by every
+// family that offers this extra so a config change here is picked up by every
+// calculator (agent, admin test tool, quote review) at once — this is the fix
+// for the earlier bug where a new cost was only wired into one screen.
+const TAPE_EXTRA_KEY = 'double_sided_tape';
+function applyTapeExtra(config, familyKey, extras) {
+  if (!extras || !extras.includes(TAPE_EXTRA_KEY)) return { cost: 0, sellingSurcharge: 0, row: null };
+  const cost = parseFloat(config?.[`tape_cost_${familyKey}`]) || 0;
+  const sellingSurcharge = parseFloat(config?.[`tape_selling_price_${familyKey}`]) || 0;
+  return {
+    cost,
+    sellingSurcharge,
+    row: { key: TAPE_EXTRA_KEY, label: 'דבק דו-צדדי', cost: round(cost), sellingCost: round(sellingSurcharge), calc: `${round(cost)} ₪ קבוע ליחידה`, type: 'material' },
+  };
+}
+
 // Raw material cost for 1 m² of a logo product at a given thickness, no extras —
 // same components `calculate()` uses for the PVC/perspex path (board + ink + dowel +
 // packaging + instruction sheet + mounting board, plus waste %). Used by the admin
@@ -167,6 +186,7 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
       + (parseInt(customShelves) || 0) * (parseFloat(config.kapa_shelf_custom_cost) || 0);
     const shelvesSellingPrice = (parseInt(standardShelves) || 0) * (parseFloat(config.kapa_shelf_standard_price) || 0)
       + (parseInt(customShelves) || 0) * (parseFloat(config.kapa_shelf_custom_price) || 0);
+    const tape = applyTapeExtra(config, 'kapa', extras);
 
     const printHourCost = parseFloat(config.print_hour_cost) || 0;
     const workerHourCost = parseFloat(config.general_worker_hour_cost) || 0;
@@ -188,11 +208,11 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
     const overheadCost = (rawMaterialCost + laborCost) * overheadPct;
     const sellingPricePerUnit = Number(tier.price) || 0;
     // קאפה — ללא דמי משלוח בכלל
-    const sellingPriceAll = sellingPricePerUnit * Q + shelvesSellingPrice;
+    const sellingPriceAll = sellingPricePerUnit * Q + shelvesSellingPrice + tape.sellingSurcharge;
 
     const salesAgentCommissionCost = sellingPriceAll * (parseFloat(config.sales_agent_commission_percent) || 0) / 100;
     const marketingCommissionCost = sellingPriceAll * (parseFloat(config.marketing_commission_percent) || 0) / 100;
-    const totalCostAll = rawMaterialCost + laborCost + overheadCost + salesAgentCommissionCost + marketingCommissionCost + shelvesCostReal;
+    const totalCostAll = rawMaterialCost + laborCost + overheadCost + salesAgentCommissionCost + marketingCommissionCost + shelvesCostReal + tape.cost;
 
     const profitPerUnit = sellingPriceAll - totalCostAll;
     const profitMarginPct = sellingPriceAll > 0 ? (profitPerUnit / sellingPriceAll) * 100 : 0;
@@ -200,6 +220,7 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
 
     const extrasBreakdown = [];
     if (shelvesCostReal > 0 || shelvesSellingPrice > 0) extrasBreakdown.push({ key: 'shelves', label: 'מדפים', cost: round(shelvesCostReal), sellingCost: round(shelvesSellingPrice), calc: `${standardShelves || 0} סטנדרטים + ${customShelves || 0} בעיצוב אישי`, type: 'material' });
+    if (tape.row) extrasBreakdown.push(tape.row);
 
     return {
       area: round(kapaArea),
@@ -585,7 +606,8 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
     const cleanLaborCost = (cleanMinutesPerMeter * totalLinearMeters / 60) * printHourCost;
 
     const laborCost = printLaborCost + preCutLaborCost + cutLaborCost + cleanLaborCost + packagingLaborCost;
-    const rawMaterialBeforeWaste = boardCost + inkCost;
+    const tape = applyTapeExtra(config, 'lokobond', extras);
+    const rawMaterialBeforeWaste = boardCost + inkCost + tape.cost;
     const wastePct = (parseFloat(config.raw_material_waste_percent) || 0) / 100;
     const wasteAmount = rawMaterialBeforeWaste * wastePct;
     const rawMaterialCost = rawMaterialBeforeWaste + wasteAmount;
@@ -636,6 +658,7 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
       sellingPricePerUnit = baseCost;
       priceMissing = true;
     }
+    sellingPricePerUnit += tape.sellingSurcharge;
 
     const salesAgentCommissionCost = sellingPricePerUnit * (parseFloat(config.sales_agent_commission_percent) || 0) / 100;
     const marketingCommissionCost = sellingPricePerUnit * (parseFloat(config.marketing_commission_percent) || 0) / 100;
@@ -648,6 +671,7 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
     const priceWithVat = sellingPriceAll * (1 + (parseFloat(config.vat_percent) || 18) / 100);
 
     const extrasBreakdown = [];
+    if (tape.row) extrasBreakdown.push(tape.row);
     if (shippingCost > 0) extrasBreakdown.push({ key: 'shipping', label: 'משלוח', cost: round(shippingCost), sellingCost: round(shippingCost), calc: `${round(shippingCost)} ₪ קבוע`, type: 'material' });
 
     return {
@@ -732,7 +756,8 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
     const cleanLaborCost = (cleanMinutesPerMeter * totalLinearMeters / 60) * printHourCost;
 
     const laborCost = printLaborCost + preCutLaborCost + cutLaborCost + cleanLaborCost + packagingLaborCost;
-    const rawMaterialBeforeWaste = boardCost + inkCost;
+    const tape = applyTapeExtra(config, 'foamex', extras);
+    const rawMaterialBeforeWaste = boardCost + inkCost + tape.cost;
     const wastePct = (parseFloat(config.raw_material_waste_percent) || 0) / 100;
     const wasteAmount = rawMaterialBeforeWaste * wastePct;
     const rawMaterialCost = rawMaterialBeforeWaste + wasteAmount;
@@ -759,6 +784,7 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
       sellingPricePerUnit = baseCost;
       priceMissing = true;
     }
+    sellingPricePerUnit += tape.sellingSurcharge;
 
     const salesAgentCommissionCost = sellingPricePerUnit * (parseFloat(config.sales_agent_commission_percent) || 0) / 100;
     const marketingCommissionCost = sellingPricePerUnit * (parseFloat(config.marketing_commission_percent) || 0) / 100;
@@ -771,6 +797,7 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
     const priceWithVat = sellingPriceAll * (1 + (parseFloat(config.vat_percent) || 18) / 100);
 
     const extrasBreakdown = [];
+    if (tape.row) extrasBreakdown.push(tape.row);
     if (shippingCost > 0) extrasBreakdown.push({ key: 'shipping', label: 'משלוח', cost: round(shippingCost), sellingCost: round(shippingCost), calc: `${round(shippingCost)} ₪ קבוע`, type: 'material' });
 
     return {
@@ -847,7 +874,8 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
     const cleanLaborCost = (cleanMinutesPerMeter * totalLinearMeters / 60) * printHourCost;
 
     const laborCost = printLaborCost + preCutLaborCost + cutLaborCost + cleanLaborCost + packagingLaborCost;
-    const rawMaterialBeforeWaste = boardCost + inkCost;
+    const tape = applyTapeExtra(config, 'perspex_board', extras);
+    const rawMaterialBeforeWaste = boardCost + inkCost + tape.cost;
     const wastePct = (parseFloat(config.raw_material_waste_percent) || 0) / 100;
     const wasteAmount = rawMaterialBeforeWaste * wastePct;
     const rawMaterialCost = rawMaterialBeforeWaste + wasteAmount;
@@ -874,6 +902,7 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
       sellingPricePerUnit = baseCost;
       priceMissing = true;
     }
+    sellingPricePerUnit += tape.sellingSurcharge;
 
     const salesAgentCommissionCost = sellingPricePerUnit * (parseFloat(config.sales_agent_commission_percent) || 0) / 100;
     const marketingCommissionCost = sellingPricePerUnit * (parseFloat(config.marketing_commission_percent) || 0) / 100;
@@ -886,6 +915,7 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
     const priceWithVat = sellingPriceAll * (1 + (parseFloat(config.vat_percent) || 18) / 100);
 
     const extrasBreakdown = [];
+    if (tape.row) extrasBreakdown.push(tape.row);
     if (shippingCost > 0) extrasBreakdown.push({ key: 'shipping', label: 'משלוח', cost: round(shippingCost), sellingCost: round(shippingCost), calc: `${round(shippingCost)} ₪ קבוע`, type: 'material' });
 
     return {
@@ -1232,7 +1262,7 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
 // Lightbox (003) pricing — the one and only place this math should live.
 // tier = a LightboxSizeTier row (width_cm/height_cm/frame_cost/transformer_cost/
 // selling_base_price/selling_price_per_sqm), config = PricingConfig, quantity = units.
-export function calculateLightbox(tier, config, quantity = 1, delivery = 'pickup') {
+export function calculateLightbox(tier, config, quantity = 1, delivery = 'pickup', extras = []) {
   if (!tier || !config) return null;
   const area = (parseFloat(tier.width_cm) / 100) * (parseFloat(tier.height_cm) / 100);
   const Q = parseInt(quantity) || 1;
@@ -1242,6 +1272,8 @@ export function calculateLightbox(tier, config, quantity = 1, delivery = 'pickup
   const ledUnitPrice = parseFloat(config.lightbox_led_waterproof_cost) || 0;
   const ledCost = ledQtyPerSqm * ledUnitPrice * area * Q;
   const transformerCost = (parseFloat(tier.transformer_cost) || 0) * Q;
+  const tape = applyTapeExtra(config, 'lightbox', extras);
+  const tapeCost = tape.cost * Q;
 
   const perspexCostPerMmPerSqm = parseFloat(config.perspex_cost_per_mm) || 0;
   const perspexFrontCost = perspexCostPerMmPerSqm * 3 * area * Q;
@@ -1255,14 +1287,14 @@ export function calculateLightbox(tier, config, quantity = 1, delivery = 'pickup
   const packagingLaborCost = (packagingMinutes / 60) * workerHourCost * Q;
   const laborCost = printLaborCost + packagingLaborCost;
 
-  const rawMaterialCost = frameCost + ledCost + transformerCost + perspexFrontCost;
+  const rawMaterialCost = frameCost + ledCost + transformerCost + perspexFrontCost + tapeCost;
   const overheadPct = (parseFloat(config.operational_overhead_percent) || 0) / 100;
   const overheadCost = (rawMaterialCost + laborCost) * overheadPct;
   const totalCost = rawMaterialCost + laborCost + overheadCost;
 
   const baseSellingPrice = parseFloat(tier.selling_base_price) || 0;
   const perSqmSelling = parseFloat(tier.selling_price_per_sqm) || 0;
-  const sellingPricePerUnit = baseSellingPrice + perSqmSelling * area;
+  const sellingPricePerUnit = baseSellingPrice + perSqmSelling * area + tape.sellingSurcharge;
 
   const salesCommission = sellingPricePerUnit * (parseFloat(config.sales_agent_commission_percent) || 0) / 100;
   const marketingCommission = sellingPricePerUnit * (parseFloat(config.marketing_commission_percent) || 0) / 100;
@@ -1274,9 +1306,12 @@ export function calculateLightbox(tier, config, quantity = 1, delivery = 'pickup
   const profitMarginPct = sellingPricePerUnit > 0 ? (profitPerUnit / sellingPricePerUnit) * 100 : 0;
   const priceWithVat = sellingPriceAll * (1 + (parseFloat(config.vat_percent) || 18) / 100);
 
+  const extrasBreakdown = [];
+  if (tape.row) extrasBreakdown.push(tape.row);
+
   return {
     frameCost: round(frameCost), ledCost: round(ledCost), transformerCost: round(transformerCost),
-    perspexFrontCost: round(perspexFrontCost),
+    perspexFrontCost: round(perspexFrontCost), tapeCost: round(tapeCost),
     laborCost: round(laborCost), overheadCost: round(overheadCost),
     rawMaterialCost: round(rawMaterialCost), totalCost: round(totalCostWithCommission),
     sellingPricePerUnit: round(sellingPricePerUnit), sellingPriceAll: round(sellingPriceAll),
@@ -1285,6 +1320,7 @@ export function calculateLightbox(tier, config, quantity = 1, delivery = 'pickup
     priceWithVat: round(priceWithVat),
     salesCommission: round(salesCommission * Q),
     marketingCommission: round(marketingCommission * Q),
+    extrasBreakdown,
   };
 }
 

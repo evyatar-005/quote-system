@@ -39,6 +39,7 @@ export default function LightboxCalculator({ config }) {
   const [quantity, setQuantity] = useState(1);
   const paymentKey = "cash";
   const [delivery, setDelivery] = useState("pickup");
+  const [extras, setExtras] = useState([]);
 
   useEffect(() => {
     base44.entities.LightboxSizeTier.list("width_cm", 100).then((data) => {
@@ -65,7 +66,7 @@ export default function LightboxCalculator({ config }) {
     );
   }
 
-  const result = calculateLightbox(selectedTier, config, quantity, delivery);
+  const result = calculateLightbox(selectedTier, config, quantity, delivery, extras);
   // Single VAT source for this whole document — admin config, not a hardcoded rate.
   const vatMultiplier = 1 + (parseFloat(config?.vat_percent) || 18) / 100;
   const basePrice = result ? result.priceWithVat : 0;
@@ -121,6 +122,18 @@ export default function LightboxCalculator({ config }) {
           </div>
         </div>
 
+        {/* תוספות */}
+        <div className="flex items-center gap-3">
+          <span className="text-base text-zinc-400">תוספות:</span>
+          <button
+            onClick={() => setExtras((e) => e.includes("double_sided_tape") ? e.filter((k) => k !== "double_sided_tape") : [...e, "double_sided_tape"])}
+            className={`px-3 h-8 rounded-lg border text-sm font-semibold transition-all ${
+              extras.includes("double_sided_tape") ? "border-[#C9A84C]/50 bg-[#C9A84C]/10 text-[#C9A84C]" : "border-white/20 bg-[#16161F] text-zinc-400 hover:border-white/25"
+            }`}
+          >
+            דבק דו-צדדי
+          </button>
+        </div>
 
       </div>
 
@@ -140,6 +153,7 @@ export default function LightboxCalculator({ config }) {
               <Row label="לדים" value={fmt(result.ledCost)} />
               <Row label="שנאי" value={fmt(result.transformerCost)} />
               <Row label="פרספקס חזית (3מ״מ)" value={fmt(result.perspexFrontCost)} />
+              {result.tapeCost > 0 && <Row label="דבק דו-צדדי" value={fmt(result.tapeCost)} />}
               <Row label="עבודה" value={fmt(result.laborCost)} />
               <Row label="תקורה" value={fmt(result.overheadCost)} />
               <Row label="עמלות" value={fmt(result.salesCommission + result.marketingCommission)} />

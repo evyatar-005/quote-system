@@ -131,6 +131,32 @@ function EmptyProductPlaceholder({ label }) {
   );
 }
 
+// תוספת "דבק דו-צדדי" — מחיר מכירה נקבע בנפרד לכל מוצר (עלות מקבילה בלשונית
+// "קביעת עלויות" → MaterialCostsSection), אותה תבנית עיצוב בדיוק כמו תוספת
+// הספייסרים (005) ותוספות המדפים (008) למטה.
+function TapeSellingPriceField({ configKey, config, onConfigChange }) {
+  return (
+    <div className="bg-blue-50/50 border border-blue-200 rounded-xl p-4 flex items-center justify-between gap-3">
+      <div>
+        <p className="text-sm font-semibold text-foreground">מחיר תוספת דבק דו-צדדי</p>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          מחיר זה נוסף למחיר המכירה כשלקוח בוחר "דבק דו-צדדי" ברשימת התוספות. נשמר עם הכפתור "שמור הגדרות" למעלה.
+        </p>
+      </div>
+      <div className="relative w-32 shrink-0">
+        <Input
+          type="text" inputMode="decimal"
+          value={config?.[configKey] ?? ""}
+          onChange={(e) => onConfigChange?.(configKey, e.target.value === "" ? null : parseFloat(sanitizeDecimal(e.target.value)) || 0)}
+          className="h-11 text-center text-base w-32 bg-background pl-7"
+          dir="ltr"
+        />
+        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">₪</span>
+      </div>
+    </div>
+  );
+}
+
 export default function SalesPriceTable({ config, onConfigChange }) {
   const [selected, setSelected] = useState(null);
 
@@ -201,6 +227,11 @@ export default function SalesPriceTable({ config, onConfigChange }) {
               <LokobondAreaPriceTable config={config} />
             </div>
           </CollapsibleSection>
+
+          <CollapsibleSection title="תוספת דבק דו-צדדי">
+            <TapeSellingPriceField configKey="tape_selling_price_lokobond" config={config} onConfigChange={onConfigChange} />
+          </CollapsibleSection>
+
           <CollapsibleSection title="בדיקת מחשבון" defaultOpen={false}>
             <AdminCalculatorTest config={config} allowedProducts={["lokobond_plain", "lokobond_diecut"]} />
           </CollapsibleSection>
@@ -219,6 +250,11 @@ export default function SalesPriceTable({ config, onConfigChange }) {
               enablePriceRange
             />
           </CollapsibleSection>
+
+          <CollapsibleSection title="תוספת דבק דו-צדדי">
+            <TapeSellingPriceField configKey="tape_selling_price_foamex" config={config} onConfigChange={onConfigChange} />
+          </CollapsibleSection>
+
           <CollapsibleSection title="בדיקת מחשבון" defaultOpen={false}>
             <AdminCalculatorTest config={config} allowedProducts={["foamex_white", "foamex_black"]} />
           </CollapsibleSection>
@@ -237,6 +273,11 @@ export default function SalesPriceTable({ config, onConfigChange }) {
               enablePriceRange
             />
           </CollapsibleSection>
+
+          <CollapsibleSection title="תוספת דבק דו-צדדי">
+            <TapeSellingPriceField configKey="tape_selling_price_perspex_board" config={config} onConfigChange={onConfigChange} />
+          </CollapsibleSection>
+
           <CollapsibleSection title="בדיקת מחשבון" defaultOpen={false}>
             <AdminCalculatorTest config={config} allowedProducts={["perspex_board_clear_print", "perspex_board_black_matte", "perspex_board_black_glossy", "perspex_board_white", "perspex_board_milky"]} />
           </CollapsibleSection>
@@ -358,6 +399,10 @@ export default function SalesPriceTable({ config, onConfigChange }) {
             </div>
           </CollapsibleSection>
 
+          <CollapsibleSection title="תוספת דבק דו-צדדי">
+            <TapeSellingPriceField configKey="tape_selling_price_kapa" config={config} onConfigChange={onConfigChange} />
+          </CollapsibleSection>
+
           <CollapsibleSection title="בדיקת מחשבון" defaultOpen={false}>
             <AdminCalculatorTest config={config} allowedProducts={["kapa"]} />
           </CollapsibleSection>
@@ -404,6 +449,11 @@ export default function SalesPriceTable({ config, onConfigChange }) {
           <CollapsibleSection title="טבלת מחירי ארגז מואר">
             <LightboxSellPriceTable />
           </CollapsibleSection>
+
+          <CollapsibleSection title="תוספת דבק דו-צדדי">
+            <TapeSellingPriceField configKey="tape_selling_price_lightbox" config={config} onConfigChange={onConfigChange} />
+          </CollapsibleSection>
+
           <CollapsibleSection title="בדיקת מחשבון" defaultOpen={false}>
             {/* ארגז מואר משתמש במנוע חישוב שונה (calculateLightbox) — לא ב-CalculatorForm הרגיל */}
             <LightboxCalculator config={config} />
