@@ -41,7 +41,7 @@ async function fetchClosedDeliveryNotes(db, dateStr) {
       // a fallback in case a given document has no amountDueVat for some
       // reason (e.g. a fully VAT-exempt document).
       const preVat = doc.amountDueVat ?? (doc.amount != null && doc.vat != null ? doc.amount - doc.vat : doc.amount);
-      items.push({ number: doc.number, amount: preVat || 0 });
+      items.push({ number: doc.number, amount: preVat || 0, clientName: doc.client?.name || '' });
     }
     if (page >= (result.pages || 1)) break;
     page += 1;
@@ -55,7 +55,7 @@ function buildReportEmail(items, dateStr) {
   const subject = `דוח תעודות משלוח יומי — ${dateStr} (${items.length})`;
 
   const rows = items
-    .map((it) => `<tr><td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;">${it.number}</td><td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;">${fmt(it.amount)}</td></tr>`)
+    .map((it) => `<tr><td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;">${it.number}</td><td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;">${it.clientName}</td><td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;">${fmt(it.amount)}</td></tr>`)
     .join('');
 
   const html = `
@@ -67,6 +67,7 @@ function buildReportEmail(items, dateStr) {
         <thead>
           <tr style="background:#f8fafc;">
             <th style="padding:6px 10px; text-align:right;">מס׳ תעודה</th>
+            <th style="padding:6px 10px; text-align:right;">לקוח</th>
             <th style="padding:6px 10px; text-align:right;">סכום (לפני מע״מ)</th>
           </tr>
         </thead>
@@ -76,7 +77,7 @@ function buildReportEmail(items, dateStr) {
 
   const text = `דוח תעודות משלוח יומי — ${dateStr}\n\n` +
     `${items.length} תעודות, סה"כ ${fmt(total)} לפני מע"מ\n\n` +
-    items.map((it) => `תעודה ${it.number}: ${fmt(it.amount)}`).join('\n');
+    items.map((it) => `תעודה ${it.number} — ${it.clientName}: ${fmt(it.amount)}`).join('\n');
 
   return { subject, html, text };
 }
