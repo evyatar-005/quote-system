@@ -20,6 +20,7 @@ export default function UsersManagementSection() {
   const [resetPasswordValue, setResetPasswordValue] = useState("");
   const [editEmailFor, setEditEmailFor] = useState(null);
   const [editEmailValue, setEditEmailValue] = useState("");
+  const [roleFilter, setRoleFilter] = useState("all");
 
   useEffect(() => {
     loadUsers();
@@ -169,6 +170,27 @@ export default function UsersManagementSection() {
           </Button>
         </div>
 
+        {/* Role filter tabs */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {[
+            { value: "all", label: "הכל" },
+            { value: "admin", label: "מנהלי מכירות" },
+            { value: "agent", label: "סוכני מכירות" },
+            { value: "operations", label: "תפעול (תפ\"י)" },
+          ].map((tab) => (
+            <button
+              key={tab.value}
+              type="button"
+              onClick={() => setRoleFilter(tab.value)}
+              className={`px-3 py-1.5 rounded-full text-sm font-medium border-2 border-black transition-colors ${
+                roleFilter === tab.value ? "bg-primary text-primary-foreground" : "bg-background text-slate-700 hover:bg-slate-100"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
         {/* Users list */}
         {loading ? (
           <div className="flex justify-center py-6">
@@ -176,7 +198,7 @@ export default function UsersManagementSection() {
           </div>
         ) : (
           <div className="border-2 border-black rounded-xl divide-y divide-slate-300">
-            {users.map((u) => (
+            {users.filter((u) => roleFilter === "all" || u.role === roleFilter).map((u) => (
               <div key={u.id} className="flex items-center justify-between gap-3 p-3 flex-wrap">
                 <div>
                   <p className="text-sm font-semibold text-slate-800">{u.full_name || u.username}</p>

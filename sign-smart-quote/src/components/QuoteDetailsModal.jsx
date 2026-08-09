@@ -422,7 +422,7 @@ const MORNING_ACTIONS = [
 // this quote. Kept as its own component so a Morning API hiccup (history
 // fetch failing) can only ever blank out this one card, never the rest of
 // the modal's pricing UI.
-function MorningSection({ quoteId }) {
+function MorningSection({ quoteId, readOnly = false }) {
   const [busyType, setBusyType] = useState(null);
   const [history, setHistory] = useState(null);
   const [historyError, setHistoryError] = useState(false);
@@ -458,19 +458,23 @@ function MorningSection({ quoteId }) {
     <div>
       <h3 className="text-sm font-semibold text-zinc-300 mb-2 uppercase tracking-wider">מורנינג</h3>
       <div className="bg-[#16161F] rounded-xl p-3 space-y-3">
-        <div className="flex flex-wrap gap-2">
-          {MORNING_ACTIONS.map(({ toType, label }) => (
-            <button
-              key={toType}
-              onClick={() => handleConvert(toType, label)}
-              disabled={busyType !== null}
-              className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border border-white/15 text-zinc-200 hover:border-[#C9A84C]/50 hover:text-[#C9A84C] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {busyType === toType ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
-              {label}
-            </button>
-          ))}
-        </div>
+        {/* readOnly (the general-history archive screen) keeps the audit trail
+            below but hides these — they issue REAL Morning documents. */}
+        {!readOnly && (
+          <div className="flex flex-wrap gap-2">
+            {MORNING_ACTIONS.map(({ toType, label }) => (
+              <button
+                key={toType}
+                onClick={() => handleConvert(toType, label)}
+                disabled={busyType !== null}
+                className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border border-white/15 text-zinc-200 hover:border-[#C9A84C]/50 hover:text-[#C9A84C] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {busyType === toType ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className="border-t border-white/10 pt-2 space-y-1.5 max-h-40 overflow-y-auto">
           {historyError ? (
@@ -631,7 +635,13 @@ function ItemPricingFields({ discount, onChange, area, originalPrice, itemKey })
   );
 }
 
-export default function QuoteDetailsModal({ quote, onClose, onSaved }) {
+// `readOnly` powers the general-history archive screen (QuotesArchive): same
+// rich breakdown, but every control that WRITES is hidden — the pricing-mode
+// override, the discount inputs, the save button (which creates a revised quote
+// and approves the original), and the Morning document actions. It is a
+// clarity/misclick guard, not a security boundary: both screens are admin-only,
+// and an admin can do all of this from /quotes anyway.
+export default function QuoteDetailsModal({ quote, onClose, onSaved, readOnly = false }) {
   // Everything needed to render this quote is already in the saved row — no
   // network round-trip, and nothing here can drift from admin price edits made
   // after the quote was issued, because we render the breakdown as computed
@@ -919,6 +929,9 @@ export default function QuoteDetailsModal({ quote, onClose, onSaved }) {
                   </div>
                 ))}
 
+                {/* Per-item discount entry + the save button are write controls —
+                    hidden in readOnly (the archive screen). */}
+                {!readOnly && (
                 <div className="bg-[#16161F] rounded-xl p-3">
                   {pricingMode !== "discount" ? (
                     <p className="text-xs text-zinc-500">
@@ -945,7 +958,9 @@ export default function QuoteDetailsModal({ quote, onClose, onSaved }) {
                     </>
                   )}
                 </div>
+                )}
 
+                {!readOnly && (
                 <button
                   onClick={handleSave}
                   disabled={saving}
@@ -956,6 +971,7 @@ export default function QuoteDetailsModal({ quote, onClose, onSaved }) {
                 >
                   {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : saved ? <><CheckCircle2 className="w-4 h-4" /> נשמר!</> : <><Save className="w-4 h-4" /> שמור הצעה מתוקנת</>}
                 </button>
+                )}
               </>
             ) : (
               <p className="text-zinc-500 text-sm">אין פריטים עם פירוט עלויות שמור להצעה זו.</p>
@@ -1015,7 +1031,11 @@ export default function QuoteDetailsModal({ quote, onClose, onSaved }) {
             </div>
 
             {/* מצב תמחור — הנחה רגילה, או אחת מ-3 רובריקות תמחור קבועות שמנהל
-                המכירות יכול להפעיל על כל ההזמנה בבת אחת. */}
+                המכירות יכול להפעיל על כל ההזמנה בבת אחת.
+                Hidden in readOnly: these controls only exist to CHANGE the price.
+                The totals above still render the quote exactly as saved, because
+                pricingMode/discounts are initialised from calculation_data. */}
+            {!readOnly && (
             <div>
               <h3 className="text-sm font-semibold text-zinc-300 mb-2 uppercase tracking-wider">מצב תמחור</h3>
               <div className="bg-[#16161F] rounded-xl p-3 space-y-3">
@@ -1083,6 +1103,7 @@ export default function QuoteDetailsModal({ quote, onClose, onSaved }) {
                 })()}
               </div>
             </div>
+            )}
 
             {/* מחירים — final price, highlighted */}
             <div>
@@ -1102,7 +1123,7 @@ export default function QuoteDetailsModal({ quote, onClose, onSaved }) {
           </div>
 
           <div className="mt-4">
-            <MorningSection quoteId={quote.id} />
+            <MorningSection quoteId={quote.id} readOnly={readOnly} />
           </div>
         </div>
       </div>

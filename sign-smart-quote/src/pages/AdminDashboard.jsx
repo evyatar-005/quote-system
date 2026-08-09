@@ -216,9 +216,16 @@ export default function AdminDashboard() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {/* Two distinct screens: /quotes is the review queue (approve/reject/
+                convert), /quotes-archive is the read-only general history. */}
             <Link to="/quotes">
               <Button variant="outline" className="gap-2 h-10 px-4 rounded-xl">
-                היסטוריית הצעות
+                הצעות לבדיקה
+              </Button>
+            </Link>
+            <Link to="/quotes-archive">
+              <Button variant="outline" className="gap-2 h-10 px-4 rounded-xl">
+                היסטוריית הצעות כללית
               </Button>
             </Link>
             <Link to="/cutting">

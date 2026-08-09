@@ -1,42 +1,9 @@
 PRAGMA foreign_keys = ON;
 
--- Independent raw material cost catalog — NOT used by the pricing engine
-CREATE TABLE IF NOT EXISTS raw_materials (
-  id    INTEGER PRIMARY KEY AUTOINCREMENT,
-  name  TEXT    NOT NULL,
-  sku   TEXT,
-  price REAL    NOT NULL DEFAULT 0
-);
-
-CREATE TABLE IF NOT EXISTS products (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
-  name       TEXT    NOT NULL,
-  sku        TEXT,
-  min_width  INTEGER NOT NULL DEFAULT 0,
-  min_height INTEGER NOT NULL DEFAULT 0,
-  min_price  REAL    NOT NULL DEFAULT 0
-);
-
-CREATE TABLE IF NOT EXISTS sub_products (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
-  product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-  name       TEXT    NOT NULL,
-  sku        TEXT
-);
-
-CREATE TABLE IF NOT EXISTS product_variants (
-  id             INTEGER PRIMARY KEY AUTOINCREMENT,
-  sub_product_id INTEGER NOT NULL REFERENCES sub_products(id) ON DELETE CASCADE,
-  thickness      TEXT    NOT NULL,
-  price_per_sqm  REAL    NOT NULL,
-  minimum_price  REAL    NOT NULL DEFAULT 0
-);
-
 -- ════════════════════════════════════════════════════════════════════════════
 -- SignCalc Pro — sign-shop pricing engine (ported from base44 reference).
--- Additive + isolated: lives alongside the cabinet/door tables above, never
--- touched by the legacy /api/quote/calculate path. All IF NOT EXISTS so this
--- file can be re-applied on a live database.sqlite without data loss.
+-- All IF NOT EXISTS so this file can be re-applied on a live database.sqlite
+-- without data loss.
 -- ════════════════════════════════════════════════════════════════════════════
 
 -- Key/value mirror of the base44 PricingConfig entity (~70 fields). One row per
@@ -438,8 +405,6 @@ CREATE TABLE IF NOT EXISTS production_worksheet_steps (
 
 -- SQLite doesn't auto-index FK-like columns — these are all looked up by value.
 CREATE INDEX IF NOT EXISTS idx_notifications_recipient  ON notifications(recipient_username);
-CREATE INDEX IF NOT EXISTS idx_sub_products_product      ON sub_products(product_id);
-CREATE INDEX IF NOT EXISTS idx_product_variants_sub      ON product_variants(sub_product_id);
 CREATE INDEX IF NOT EXISTS idx_signshop_quotes_created_by ON signshop_quotes(created_by);
 CREATE INDEX IF NOT EXISTS idx_quote_attachments_quote     ON signshop_quote_attachments(quote_id);
 CREATE INDEX IF NOT EXISTS idx_morning_documents_map_quote ON morning_documents_map(quote_id);

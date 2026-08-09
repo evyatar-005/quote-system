@@ -247,6 +247,5 @@ app.listen(PORT, () => {
 // They were also completely unauthenticated, which was the top pre-launch security
 // finding. Deleting unreachable code closes that hole outright instead of patching
 // dead routes. The backend engine they used to call (./engine/signCalc.js) and the
-// legacy tables (products/sub_products/product_variants/raw_materials, still defined
-// in db/schema.sql) are now unused too — left in place since dropping tables/files
-// with zero read path is a cleanup, not a security fix; safe to remove separately.
+// legacy tables (products/sub_products/product_variants/raw_materials) were removed
+// separately (2026-08-09).

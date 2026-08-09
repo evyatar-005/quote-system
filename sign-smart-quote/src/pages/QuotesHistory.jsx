@@ -9,32 +9,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/lib/AuthContext";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import printellaLogo from "@/assets/printella-logo.png";
-
-const fmt = (val) =>
-  val != null ? `₪ ${Number(val).toLocaleString("he-IL", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : "—";
-
-const STATUS_LABELS = { draft: "טיוטה", sent: "נשלחה", approved: "אושרה", rejected: "נדחתה" };
-const STATUS_COLORS = {
-  draft: "bg-slate-100 text-slate-500",
-  sent: "bg-blue-50 text-blue-600",
-  approved: "bg-emerald-50 text-emerald-600",
-  rejected: "bg-red-50 text-red-500",
-};
-const CATEGORY_LABELS = { logo: "לוגו", sticker: "מדבקות", kapa: "קאפה", lokobond: "לוקובונד", foamex: "פיוויסי", rollup: "רול אפ", glass: "זכוכית", lightbox: "ארגז מואר" };
-// Morning document type codes — see docs/morning-api-reference.md / src/services/morning/mappings.js
-const MORNING_TYPE_LABELS = { 10: "הצעת מחיר", 100: "הזמנה", 300: "חשבון עסקה", 305: "חשבונית מס" };
-// Same muted Printela-brand hues used in the product picker (CalculatorForm),
-// so a category reads the same color everywhere in the app.
-const CATEGORY_COLORS = {
-  logo: "bg-brand-gold/15 text-brand-gold",
-  sticker: "bg-brand-pink/15 text-brand-pink",
-  kapa: "bg-brand-teal/15 text-brand-teal",
-  lokobond: "bg-brand-green/15 text-brand-green",
-  foamex: "bg-brand-purple/15 text-brand-purple",
-  rollup: "bg-brand-green/15 text-brand-green",
-  glass: "bg-brand-purple/15 text-brand-purple",
-  lightbox: "bg-brand-teal/15 text-brand-teal",
-};
+import { fmt, STATUS_LABELS, STATUS_COLORS, CATEGORY_LABELS, CATEGORY_COLORS, MORNING_TYPE_LABELS, toLocalDateStr } from "@/lib/quoteLabels";
 
 const DATE_PRESETS = [
   { key: "today", label: "היום" },
@@ -43,16 +18,6 @@ const DATE_PRESETS = [
   { key: "all", label: "הכל" },
   { key: "custom", label: "טווח מותאם" },
 ];
-
-// Local YYYY-MM-DD (not toISOString, which shifts to UTC and can land on the
-// wrong calendar day) — used both for <input type="date"> and for comparing
-// against created_date.
-function toLocalDateStr(d) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
 
 export default function QuotesHistory() {
   const { logout } = useAuth();
@@ -272,6 +237,12 @@ export default function QuotesHistory() {
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="bg-white border-black">
+              <DropdownMenuItem asChild>
+                <Link to="/quotes-archive" className="flex items-center gap-2 cursor-pointer">
+                  <FileText className="w-4 h-4" />
+                  היסטוריית הצעות כללית
+                </Link>
+              </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <Link to="/" className="flex items-center gap-2 cursor-pointer">
                   <Settings className="w-4 h-4" />

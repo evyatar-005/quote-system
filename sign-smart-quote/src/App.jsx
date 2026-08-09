@@ -12,6 +12,7 @@ import CostsDashboard from './pages/CostsDashboard.jsx';
 import CutListOptimizer from './pages/CutListOptimizer.jsx';
 import CutFileGenerator from './pages/CutFileGenerator.jsx';
 import QuotesHistory from './pages/QuotesHistory.jsx';
+import QuotesArchive from './pages/QuotesArchive.jsx';
 import MyQuotes from './pages/MyQuotes.jsx';
 import RecipesAdmin from './pages/RecipesAdmin.jsx';
 import ProductionBoard from './pages/ProductionBoard.jsx';
@@ -80,6 +81,7 @@ const AuthenticatedApp = () => {
         <Route path="/cutting" element={<CutListOptimizer />} />
         <Route path="/cutfile" element={<CutFileGenerator />} />
         <Route path="/quotes" element={<AdminOnly><QuotesHistory /></AdminOnly>} />
+        <Route path="/quotes-archive" element={<AdminOnly><QuotesArchive /></AdminOnly>} />
         <Route path="/my-quotes" element={<MyQuotes />} />
         <Route path="/recipes" element={<OperationsOnly><RecipesAdmin /></OperationsOnly>} />
         <Route path="/production" element={<OperationsOnly><ProductionBoard /></OperationsOnly>} />
