@@ -209,18 +209,23 @@ async function createPaymentForm(db, quoteId) {
     // payment plugin" per the docs, but in practice this account has no
     // plugin actually marked default (errorCode 2600 "לא נמצא מסוף סליקה
     // פעיל" even with two plugins active) — so the plugin must be resolved
-    // and passed explicitly. Each plugin only works with the specific
-    // document type it was configured for (its own settings.docType), so try
-    // the types this account's plugins are known to support, in order, and
-    // use whichever one actually has an active plugin.
-    let paymentType = null;
-    let pluginId = null;
-    for (const candidateType of [400, 320, 305, 300]) {
-      const info = await request(db, 'GET', `/documents/info?type=${candidateType}`);
-      const plugin = (info.paymentPlugins || []).find(p => p.active);
-      if (plugin) { paymentType = candidateType; pluginId = plugin.id; break; }
-    }
-    if (!pluginId) throw new Error('No active Morning payment plugin found for any supported document type');
+    // and passed explicitly. GET /documents/info returns the SAME
+    // paymentPlugins list regardless of the ?type= queried (confirmed live —
+    // it does not actually filter by type), so query it once and pick the
+    // document type from the CHOSEN PLUGIN'S OWN settings.docType — pairing a
+    // plugin with any other type is what would actually cause a mismatch.
+    // Prefer a plain קבלה (400, e.g. a card terminal) over a חשבונית מס/קבלה
+    // (320, e.g. PayPal) when more than one plugin is active, since a plain
+    // receipt is the safer default against an order that isn't itself a tax
+    // invoice yet.
+    const info = await request(db, 'GET', '/documents/info?type=400');
+    const activePlugins = (info.paymentPlugins || []).filter(p => p.active && p.settings?.docType);
+    const plugin =
+      activePlugins.find(p => p.settings.docType === 400) ||
+      activePlugins[0];
+    if (!plugin) throw new Error('No active Morning payment plugin found on this account');
+    const paymentType = plugin.settings.docType;
+    const pluginId = plugin.id;
 
     const body = {
       description: `תשלום עבור הזמנה ${quote.quote_number}`,
