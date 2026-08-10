@@ -147,7 +147,7 @@ export default function QuotesArchive() {
   // Server-side restricted to one specific account (src/routes/entities.js,
   // QUOTE_DELETE_USERNAME) regardless of role — this button is hidden for
   // everyone else, but the real enforcement is the 403 on the backend.
-  const canDelete = user?.username === "אביתר";
+  const canDelete = user?.username === "evyatar";
   const deleteQuote = async (e, q) => {
     e.stopPropagation(); // the whole row opens the details modal on click
     if (deletingIds.has(q.id)) return;
@@ -441,7 +441,10 @@ export default function QuotesArchive() {
               <tbody>
                 {filtered.map((q) => {
                   const doc = morningDocs[q.id];
-                  const docNumber = isOrder(q) && doc ? (doc.morning_document_number || doc.morning_document_id) : q.quote_number;
+                  // Only a real Morning document number — never the internal
+                  // "מכירות-N" placeholder (quote_number), which is just a local
+                  // DB reference assigned before anything is ever issued.
+                  const docNumber = doc ? (doc.morning_document_number || doc.morning_document_id) : "—";
                   // Deliberately does NOT write viewed_at (unlike openQuote in
                   // QuotesHistory). viewed_at is the sole input to the review
                   // queue's "לא נפתחו בלבד" badge — browsing the archive would

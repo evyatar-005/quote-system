@@ -11,7 +11,7 @@ const { notifyAdminsOfSentQuote } = require('../services/notifyAdmins');
 
 // Quote deletion is deliberately narrower than "any admin" — restricted to
 // this one account by explicit request, not tied to the admin role itself.
-const QUOTE_DELETE_USERNAME = 'אביתר';
+const QUOTE_DELETE_USERNAME = 'evyatar';
 
 // Entities backed by a plain table (generic CRUD).
 const REGISTRY = {
