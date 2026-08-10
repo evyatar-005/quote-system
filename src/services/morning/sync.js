@@ -181,6 +181,16 @@ async function createOrConvertDocument(db, { quoteId, targetType, actorUsername 
        VALUES (?, ?, ?, ?, ?, ?)`
     ).run(quoteId, response.id, targetType, response.number || null, prevMap ? prevMap.id : null, documentUrl);
 
+    // Once Morning has actually issued a document for this quote, its number
+    // becomes the quote's number too — the internal "מכירות-NN" one assigned
+    // at save time was only ever a placeholder for quotes that may never reach
+    // Morning at all (drafts, rejected ones). Re-run on every conversion
+    // (quote → order → invoice) so quote_number always reflects the latest
+    // real document, not just the first one issued.
+    if (response.number) {
+      db.prepare(`UPDATE signshop_quotes SET quote_number = ? WHERE id = ?`).run(response.number, quoteId);
+    }
+
     db.prepare(
       `INSERT INTO morning_sync_log (quote_id, action, request_json, response_json, success, created_by)
        VALUES (?, ?, ?, ?, 1, ?)`

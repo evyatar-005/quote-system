@@ -4,6 +4,7 @@ import { PRODUCT_NAMES, PRODUCT_CODES, EXTRAS_OPTIONS, categoryOf, productImage 
 import { base44 } from "@/api/base44Client";
 import { issueQuoteToMorning } from "@/api/morningClient";
 import ClientSearchField from "./ClientSearchField";
+import NewClientModal from "./NewClientModal";
 import DocumentIssuedModal from "@/components/DocumentIssuedModal";
 import { Plus, Trash2, ShoppingCart, BarChart3, Tag, Lightbulb, Shapes, Layers, Save, Send, FileOutput, Loader2, CheckCircle2, Paperclip, FileText, Image as ImageIcon, X, Pencil } from "lucide-react";
 import { toast } from "sonner";
@@ -24,15 +25,15 @@ function AttachmentDropZone({ files, onFilesAdded, onRemove }) {
   const inputRef = useRef(null);
 
   return (
-    <div className="space-y-1.5">
-      <label className="text-sm font-semibold text-slate-600">קבצים מצורפים (תמונה / PDF — רקע להצעה, לא מוצג ללקוח)</label>
+    <div className="space-y-1.5 h-full flex flex-col">
       <div
+        title="קבצים מצורפים (תמונה / PDF — רקע להצעה, לא מוצג ללקוח)"
         onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
         onDragLeave={() => setDragOver(false)}
         onDrop={(e) => { e.preventDefault(); setDragOver(false); onFilesAdded(e.dataTransfer.files); }}
         onClick={() => inputRef.current?.click()}
-        className={`cursor-pointer rounded-lg border-2 border-dashed px-3 py-3 text-center text-xs transition-colors ${
-          dragOver ? "border-amber-400 bg-amber-50 text-amber-600" : "border-slate-300 text-slate-400 hover:border-slate-400"
+        className={`flex-1 flex flex-col items-center justify-center cursor-pointer rounded-lg border-2 border-dashed px-3 py-3 text-center text-xs transition-colors ${
+          dragOver ? "border-amber-400 bg-amber-50 text-amber-600" : "border-black text-black hover:border-slate-400"
         }`}
       >
         <Paperclip className="w-4 h-4 mx-auto mb-1" />
@@ -49,20 +50,37 @@ function AttachmentDropZone({ files, onFilesAdded, onRemove }) {
       {files.length > 0 && (
         <ul className="space-y-1">
           {files.map((f, i) => (
-            <li key={`${f.name}-${i}`} className="flex items-center justify-between gap-2 bg-slate-50 border border-slate-200 rounded-md px-2 py-1 text-xs">
+            <li key={`${f.name}-${i}`} className="flex items-center justify-between gap-2 bg-slate-50 border border-black rounded-md px-2 py-1 text-xs">
               <span className="flex items-center gap-1.5 min-w-0">
                 {f.type === "application/pdf"
-                  ? <FileText className="w-3.5 h-3.5 shrink-0 text-slate-400" />
-                  : <ImageIcon className="w-3.5 h-3.5 shrink-0 text-slate-400" />}
-                <span className="truncate text-slate-600">{f.name}</span>
+                  ? <FileText className="w-3.5 h-3.5 shrink-0 text-black" />
+                  : <ImageIcon className="w-3.5 h-3.5 shrink-0 text-black" />}
+                <span className="truncate text-black">{f.name}</span>
               </span>
-              <button type="button" onClick={(e) => { e.stopPropagation(); onRemove(i); }} className="shrink-0 text-slate-400 hover:text-red-500">
+              <button type="button" onClick={(e) => { e.stopPropagation(); onRemove(i); }} className="shrink-0 text-black hover:text-red-500">
                 <X className="w-3.5 h-3.5" />
               </button>
             </li>
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+// Clear break between the three stacked "windows" (document → summary →
+// actions) — a numbered badge on a full-width line, not just a gap, so the
+// agent's eyes register a hard stop between steps instead of the page
+// reading as one long continuous form.
+function StepDivider({ step, label }) {
+  return (
+    <div className="flex items-center gap-3 -my-1">
+      <div className="flex-1 h-0.5 bg-black" />
+      <div className="flex items-center gap-2.5 shrink-0 bg-black text-white rounded-full pl-5 pr-4 py-2">
+        <span className="w-8 h-8 rounded-full bg-amber-400 text-black text-lg font-bold flex items-center justify-center shrink-0">{step}</span>
+        <span className="text-lg font-bold">{label}</span>
+      </div>
+      <div className="flex-1 h-0.5 bg-black" />
     </div>
   );
 }
@@ -199,6 +217,12 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
   // (0 = מזומן/שוטף) — client-level, distinct from installmentCount below,
   // which is this quote's own cash/installments payment method.
   const [clientPaymentTerms, setClientPaymentTerms] = useState(hydration.clientPaymentTerms ?? 0);
+  // Phone/VAT/email/payment-terms are never edited inline on this screen —
+  // they only exist as a side effect of registering the client via "שמור
+  // לקוח" (NewClientModal) or picking an existing one from ClientSearchField,
+  // so the main document form doesn't ask the agent to re-type Morning client
+  // details it already has (or will collect through that one explicit action).
+  const [showSaveClientModal, setShowSaveClientModal] = useState(false);
   // Assigned by the server on save/send — never typed by the agent — so it's
   // unmistakably a number issued by "ממשק סוכני מכירות" (see quoteCreate in
   // src/routes/entities.js).
@@ -534,7 +558,12 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
     status,
   });
 
-  const isQuoteValid = clientName.trim() && clientPhone.trim() && clientAddress.trim() && documentTitle.trim() && grandTotal > 0;
+  // clientPhone is no longer a separately-typed field — it (and the client's
+  // Morning registration) only ever exists once morningClientId is set, via
+  // "שמור לקוח" or picking an existing client, so that's the actual gate here.
+  // Address is only required for actual delivery — pickup orders have nowhere
+  // to ship to, so nothing to require here.
+  const isQuoteValid = clientName.trim() && morningClientId && (delivery !== "shipping" || clientAddress.trim()) && documentTitle.trim() && grandTotal > 0;
 
   // Warn on refresh/tab-close/back-button while there's real unsaved work —
   // nothing here is persisted anywhere until one of the three buttons below is
@@ -639,16 +668,28 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
   };
 
   return (
-    <div className="flex flex-col lg:flex-row gap-6 items-start">
-      {/* MAIN — the whole document as one white "page", distinct from the gray screen background */}
-      <div className="order-1 lg:order-2 flex-1 min-w-0 w-full">
-        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-5 sm:p-6 space-y-8">
-          {/* פרטי המסמך */}
+    <div className="flex flex-col gap-6">
+      <StepDivider step={1} label="פרטי המסמך והמוצרים" />
+
+      {/* MAIN — the whole document as one white "page", distinct from the gray screen background.
+          Sits first: client details and line items are what the agent fills in before there's
+          anything to summarize, so the summary/actions below read as the natural next step. */}
+      <div className="w-full">
+        <div className="bg-white border border-black rounded-2xl shadow-sm p-5 sm:p-6 space-y-8">
+          {/* פרטי המסמך — required fields get a clear box + a red/emerald state
+              (empty vs. filled) instead of a thin underline, so the two things
+              an agent must do first (name a client, title the document) are
+              visually unmistakable rather than blending into the page. */}
           <section className="space-y-5">
-            <h3 className="text-lg font-bold text-slate-800">פרטי המסמך</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
+            <div className="flex items-center gap-2">
+              <div className="w-1.5 h-5 rounded-full bg-amber-400" />
+              <h3 className="text-xl font-bold text-black">פרטי המסמך</h3>
+            </div>
+            <div className="space-y-5">
               <div className="space-y-1.5">
-                <label className="text-sm font-semibold text-slate-600">שם לקוח <span className="text-red-500">*</span></label>
+                <label className="text-lg font-semibold text-black">
+                  שם לקוח <span className="text-red-500 font-bold">*</span>
+                </label>
                 <ClientSearchField
                   value={clientName}
                   onChange={(v) => { setClientName(v); setMorningClientId(null); }}
@@ -662,63 +703,54 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
                     setMorningClientId(c.id);
                   }}
                   placeholder="שם הלקוח — חפש לקוח קיים או הקלד חדש"
-                  className="w-full h-9 bg-transparent border-0 border-b-2 border-slate-300 px-0.5 py-1 text-base placeholder:text-slate-300 focus-visible:outline-none focus-visible:border-amber-400"
+                  className={`w-full h-11 rounded-xl border-2 px-3 text-base font-medium placeholder:text-slate-300 placeholder:font-normal focus-visible:outline-none transition-colors ${
+                    clientName.trim()
+                      ? "border-emerald-300 bg-emerald-50/40 text-black focus-visible:border-emerald-400"
+                      : "border-red-300 bg-red-50/40 focus-visible:border-red-400"
+                  }`}
                 />
               </div>
               <div className="space-y-1.5">
-                <label className="text-sm font-semibold text-slate-600">טלפון לקוח <span className="text-red-500">*</span></label>
-                <input
-                  value={clientPhone}
-                  onChange={(e) => setClientPhone(e.target.value)}
-                  placeholder="050-1234567"
-                  dir="ltr"
-                  className="w-full h-9 bg-transparent border-0 border-b-2 border-slate-300 px-0.5 py-1 text-base placeholder:text-slate-300 focus-visible:outline-none focus-visible:border-amber-400"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-semibold text-slate-600">כותרת המסמך <span className="text-red-500">*</span></label>
+                <label className="text-lg font-semibold text-black">
+                  כותרת המסמך <span className="text-red-500 font-bold">*</span>
+                </label>
                 <input
                   value={documentTitle}
                   onChange={(e) => setDocumentTitle(e.target.value)}
                   placeholder="לדוגמה: שילוט חזית לחנות"
-                  className="w-full h-9 bg-transparent border-0 border-b-2 border-slate-300 px-0.5 py-1 text-base placeholder:text-slate-300 focus-visible:outline-none focus-visible:border-amber-400"
+                  className={`w-full h-11 rounded-xl border-2 px-3 text-base font-medium placeholder:text-slate-300 placeholder:font-normal focus-visible:outline-none transition-colors ${
+                    documentTitle.trim()
+                      ? "border-emerald-300 bg-emerald-50/40 text-black focus-visible:border-emerald-400"
+                      : "border-red-300 bg-red-50/40 focus-visible:border-red-400"
+                  }`}
                 />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-semibold text-slate-600">ח.פ / עוסק מורשה</label>
-                <input
-                  value={clientVatId}
-                  onChange={(e) => setClientVatId(e.target.value)}
-                  placeholder="512345678"
-                  dir="ltr"
-                  className="w-full h-9 bg-transparent border-0 border-b-2 border-slate-300 px-0.5 py-1 text-base placeholder:text-slate-300 focus-visible:outline-none focus-visible:border-amber-400"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-semibold text-slate-600">אימייל לקוח</label>
-                <input
-                  type="email"
-                  value={clientEmail}
-                  onChange={(e) => setClientEmail(e.target.value)}
-                  placeholder="client@example.com"
-                  dir="ltr"
-                  className="w-full h-9 bg-transparent border-0 border-b-2 border-slate-300 px-0.5 py-1 text-base placeholder:text-slate-300 focus-visible:outline-none focus-visible:border-amber-400"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label className="text-sm font-semibold text-slate-600">תנאי תשלום ללקוח</label>
-                <select
-                  value={clientPaymentTerms}
-                  onChange={(e) => setClientPaymentTerms(Number(e.target.value))}
-                  className="w-full h-9 bg-transparent border-0 border-b-2 border-slate-300 px-0.5 py-1 text-base focus-visible:outline-none focus-visible:border-amber-400"
-                >
-                  <option value={0}>מזומן / שוטף</option>
-                  <option value={30}>שוטף+30</option>
-                  <option value={60}>שוטף+60</option>
-                  <option value={90}>שוטף+90</option>
-                </select>
               </div>
             </div>
+
+            {/* Phone/VAT/email/payment-terms are never inline fields here —
+                they only ever get collected through this one explicit action
+                (or by picking an existing client above), never re-typed loose
+                on the document form. This is also a required gate for the
+                quote (see isQuoteValid), so it gets the same red/emerald
+                treatment as the two fields above — never a quiet muted line
+                the agent could miss. */}
+            {morningClientId ? (
+              <div className="flex items-center gap-2 text-sm font-medium text-emerald-700 bg-emerald-50 border-2 border-emerald-300 rounded-xl px-3 py-2.5 w-fit">
+                <CheckCircle2 className="w-4 h-4" />
+                לקוח שמור במורנינג{clientPhone ? ` · ${clientPhone}` : ""}
+              </div>
+            ) : clientName.trim() ? (
+              <button
+                type="button"
+                onClick={() => setShowSaveClientModal(true)}
+                className="flex items-center gap-2 text-sm font-bold text-amber-700 bg-amber-100 border-2 border-amber-400 rounded-xl px-4 py-2.5 hover:bg-amber-200 hover:border-amber-500 transition-colors w-fit shadow-sm"
+              >
+                <Save className="w-4 h-4" />
+                שמור לקוח — שלב חובה לפני שליחה/הנפקה
+              </button>
+            ) : (
+              <p className="text-sm font-medium text-red-500">יש להזין שם לקוח ואז לשמור אותו (טלפון, ח.פ, אימייל ותנאי תשלום נאספים בשלב הזה)</p>
+            )}
           </section>
 
           {/* התראה לסוכן — נפתח מרווח מיקוח כי ההזמנה עברה מכסת מ"ר */}
@@ -740,7 +772,7 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
 
           {/* פירוט — רשימת הפריטים */}
           <section className="space-y-5 border-t border-slate-100 pt-7">
-            <h3 className="text-lg font-bold text-slate-800">פירוט</h3>
+            <h3 className="text-xl font-bold text-black">פירוט</h3>
             {items.map((item, index) => {
               const isLocked = !!lockedIds[item.id];
               const formData = formDataMap[item.id];
@@ -768,23 +800,23 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
                   <div
                     key={item.id}
                     onClick={() => toggleItemLock(item.id, false)}
-                    className="flex items-center justify-between gap-4 border-2 border-slate-200 rounded-2xl px-4 sm:px-5 py-3.5 bg-white cursor-pointer hover:border-amber-300 transition-colors"
+                    className="flex items-center justify-between gap-4 border-2 border-black rounded-2xl px-4 sm:px-5 py-3.5 bg-white cursor-pointer hover:border-amber-300 transition-colors"
                   >
                     <div className="flex items-center gap-3 min-w-0 flex-1">
                       {img && !isFree && (
-                        <img src={img} alt="" className="w-12 h-12 rounded-xl object-cover shrink-0 border border-slate-200" />
+                        <img src={img} alt="" className="w-12 h-12 rounded-xl object-cover shrink-0 border border-black" />
                       )}
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm font-semibold text-slate-700 truncate">{itemDisplayName(item.id, index)}</span>
-                          {sku && <span className="text-xs font-mono text-slate-400 shrink-0">מק"ט {sku}</span>}
+                          <span className="text-xl font-bold text-black truncate">{itemDisplayName(item.id, index)}</span>
+                          {sku && <span className="text-lg font-mono text-black shrink-0">מק"ט {sku}</span>}
                         </div>
-                        <div className="text-xs text-slate-400 truncate">
+                        <div className="text-lg text-black font-medium truncate">
                           {pt ? (isFree ? (formData.lineLabel || "מוצר חופשי") : (PRODUCT_NAMES[pt] || pt)) : "לא נבחר מוצר"}
                           {extraCount > 0 ? ` · +${extraCount} מידות נוספות` : ""}
                         </div>
                         {unitArea != null && (
-                          <div className="text-base font-semibold text-slate-600 mt-0.5">
+                          <div className="text-xl font-semibold text-black mt-0.5">
                             {w}×{h} מ' <span className="text-slate-300 mx-1">·</span> כמות {q}
                             <span className="text-slate-300 mx-1">·</span>
                             סה"כ {totalArea.toFixed(2)} מ"ר
@@ -796,7 +828,7 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
                       </div>
                     </div>
                     <span className="text-base font-bold text-amber-600 shrink-0">{fmt(prices[item.id])}</span>
-                    <span className="text-sm text-slate-500 px-2 py-1 shrink-0">ערוך</span>
+                    <span className="text-lg text-black px-2 py-1 shrink-0">ערוך</span>
                     {items.length > 1 && (
                       <button
                         onClick={(e) => { e.stopPropagation(); removeItem(item.id); }}
@@ -809,10 +841,12 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
                 );
               }
               return (
-                // Each product is its own isolated card — a clear border fully
-                // separates it from the product before/after it (not just a thin
-                // divider line), per the "no shared bleed between products" rule.
-                <div key={item.id} className="relative border-2 border-slate-300 rounded-2xl p-4 sm:p-5 bg-slate-50/50">
+                // Each product is its own isolated card — a clear, visibly gray
+                // frame fully separates it from the product before/after it (not
+                // just a thin divider line), per the "no shared bleed between
+                // products" rule. Solid slate-50 (not /50 translucent) + shadow so
+                // the frame reads clearly against the white page behind it.
+                <div key={item.id} className="relative border-2 border-black rounded-2xl p-4 sm:p-5 bg-slate-50 shadow-sm">
                   <div className="flex items-center justify-between mb-3 gap-3">
                     <div className="relative min-w-0 flex-1 group">
                       <input
@@ -820,14 +854,14 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
                         onChange={(e) => setItemLabel(item.id, e.target.value)}
                         placeholder={`מוצר ${index + 1} (לחצו כדי לתת שם משלכם)`}
                         title="שם מותאם למוצר זה — יופיע בהצעת המחיר במקום 'מוצר N'"
-                        className="w-full text-sm font-semibold text-zinc-600 tracking-wide bg-white border border-dashed border-slate-300 rounded-lg hover:border-amber-400 focus-visible:outline-none focus-visible:border-amber-400 focus-visible:border-solid focus-visible:ring-2 focus-visible:ring-amber-100 pl-8 pr-2 py-1.5 transition-colors"
+                        className="w-full text-sm font-semibold text-zinc-600 tracking-wide bg-white border border-dashed border-black rounded-lg hover:border-amber-400 focus-visible:outline-none focus-visible:border-amber-400 focus-visible:border-solid focus-visible:ring-2 focus-visible:ring-amber-100 pl-8 pr-2 py-1.5 transition-colors"
                       />
-                      <Pencil className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none group-focus-within:text-amber-500" />
+                      <Pencil className="w-3.5 h-3.5 text-black absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none group-focus-within:text-amber-500" />
                     </div>
                     {items.length > 1 && (
                       <button
                         onClick={() => toggleItemLock(item.id, true)}
-                        className="text-sm text-slate-500 hover:text-amber-600 transition-colors px-2 py-1 rounded-lg hover:bg-amber-50"
+                        className="text-lg text-black hover:text-amber-600 transition-colors px-2 py-1 rounded-lg hover:bg-amber-50"
                       >
                         סיימתי, כווץ
                       </button>
@@ -869,74 +903,40 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
               );
             })}
 
-            {/* Add product */}
+            {/* Add product — 30% width (shortened 70%), pinned to the right edge.
+                justify-start, not justify-end: this page is dir="rtl", where
+                flex's "end" is the LEFT edge — "start" is the right one. */}
+            <div className="flex justify-start">
             <button
               onClick={addItem}
-              className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-2xl border border-amber-300 bg-amber-50 text-base font-semibold text-amber-600 hover:bg-amber-100 hover:border-amber-400 transition-all"
+              className="w-[30%] flex items-center justify-center gap-2 py-3 px-4 rounded-2xl border border-amber-300 bg-amber-50 text-base font-semibold text-amber-600 hover:bg-amber-100 hover:border-amber-400 transition-all"
             >
               <Plus className="w-4 h-4" /> הוסף מוצר נוסף
             </button>
+            </div>
           </section>
         </div>
       </div>
 
-      {/* SIDEBAR — live order summary (sits on the right in RTL) */}
-      <div className="order-2 lg:order-1 w-full lg:w-[34rem] lg:flex-shrink-0 lg:sticky lg:top-4">
-        <div className="flex flex-col lg:flex-row-reverse gap-4 items-start">
-        <div className="w-full lg:w-72 lg:flex-shrink-0 bg-white border border-amber-200 rounded-2xl p-5 shadow-sm space-y-4">
-          <div className="flex items-center gap-2">
-            <ShoppingCart className="w-4 h-4 text-amber-500" />
-            <span className="text-base font-semibold text-amber-600">סיכום הזמנה</span>
-          </div>
+      <StepDivider step={2} label="משלוח" />
 
-          {/* Dates */}
-          <div className="space-y-2 text-sm border-b border-slate-100 pb-3">
-            <div className="flex justify-between">
-              <span className="text-slate-400">תאריך ההצעה</span>
-              <span className="font-semibold text-slate-700" dir="ltr">{quoteDate}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-400">בתוקף עד (14 יום)</span>
-              <span className="font-semibold text-slate-700" dir="ltr">{validUntil}</span>
-            </div>
-          </div>
-
-          {/* Client details */}
-          <div className="space-y-2 border-b border-slate-100 pb-3">
-            <div className="text-sm font-semibold text-slate-600">פרטי הלקוח</div>
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-slate-400">שם:</span>
-              <span className="font-semibold text-slate-700">{clientName || "—"}</span>
-            </div>
-            <div className="space-y-1">
-              <label className="text-sm text-slate-400">כתובת <span className="text-red-500">*</span></label>
-              <input
-                value={clientAddress}
-                onChange={(e) => setClientAddress(e.target.value)}
-                placeholder="רחוב, עיר"
-                className="w-full h-9 bg-transparent border-0 border-b-2 border-slate-300 px-0.5 py-1 text-sm placeholder:text-slate-300 focus-visible:outline-none focus-visible:border-amber-400"
-              />
-            </div>
-          </div>
-
-          {/* Order details */}
-          <div className="space-y-3">
-            <div className="flex justify-between items-center text-sm">
-              <span className="text-slate-400">מספר מוצרים</span>
-              <span className="font-semibold text-slate-700">{items.length}</span>
-            </div>
-
-            {/* Delivery */}
+      {/* משלוח — its own step, separate from both the document above and the
+          summary below: pickup needs no address to complete the order, but
+          delivery does, so the address field lives here (not in the summary)
+          and its required/optional state follows this screen's own choice. */}
+      <div className="w-full">
+        <div className="bg-white border border-black rounded-2xl shadow-sm p-5 sm:p-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
             <div className="space-y-1.5">
-              <span className="text-sm text-slate-400">אספקה</span>
+              <span className="text-lg text-black font-semibold">אספקה</span>
               <div className="grid grid-cols-2 gap-2">
                 {[{ v: "pickup", l: "איסוף עצמי" }, { v: "shipping", l: "משלוח" }].map(({ v, l }) => (
                   <button
                     key={v}
                     type="button"
                     onClick={() => setDelivery(v)}
-                    className={`h-10 rounded-md border text-sm transition-colors ${
-                      delivery === v ? "border-amber-400 bg-amber-50 text-amber-700 font-semibold" : "border-black bg-slate-50 text-slate-600 hover:border-black"
+                    className={`h-11 rounded-md border-2 text-base font-semibold transition-colors ${
+                      delivery === v ? "border-amber-400 bg-amber-50 text-amber-700" : "border-black bg-slate-50 text-black hover:bg-slate-100"
                     }`}
                   >
                     {l}
@@ -950,28 +950,72 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
                     value={shipping}
                     onChange={(e) => setShipping(e.target.value.replace(/[^\d.]/g, "").replace(/(\..*)\./g, "$1"))}
                     placeholder="מחיר משלוח (לפני מע״מ)"
-                    className="flex h-10 w-full rounded-md border border-black bg-slate-50 pl-7 pr-3 text-sm text-left placeholder:text-slate-300 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    className="flex h-11 w-full rounded-md border-2 border-black bg-slate-50 pl-7 pr-3 text-base font-semibold text-left placeholder:text-slate-300 placeholder:font-normal focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   />
-                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-slate-400 pointer-events-none">₪</span>
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-lg text-black pointer-events-none">₪</span>
                 </div>
               )}
             </div>
 
-            {/* Payments */}
-            <div className="space-y-1.5 text-sm">
-              <span className="text-slate-400">מספר תשלומים</span>
+            <div className="space-y-1.5">
+              <label className="text-lg font-semibold text-black">
+                כתובת {delivery === "shipping" && <span className="text-red-500 font-bold">*</span>}
+              </label>
+              <input
+                value={clientAddress}
+                onChange={(e) => setClientAddress(e.target.value)}
+                placeholder={delivery === "pickup" ? "לא חובה — נבחר איסוף עצמי" : "רחוב, עיר"}
+                className={`w-full h-11 rounded-xl border-2 px-3 text-base font-medium placeholder:text-slate-300 placeholder:font-normal focus-visible:outline-none transition-colors ${
+                  delivery === "pickup"
+                    ? "border-black bg-white text-black focus-visible:border-amber-400"
+                    : clientAddress.trim()
+                      ? "border-emerald-300 bg-emerald-50/40 text-black focus-visible:border-emerald-400"
+                      : "border-red-300 bg-red-50/40 focus-visible:border-red-400"
+                }`}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <StepDivider step={3} label="סיכום ההזמנה" />
+
+      {/* SUMMARY + ACTIONS — moved below the document (was a side panel) so the
+          order summary reads as the primary next step after filling in the
+          document, not a secondary column competing for attention. Three
+          stacked windows top to bottom: document, then summary, then actions —
+          not side by side, so the flow reads as one sequence. */}
+      <div className="w-full">
+        <div className="flex flex-col gap-6">
+        <div className="w-full bg-white border-2 border-amber-200 rounded-2xl p-5 shadow-sm space-y-4">
+          <div className="flex items-center gap-2">
+            <ShoppingCart className="w-5 h-5 text-amber-500" />
+            <span className="text-lg font-bold text-amber-600">סיכום הזמנה</span>
+          </div>
+
+          {/* Order details */}
+          <div className="space-y-3 border-b border-slate-100 pb-3">
+            <div className="flex justify-between items-center text-base">
+              <span className="text-black font-medium">מספר מוצרים</span>
+              <span className="font-bold text-black">{items.length}</span>
+            </div>
+
+            {/* Payments — the only decision still made here; delivery/address
+                already happened a step earlier (see the משלוח step above). */}
+            <div className="space-y-1.5">
+              <span className="text-lg text-black font-semibold">שיטת תשלום</span>
               <select
                 value={installmentCount}
                 onChange={(e) => setInstallmentCount(parseInt(e.target.value))}
-                className="h-9 w-full rounded-md border border-black bg-white px-2 text-sm font-semibold text-slate-700 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                className="h-11 w-full rounded-md border-2 border-black bg-white px-2 text-base font-bold text-black focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               >
                 <option value={1}>תשלום מזומן / העברה בנקאית</option>
                 {Array.from({ length: 9 }, (_, i) => i + 2).map((n) => (<option key={n} value={n}>תשלום באשראי עד {n} תשלומים</option>))}
               </select>
+              {installmentCount > 1 && (
+                <div className="text-sm text-black font-medium">כולל תוספת {(installmentSurchargePctTotal * 100).toFixed(1)}% על מחיר מזומן</div>
+              )}
             </div>
-            {installmentCount > 1 && (
-              <div className="text-xs text-slate-400 text-left">כולל תוספת {(installmentSurchargePctTotal * 100).toFixed(1)}% על מחיר מזומן</div>
-            )}
           </div>
 
           {/* Prices */}
@@ -983,60 +1027,66 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
                 {items.map((item, index) => {
                   const itemBeforeVat = ((prices[item.id] || 0) * orderMultiplier) / vatMultiplier;
                   return (
-                    <div key={item.id} className="flex justify-between text-sm">
-                      <span className="text-slate-400">{itemDisplayName(item.id, index)} - מחיר</span>
-                      <span className="text-slate-600">{fmt(itemBeforeVat)}</span>
+                    <div key={item.id} className="flex justify-between text-base">
+                      <span className="text-black font-medium">{itemDisplayName(item.id, index)} - מחיר</span>
+                      <span className="text-black font-semibold">{fmt(itemBeforeVat)}</span>
                     </div>
                   );
                 })}
                 {delivery === "shipping" && shippingPreVat > 0 && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-400">עלות משלוח</span>
-                    <span className="text-slate-600">{fmt(shippingPreVat * orderMultiplier)}</span>
+                  <div className="flex justify-between text-base">
+                    <span className="text-black font-medium">עלות משלוח</span>
+                    <span className="text-black font-semibold">{fmt(shippingPreVat * orderMultiplier)}</span>
                   </div>
                 )}
               </div>
             )}
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-400">מחיר לפני מע״מ</span>
-              <span className="font-semibold text-slate-700">{fmt(grandBeforeVat)}</span>
+            <div className="flex justify-between text-base">
+              <span className="text-black font-medium">מחיר לפני מע״מ</span>
+              <span className="font-bold text-black">{fmt(grandBeforeVat)}</span>
             </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-400">מע״מ ({vatPct}%)</span>
-              <span className="font-semibold text-slate-700">{fmt(vatAmount)}</span>
+            <div className="flex justify-between text-base">
+              <span className="text-black font-medium">מע״מ ({vatPct}%)</span>
+              <span className="font-bold text-black">{fmt(vatAmount)}</span>
             </div>
           </div>
 
           {/* Grand total */}
           <div className="flex justify-between items-center border-t border-amber-200 pt-3">
-            <span className="text-base font-bold text-slate-800">סה״כ כולל מע״מ</span>
+            <span className="text-xl font-bold text-black">סה״כ כולל מע״מ</span>
             <span className="text-2xl font-bold text-amber-600">{fmt(grandTotal)}</span>
           </div>
         </div>
 
+        <StepDivider step={4} label="שליחה / הנפקה" />
+
         {/* Save / send */}
-        <div className="w-full lg:w-72 lg:flex-shrink-0 bg-white border-2 border-slate-300 rounded-2xl p-5 shadow-sm space-y-3">
-          <div className="flex items-center justify-between text-sm bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
-            <span className="text-slate-500">מס׳ הצעת מחיר</span>
-            <span className="font-semibold text-slate-700" dir="ltr">
-              {savedQuoteNumber || "נקבע אוטומטית עם השמירה"}
-            </span>
-          </div>
+        <div className="w-full bg-white border-2 border-black rounded-2xl p-5 shadow-sm space-y-3">
 
           {/* Background for the manager — shown only in the review screen
               (QuotesHistory/QuoteDetailsModal), never on the client document. */}
-          <div className="space-y-1.5">
-            <label className="text-sm font-semibold text-slate-600">הערה למנהל המכירות (רקע להצעה, לא מוצג ללקוח)</label>
-            <textarea
-              value={agentNote}
-              onChange={(e) => setAgentNote(e.target.value)}
-              placeholder="לדוגמה: הלקוח ביקש הנחה כי הוא מזמין קבוע, סוכם על משלוח מהיר..."
-              rows={2}
-              className="w-full rounded-lg border border-black bg-white px-3 py-2 text-sm placeholder:text-slate-300 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring resize-none"
-            />
+          {/* Notes take the right 3/4 of the row (dir="rtl", so first flex-child
+              is the right one), attachments the remaining 1/4 on the left —
+              side by side instead of stacked, since neither needs full width.
+              Notes gets the same solid boxed treatment as the dropzone (was a
+              bare thin-border textarea, which read as unstyled/broken next to
+              the dropzone's bolder dashed box) so the two sit at equal visual
+              weight. */}
+          <div className="flex flex-col sm:flex-row gap-4 items-stretch">
+            <div className="w-full sm:w-[85%] flex flex-col">
+              <textarea
+                title="הערה למנהל המכירות (רקע להצעה, לא מוצג ללקוח)"
+                value={agentNote}
+                onChange={(e) => setAgentNote(e.target.value)}
+                placeholder="לדוגמה: הלקוח ביקש הנחה כי הוא מזמין קבוע, סוכם על משלוח מהיר..."
+                rows={4}
+                className="w-full flex-1 rounded-lg border-2 border-dashed border-black bg-white px-3 py-2.5 text-base placeholder:text-slate-300 focus-visible:outline-none focus-visible:border-amber-400 focus-visible:ring-2 focus-visible:ring-amber-200 resize-none"
+              />
+            </div>
+            <div className="w-full sm:w-[15%] flex flex-col">
+              <AttachmentDropZone files={attachedFiles} onFilesAdded={addAttachedFiles} onRemove={removeAttachedFile} />
+            </div>
           </div>
-
-          <AttachmentDropZone files={attachedFiles} onFilesAdded={addAttachedFiles} onRemove={removeAttachedFile} />
 
           <button
             onClick={handleSave}
@@ -1044,7 +1094,7 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
             className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all border ${
               saved
                 ? "bg-emerald-500/20 border-emerald-500/30 text-emerald-600"
-                : "bg-white border-slate-300 text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                : "bg-white border-black text-black hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
             }`}
           >
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : saved ? <><CheckCircle2 className="w-4 h-4" /> נשמרה טיוטה!</> : <><Save className="w-4 h-4" /> שמור כטיוטה</>}
@@ -1069,11 +1119,6 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
           >
             {issuing ? <Loader2 className="w-4 h-4 animate-spin" /> : <><FileOutput className="w-4 h-4" /> הנפק הצעת מחיר ללקוח</>}
           </button>
-          <p className="text-xs text-slate-400 text-center -mt-1">מנפיק ישירות ללקוח דרך מורנינג, בלי לעבור בדיקת מנהל מכירות</p>
-
-          {!isQuoteValid && (
-            <p className="text-xs text-slate-400 text-center">יש להזין שם לקוח, טלפון, כתובת וכותרת מסמך, ולפחות מוצר אחד עם מחיר</p>
-          )}
         </div>
         </div>
       </div>
@@ -1083,6 +1128,23 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
           documentUrl={issuedDocument.url}
           documentLabel={issuedDocument.label}
           onClose={() => setIssuedDocument(null)}
+        />
+      )}
+
+      {showSaveClientModal && (
+        <NewClientModal
+          initialName={clientName}
+          onClose={() => setShowSaveClientModal(false)}
+          onCreated={(c) => {
+            setClientName(c.name);
+            setClientPhone(c.phone || "");
+            setClientAddress(c.address || "");
+            setClientVatId(c.vatId || "");
+            setClientEmail(c.email || "");
+            setClientPaymentTerms(c.paymentTerms ?? 0);
+            setMorningClientId(c.id);
+            setShowSaveClientModal(false);
+          }}
         />
       )}
     </div>
