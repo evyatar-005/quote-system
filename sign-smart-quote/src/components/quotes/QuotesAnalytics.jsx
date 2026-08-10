@@ -81,12 +81,17 @@ export default function QuotesAnalytics({ quotes, sellers, morningDocs = {} }) {
 
     for (const q of rangedQuotes) {
       const key = q.created_by || "—";
-      if (!byAgent[key]) byAgent[key] = { key, name: sellers[key] || key, count: 0, orders: 0, closedRevenue: 0, closedCost: 0, closedProfit: 0 };
+      if (!byAgent[key]) byAgent[key] = { key, name: sellers[key] || key, count: 0, orders: 0, closedRevenue: 0, closedCost: 0, closedProfit: 0, closedNetSales: 0 };
       const a = byAgent[key];
       a.count += 1;
 
       if (!isClosed(q)) continue;
       a.orders += 1;
+
+      // Net sales = sum of the priced lines themselves, no VAT, no shipping,
+      // no document minimum top-up — a "clean" sales figure per the request
+      // that the leading chart must never mix revenue with profit.
+      for (const l of linesOf(q)) a.closedNetSales += l.result.sellingPriceAll || 0;
 
       const e = economicsOf(q);
       if (e) {
@@ -272,17 +277,19 @@ export default function QuotesAnalytics({ quotes, sellers, morningDocs = {} }) {
         </div>
       )}
 
-      {/* Agent ranking */}
-      <Card title="דירוג סוכנים — רווח מול מחזור סגירה" subtitle="ממוין לפי רווח מהזמנות שנסגרו. מחזור גבוה עם רווח נמוך = מכירה בהנחות.">
+      {/* Agent ranking — a clean, single-metric sales chart on purpose: pure
+          line-item sales, no VAT, no shipping, no document minimum top-up,
+          and never mixed with profit in the same bar. Revenue/profit/margin
+          still live in the table below for anyone who needs the fuller
+          picture. */}
+      <Card title="מכירה נטו לפי סוכן" subtitle="סכום מכירה נטו מהזמנות שנסגרו — ללא מע״מ וללא משלוח.">
         <ChartBox height={280}>
           <BarChart data={agents} margin={{ top: 4, right: 16, bottom: 4, left: 8 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
             <XAxis dataKey="name" tick={{ fontSize: 11 }} />
             <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `₪${(v / 1000).toFixed(0)}k`} />
             <Tooltip {...tooltipProps} />
-            <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Bar dataKey="closedRevenue" name="מחזור סגירה" fill="#CBD5E1" radius={[6, 6, 0, 0]} />
-            <Bar dataKey="closedProfit" name="רווח" fill="#C9A84C" radius={[6, 6, 0, 0]} />
+            <Bar dataKey="closedNetSales" name="מכירה נטו" fill="#C9A84C" radius={[6, 6, 0, 0]} />
           </BarChart>
         </ChartBox>
 
