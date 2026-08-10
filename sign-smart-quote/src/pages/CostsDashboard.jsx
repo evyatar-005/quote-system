@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
 import { Link, useLocation } from "react-router-dom";
-import { Loader2, Settings2, BarChart3, Tag, Lightbulb, Sparkles, Layers, Rows3, LogOut, ChevronDown, Scissors, PenTool, FileStack } from "lucide-react";
+import { Loader2, BarChart3, Tag, Lightbulb, Sparkles, Layers, Rows3 } from "lucide-react";
 import MultiProductCalculator from "../components/calculator/MultiProductCalculator.jsx";
 import NotificationBell from "@/components/NotificationBell";
+import AgentSidebar from "@/components/layout/AgentSidebar";
 import printellaLogo from "@/assets/printella-logo.png";
 import { useAuth } from "@/lib/AuthContext";
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 
 const LOGO_FORM = {
   productType: "pvc_white",
@@ -92,7 +92,7 @@ const ROLLUP_FORM = {
 };
 
 export default function CostsDashboard() {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const location = useLocation();
   // Populated by MyQuotes.jsx's "שכפל" action (navigate('/costs', {state:...}))
   // — a full builder_state snapshot to reopen in the calculator, plus the
@@ -190,7 +190,9 @@ export default function CostsDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900" dir="rtl">
-      {/* Header */}
+      {/* Header — no more top-right pills/dropdown here; AgentSidebar below is
+          the single, always-visible navigation, same pattern as ManagerSidebar
+          on the manager screens. */}
       <div className="sticky top-0 z-20 bg-white/90 backdrop-blur-xl border-b border-black">
         <div className="max-w-[1600px] mx-auto px-4 sm:px-8 py-2 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -201,76 +203,37 @@ export default function CostsDashboard() {
             />
             <NotificationBell />
           </div>
-          <div className="flex flex-col items-end gap-1">
-            <div className="flex items-center gap-2">
-              <Link
-                to="/my-quotes"
-                className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-amber-600 transition-colors px-3 py-1.5 rounded-lg border border-black hover:border-amber-300"
-              >
-                <FileStack className="w-3.5 h-3.5" /> ההצעות שלי
-              </Link>
-              <Link
-                to="/cutting"
-                className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-amber-600 transition-colors px-3 py-1.5 rounded-lg border border-black hover:border-amber-300"
-              >
-                <Scissors className="w-3.5 h-3.5" /> ניצולת לוחות
-              </Link>
-              <Link
-                to="/cutfile"
-                className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-amber-600 transition-colors px-3 py-1.5 rounded-lg border border-black hover:border-amber-300"
-              >
-                <PenTool className="w-3.5 h-3.5" /> קו חיתוך אוטומטי
-              </Link>
-              <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-amber-600 transition-colors px-3 py-1.5 rounded-lg border border-black hover:border-amber-300">
-                  <Settings2 className="w-3.5 h-3.5" /> הגדרות מנהל
-                  <ChevronDown className="w-3.5 h-3.5" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {user?.role === "admin" && (
-                  <DropdownMenuItem asChild>
-                    <Link to="/" className="flex items-center gap-2 cursor-pointer w-full">
-                      <Settings2 className="w-4 h-4" /> הגדרות מנהל
-                    </Link>
-                  </DropdownMenuItem>
-                )}
-                <DropdownMenuItem onClick={logout} className="flex items-center gap-2 cursor-pointer">
-                  <LogOut className="w-4 h-4" /> התנתקות
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-            {user?.full_name && <span className="text-xs text-slate-400">{user.full_name}</span>}
-          </div>
+          {user?.full_name && <span className="text-sm font-semibold text-slate-700">{user.full_name}</span>}
         </div>
       </div>
 
-      <div className="max-w-[1600px] mx-auto px-4 sm:px-8 py-6">
-        {!config && (
-          <div className="text-center py-20 text-slate-500 text-base">
-            לא הוגדרו פרמטרים עדיין.
-            <Link to="/" className="text-amber-600 underline block mt-2">עבור להגדרות</Link>
-          </div>
-        )}
+      <div className="max-w-[1600px] mx-auto px-4 sm:px-8 py-6 flex flex-col lg:flex-row gap-8 items-start">
+        <AgentSidebar />
+        <div className="flex-1 min-w-0 w-full">
+          {!config && (
+            <div className="text-center py-20 text-slate-500 text-base">
+              לא הוגדרו פרמטרים עדיין.
+              <Link to="/" className="text-amber-600 underline block mt-2">עבור להגדרות</Link>
+            </div>
+          )}
 
-        {config && (
-          <MultiProductCalculator
-            config={config}
-            priceTiers={priceTiers}
-            stickerPriceTiers={stickerPriceTiers}
-            paintSurchargeTiers={paintSurchargeTiers}
-            kapaPriceTiers={kapaPriceTiers}
-            rollupPriceTiers={rollupPriceTiers}
-            lokobondAreaTiers={lokobondAreaTiers}
-            glassPriceTiers={glassPriceTiers}
-            numberPriceTiers={numberPriceTiers}
-            allTabs={TABS}
-            initialBuilderState={initialBuilderState}
-            sourceQuoteNumber={sourceQuoteNumber}
-          />
-        )}
+          {config && (
+            <MultiProductCalculator
+              config={config}
+              priceTiers={priceTiers}
+              stickerPriceTiers={stickerPriceTiers}
+              paintSurchargeTiers={paintSurchargeTiers}
+              kapaPriceTiers={kapaPriceTiers}
+              rollupPriceTiers={rollupPriceTiers}
+              lokobondAreaTiers={lokobondAreaTiers}
+              glassPriceTiers={glassPriceTiers}
+              numberPriceTiers={numberPriceTiers}
+              allTabs={TABS}
+              initialBuilderState={initialBuilderState}
+              sourceQuoteNumber={sourceQuoteNumber}
+            />
+          )}
+        </div>
       </div>
     </div>
   );

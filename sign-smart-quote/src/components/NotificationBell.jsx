@@ -81,7 +81,7 @@ export default function NotificationBell() {
       </button>
 
       {open && (
-        <div className="absolute left-0 mt-2 w-80 max-h-96 overflow-y-auto bg-white border-2 border-black rounded-xl shadow-lg z-50" dir="rtl">
+        <div className="absolute right-0 mt-2 w-80 max-h-96 overflow-y-auto bg-white border-2 border-black rounded-xl shadow-lg z-50" dir="rtl">
           <div className="p-3 border-b border-black flex items-center justify-between">
             <span className="text-sm font-semibold text-slate-700">התראות</span>
             {items.length > 0 && (

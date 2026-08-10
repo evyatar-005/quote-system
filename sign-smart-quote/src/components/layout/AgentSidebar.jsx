@@ -1,19 +1,15 @@
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import {
-  LogOut, Settings2, Info, BarChart3, Scissors, PenTool, ClipboardList, LineChart,
-} from "lucide-react";
+import { LogOut, Settings2, FileStack, Scissors, PenTool } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 
-// The one right-side nav every sales-manager screen shares (AdminDashboard,
-// QuotesHistory, QuotesArchive, …) — replaces each page's own top-left
-// "תפריט" dropdown so the same navigation is always in the same place.
-// Fixed-width, full labeled menu, stretching the full height of the viewport
-// (same NavGroup/NavItem visual language as AgentSidebar, the agent-facing
-// counterpart, so both read identically). "הגדרות" and "אודות" are plain
-// links into AdminDashboard's tabs (via ?tab=) rather than a local
-// collapsible switcher, since only that page actually owns the Tabs state —
-// every other screen just deep-links in.
+// The agent-facing counterpart to ManagerSidebar — same fixed-width, full
+// labeled menu, stretching the full height of the viewport (same NavGroup/
+// NavItem visual language), so the "main menu" reads identically everywhere.
+// Content differs on purpose (ההצעות שלי instead of the manager-only הצעות
+// לבדיקה/אנליטיקה, no "ממשק סוכן מכירות" link back into itself) — same
+// permissions as before: the admin-only link stays gated behind
+// user.role === "admin".
 
 function NavGroup({ title, children }) {
   return (
@@ -38,28 +34,27 @@ function NavItem({ to, icon: Icon, label, active }) {
   );
 }
 
-export default function ManagerSidebar() {
-  const { logout } = useAuth();
-  const { pathname, search } = useLocation();
+export default function AgentSidebar() {
+  const { user, logout } = useAuth();
+  const { pathname } = useLocation();
 
   return (
     <aside className="w-64 shrink-0 sticky top-24 h-[calc(100vh-6rem)] overflow-y-auto border-l border-black pl-4 space-y-6">
       <NavGroup title="מכירות">
-        <NavItem to="/quotes" icon={ClipboardList} label="הצעות לבדיקה" active={pathname === "/quotes"} />
-        <NavItem to="/quotes-archive" icon={LineChart} label="אנליטיקה" active={pathname === "/quotes-archive"} />
+        <NavItem to="/my-quotes" icon={FileStack} label="ההצעות שלי" active={pathname === "/my-quotes"} />
       </NavGroup>
       <NavGroup title="תפעול">
         <NavItem to="/cutting" icon={Scissors} label="ניצולת לוחות" active={pathname === "/cutting"} />
         <NavItem to="/cutfile" icon={PenTool} label="קו חיתוך אוטומטי" active={pathname === "/cutfile"} />
       </NavGroup>
       <NavGroup title="ממשקים שונים">
-        <NavItem to="/costs" icon={BarChart3} label="ממשק סוכן מכירות" active={pathname === "/costs"} />
-        <NavItem to="/" icon={Settings2} label="הגדרות" active={pathname === "/" && !search} />
+        {user?.role === "admin" && (
+          <NavItem to="/" icon={Settings2} label="הגדרות מנהל" active={pathname === "/"} />
+        )}
         <Button variant="ghost" onClick={logout} className="w-full justify-start gap-3 h-12 px-3 rounded-xl font-normal">
           <LogOut className="w-6 h-6 shrink-0" />
           התנתקות
         </Button>
-        <NavItem to="/?tab=about" icon={Info} label="אודות" active={pathname === "/" && search === "?tab=about"} />
       </NavGroup>
     </aside>
   );
