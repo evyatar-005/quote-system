@@ -9,6 +9,10 @@ const { ensureMorningClient } = require('../services/morning/sync');
 const { resolveRecipe } = require('../services/production/resolveRecipe');
 const { notifyAdminsOfSentQuote } = require('../services/notifyAdmins');
 
+// Quote deletion is deliberately narrower than "any admin" — restricted to
+// this one account by explicit request, not tied to the admin role itself.
+const QUOTE_DELETE_USERNAME = 'אביתר';
+
 // Entities backed by a plain table (generic CRUD).
 const REGISTRY = {
   PriceTier:            { table: 'signshop_price_tiers',    cols: ['product_type', 'thickness_mm', 'price_per_sqm', 'min_price', 'agent_min_price_per_sqm'] },
@@ -479,8 +483,13 @@ module.exports = function registerEntities(app, db, deps) {
       return requireAuth(req, res, () => res.status(405).json({ error: 'read-only' }));
     }
     if (name === 'Quote') {
-      // Admin-only — same reasoning as PUT above.
-      return requireAdmin(req, res, () => {
+      // Restricted to a single named account, not the whole admin role — by
+      // explicit request, so quote deletion isn't something every manager
+      // account can do, only this one.
+      return requireAuth(req, res, () => {
+        if (req.user.username !== QUOTE_DELETE_USERNAME) {
+          return res.status(403).json({ error: 'forbidden' });
+        }
         db.prepare(`DELETE FROM signshop_quotes WHERE id = ?`).run(id);
         // Cascade-clean notifications referencing this quote so an approved
         // notification's "הנפק ללקוח" button never points at a deleted quote.

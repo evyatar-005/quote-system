@@ -8,15 +8,19 @@ import {
   Copy,
   Download,
   PackagePlus,
+  Send,
   X,
   BarChart3,
   ArrowRight,
+  Search,
+  ChevronDown,
 } from "lucide-react";
 import { toast } from "sonner";
+import { Input } from "@/components/ui/input";
 import { convertMorningDocument, createPaymentLink, getLatestMorningDocuments } from "@/api/morningClient";
 import QuoteDocument from "@/components/calculator/QuoteDocument";
 import DocumentIssuedModal from "@/components/DocumentIssuedModal";
-import { MORNING_ORDER_TYPE } from "@/lib/quoteLabels";
+import { MORNING_ORDER_TYPE, toLocalDateStr, DATE_PRESETS, computeDateRange } from "@/lib/quoteLabels";
 
 const fmt = (val) =>
   val != null ? `₪ ${Number(val).toLocaleString("he-IL", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : "—";
@@ -46,6 +50,10 @@ export default function MyQuotes() {
   const [paymentLinkPanel, setPaymentLinkPanel] = useState(null); // { quoteNumber, url }
   const [issuedDocument, setIssuedDocument] = useState(null); // { url, label }
   const [tab, setTab] = useState("all");
+  const [search, setSearch] = useState("");
+  const [datePreset, setDatePreset] = useState("all");
+  const [customFrom, setCustomFrom] = useState(toLocalDateStr(new Date()));
+  const [customTo, setCustomTo] = useState(toLocalDateStr(new Date()));
 
   const loadQuotes = async () => {
     setLoading(true);
@@ -218,9 +226,18 @@ export default function MyQuotes() {
     }
   };
 
-  const visibleQuotes = tab === "orders"
-    ? quotes.filter((q) => morningDocs[q.id]?.morning_document_type === MORNING_ORDER_TYPE)
-    : quotes;
+  const dateRange = computeDateRange(datePreset, customFrom, customTo);
+
+  const visibleQuotes = quotes
+    .filter((q) => tab !== "orders" || morningDocs[q.id]?.morning_document_type === MORNING_ORDER_TYPE)
+    .filter((q) => {
+      if (!dateRange.from && !dateRange.to) return true;
+      const created = new Date(q.created_date);
+      if (dateRange.from && created < dateRange.from) return false;
+      if (dateRange.to && created > dateRange.to) return false;
+      return true;
+    })
+    .filter((q) => !search.trim() || q.client_name?.toLowerCase().includes(search.trim().toLowerCase()));
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900" dir="rtl">
@@ -259,11 +276,59 @@ export default function MyQuotes() {
           ))}
         </div>
 
+        {/* Date filter + client-name search — same pattern/components as QuotesHistory. */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-semibold text-slate-500 shrink-0">טווח זמן:</span>
+            <div className="relative">
+              <select
+                value={datePreset}
+                onChange={(e) => setDatePreset(e.target.value)}
+                dir="rtl"
+                className="h-10 rounded-lg border border-black bg-white pl-3 pr-8 text-sm text-slate-700 appearance-none"
+              >
+                {DATE_PRESETS.map(({ key, label }) => (
+                  <option key={key} value={key}>{label}</option>
+                ))}
+              </select>
+              <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
+          </div>
+          {datePreset === "custom" && (
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={customFrom}
+                onChange={(e) => setCustomFrom(e.target.value)}
+                className="h-10 rounded-lg border border-black bg-white px-3 text-sm text-slate-700"
+                dir="ltr"
+              />
+              <span className="text-slate-500 text-sm">עד</span>
+              <input
+                type="date"
+                value={customTo}
+                onChange={(e) => setCustomTo(e.target.value)}
+                className="h-10 rounded-lg border border-black bg-white px-3 text-sm text-slate-700"
+                dir="ltr"
+              />
+            </div>
+          )}
+          <div className="relative">
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="חיפוש לפי שם לקוח..."
+              className="h-10 bg-white border-black text-foreground placeholder:text-slate-400 pr-9"
+            />
+          </div>
+        </div>
+
         {paymentLinkPanel && (
           <div className="flex items-center justify-between gap-3 bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-3">
             <div className="min-w-0">
               <div className="text-sm font-semibold text-emerald-700">
-                הזמנה {paymentLinkPanel.quoteNumber} הונפקה — קישור לתשלום:
+                קישור לתשלום עבור הצעה {paymentLinkPanel.quoteNumber}:
               </div>
               {/* readOnly input, not a plain div — lets the agent manually select
                   + Ctrl+C as a last resort if both copy methods above fail. */}
@@ -317,9 +382,21 @@ export default function MyQuotes() {
                             שכפול מ-{q.parent_quote_number}
                           </span>
                         )}
-                        <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLORS[q.status || "draft"]}`}>
-                          {STATUS_LABELS[q.status || "draft"]}
-                        </span>
+                        {/* "אושרה" is no longer tied to the admin's internal review
+                            decision (q.status === "approved") — an agent doesn't
+                            care that a manager clicked approve, only that the
+                            quote actually became a real order in Morning. So this
+                            label is now driven by alreadyOrder; every other status
+                            (draft/sent/rejected) still reads straight off q.status. */}
+                        {alreadyOrder ? (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600">
+                            אושרה
+                          </span>
+                        ) : q.status !== "approved" ? (
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLORS[q.status || "draft"]}`}>
+                            {STATUS_LABELS[q.status || "draft"]}
+                          </span>
+                        ) : null}
                       </div>
                       <div className="flex items-center gap-3 mt-1.5 text-sm text-slate-500 flex-wrap">
                         <span className="flex items-center gap-1">
@@ -351,7 +428,8 @@ export default function MyQuotes() {
                         <div className="text-sm text-slate-400">כולל מע״מ</div>
                       </div>
                       <button
-                        onClick={() => openQuoteDocument(q)}
+                        onClick={() => (morningDoc?.document_url ? window.open(morningDoc.document_url, "_blank", "noopener,noreferrer") : openQuoteDocument(q))}
+                        title={morningDoc?.document_url ? "פותח את קובץ ה-PDF המקורי ממורנינג" : undefined}
                         className="text-xs px-3 py-1.5 rounded-lg border border-black text-slate-600 hover:border-slate-500 hover:bg-slate-50 transition-colors"
                       >
                         פתח
@@ -362,26 +440,31 @@ export default function MyQuotes() {
                       >
                         שכפל
                       </button>
-                      {alreadyOrder && (
-                        <span className="text-xs px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-600 whitespace-nowrap">
-                          כבר הונפקה כהזמנה
-                        </span>
-                      )}
-                      {/* Always available, even for an already-issued order — an
-                          agent needs to re-pull the payment link to resend it,
-                          or the first issuance may have gone out without one
-                          (e.g. before the paymentPlugins field-name fix). Each
-                          click creates a new linked Morning document (the
-                          existing quote→order→invoice chaining behavior),
-                          it doesn't just "fetch" the prior one. */}
+                      {/* Standalone payment link — a completely independent Morning
+                          operation (see createPaymentForm in sync.js), always
+                          available whether or not the order exists yet. This lets
+                          an agent collect payment BEFORE issuing the work order,
+                          not just after. Each click creates a fresh link (the
+                          underlying receipt is only created by Morning once the
+                          customer actually pays), so re-clicking to resend is safe. */}
                       <button
-                        onClick={() => (alreadyOrder ? handlePullPaymentLink(q) : handleIssueOrder(q))}
+                        onClick={() => handlePullPaymentLink(q)}
                         disabled={issuingIds.has(q.id)}
-                        className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50 transition-colors"
+                        className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-amber-400 text-amber-700 bg-amber-50 hover:bg-amber-100 disabled:opacity-50 transition-colors"
                       >
-                        {issuingIds.has(q.id) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PackagePlus className="w-3.5 h-3.5" />}
-                        {alreadyOrder ? "קישור תשלום" : "הנפק הזמנה"}
+                        {issuingIds.has(q.id) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                        שלח קישור תשלום
                       </button>
+                      {!alreadyOrder && (
+                        <button
+                          onClick={() => handleIssueOrder(q)}
+                          disabled={issuingIds.has(q.id)}
+                          className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50 transition-colors"
+                        >
+                          {issuingIds.has(q.id) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PackagePlus className="w-3.5 h-3.5" />}
+                          הנפק הזמנת עבודה
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>

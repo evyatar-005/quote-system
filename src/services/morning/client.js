@@ -21,6 +21,24 @@ function resolveApiBase(creds) {
   return creds && creds.sandbox ? SANDBOX_API_BASE : API_BASE;
 }
 
+// A transport-level failure (DNS, connection reset, TLS, timeout) surfaces
+// from fetch() as a bare "fetch failed" with no detail in the message — the
+// real reason is in err.cause, which gets silently dropped once this error
+// bubbles up to a `catch (err) { ... err.message }` logger (see sync.js).
+// Re-throw with the cause folded into the message so morning_sync_log
+// actually records something diagnosable instead of just "fetch failed".
+async function safeFetch(url, opts) {
+  try {
+    return await fetch(url, opts);
+  } catch (err) {
+    const cause = err.cause;
+    const causeDetail = cause ? (cause.code || cause.message || String(cause)) : null;
+    const enriched = new Error(`Network error calling Morning (${url}): ${err.message}${causeDetail ? ` — ${causeDetail}` : ''}`);
+    enriched.cause = cause;
+    throw enriched;
+  }
+}
+
 // Cached in-memory only (never persisted to the DB) — a token is a short-lived
 // credential, and this process restarting is a fine time to just fetch a new one.
 let cached = { token: null, expiresAt: 0 };
@@ -31,6 +49,23 @@ function getCredentials(db) {
   return row;
 }
 
+// Transient transport failures (DNS blip, connection reset, a socket that
+// went stale while idle) are common on the *first* call after a quiet
+// period — the OS/firewall drops an idle keep-alive connection and the next
+// fetch dies before ever reaching Morning, even though a retry a moment
+// later succeeds fine. Rather than surface that as a user-facing "fetch
+// failed" and make the agent click the button again, retry once,
+// transparently, before giving up for real.
+async function withTransientRetry(fn) {
+  try {
+    return await fn();
+  } catch (err) {
+    if (!err.cause) throw err; // not a transport-level failure — don't mask real errors
+    await new Promise((r) => setTimeout(r, 300));
+    return fn();
+  }
+}
+
 async function getAccessToken(db) {
   const now = Date.now();
   // Refresh a bit early (60s) rather than exactly at expiry, so a request that
@@ -39,11 +74,11 @@ async function getAccessToken(db) {
 
   const creds = getCredentials(db);
   const apiBase = resolveApiBase(creds);
-  const res = await fetch(`${apiBase}/account/token`, {
+  const res = await withTransientRetry(() => safeFetch(`${apiBase}/account/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ id: creds.client_id, secret: creds.client_secret }),
-  });
+  }));
   const text = await res.text();
   if (!res.ok) throw new Error(`Morning auth failed (${res.status}): ${text}`);
 
@@ -60,14 +95,14 @@ async function getAccessToken(db) {
 async function doRequest(db, method, path, body, token) {
   const creds = db.prepare(`SELECT * FROM morning_credentials WHERE id = 1`).get();
   const apiBase = resolveApiBase(creds);
-  const res = await fetch(`${apiBase}${path}`, {
+  const res = await withTransientRetry(() => safeFetch(`${apiBase}${path}`, {
     method,
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
+  }));
   return res;
 }
 

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { Search, Loader2, User, Calendar, TrendingUp, Trash2, CheckCircle2, XCircle, ChevronDown, X, PackagePlus, Eye } from "lucide-react";
+import { Search, Loader2, User, Calendar, TrendingUp, CheckCircle2, XCircle, ChevronDown, X, PackagePlus, Eye } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import QuoteDetailsModal from "@/components/QuoteDetailsModal";
 import { convertMorningDocument, getLatestMorningDocuments } from "@/api/morningClient";
@@ -162,14 +162,8 @@ export default function QuotesHistory() {
     }
   };
 
-  const deleteQuote = async (q) => {
-    if (pendingIds.has(q.id)) return;
-    if (!window.confirm(`למחוק לצמיתות את הצעה ${q.quote_number} (${q.client_name})?`)) return;
-    await withPending(q.id, async () => {
-      await base44.entities.Quote.delete(q.id);
-      setQuotes((prev) => prev.filter((x) => x.id !== q.id));
-    });
-  };
+  // Deletion moved to the analytics screen (QuotesArchive.jsx), restricted
+  // there to a single account — this review queue no longer offers it.
 
   // Quick decision (no editing) — sets status AND notifies the agent who
   // created it. The edit-then-save flow in QuoteDetailsModal counts as the
@@ -501,14 +495,6 @@ export default function QuotesHistory() {
                       className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-30 disabled:pointer-events-none"
                     >
                       <XCircle className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => deleteQuote(q)}
-                      disabled={pendingIds.has(q.id)}
-                      title="מחק הצעה"
-                      className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-30 disabled:pointer-events-none"
-                    >
-                      <Trash2 className="w-4 h-4" />
                     </button>
                     {morningDocs[q.id] && (
                       <button

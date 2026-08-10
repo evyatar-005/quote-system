@@ -106,6 +106,7 @@ export default function QuotesArchive() {
   const [docKind, setDocKind] = useState("all");
   const [statusFilter, setStatusFilter] = useState("");
   const [selectedProduct, setSelectedProduct] = useState("");
+  const [deletingIds, setDeletingIds] = useState(() => new Set());
 
   useEffect(() => {
     base44.auth.me().then(setUser);
@@ -142,6 +143,29 @@ export default function QuotesArchive() {
   }, []);
 
   const isOrder = (q) => morningDocs[q.id]?.morning_document_type === MORNING_ORDER_TYPE;
+
+  // Server-side restricted to one specific account (src/routes/entities.js,
+  // QUOTE_DELETE_USERNAME) regardless of role — this button is hidden for
+  // everyone else, but the real enforcement is the 403 on the backend.
+  const canDelete = user?.username === "אביתר";
+  const deleteQuote = async (e, q) => {
+    e.stopPropagation(); // the whole row opens the details modal on click
+    if (deletingIds.has(q.id)) return;
+    if (!window.confirm(`למחוק לצמיתות את הצעה ${q.quote_number} (${q.client_name})?`)) return;
+    setDeletingIds((prev) => new Set(prev).add(q.id));
+    try {
+      await base44.entities.Quote.delete(q.id);
+      setQuotes((prev) => prev.filter((x) => x.id !== q.id));
+    } catch (err) {
+      toast.error(err?.message || "מחיקת ההצעה נכשלה");
+    } finally {
+      setDeletingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(q.id);
+        return next;
+      });
+    }
+  };
 
   const dateRange = (() => {
     const now = new Date();
