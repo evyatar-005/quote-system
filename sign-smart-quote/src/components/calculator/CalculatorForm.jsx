@@ -264,7 +264,7 @@ export const READONLY = "h-10 flex items-center justify-center border-0 border-b
 export function Field({ label, width = "w-24", required = false, children }) {
   return (
     <div className={`flex flex-col gap-1 ${width} shrink-0`}>
-      <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
+      <label className="text-xs font-semibold text-slate-700 uppercase tracking-wide whitespace-nowrap">
         {label}{required && <span className="text-red-500"> *</span>}
       </label>
       {children}
@@ -543,12 +543,14 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
                 onClick={() => setPickerOpen((o) => !o)}
                 className={`flex h-10 w-full items-center justify-between rounded-none border-0 border-b-2 bg-transparent px-1 text-base transition-colors ${pickerOpen ? "border-amber-400" : "border-slate-300 hover:border-slate-500"}`}
               >
-                <span className="text-slate-400 truncate">בחר מק"ט / מוצר...</span>
-                <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform shrink-0 ${pickerOpen ? "rotate-180" : ""}`} />
+                <span className="text-slate-600 truncate">בחר מק"ט / מוצר...</span>
+                <ChevronDown className={`w-5 h-5 text-slate-500 transition-transform shrink-0 ${pickerOpen ? "rotate-180" : ""}`} />
               </button>
 
               {pickerOpen && (
-                <div ref={pickerDropdownRef} className="absolute z-50 mt-1 w-[440px] max-w-[92vw] rounded-xl border-2 border-slate-900 bg-white shadow-xl max-h-[80vh] overflow-y-auto">
+                <div ref={pickerDropdownRef} className="absolute z-50 mt-1 w-[440px] max-w-[92vw] rounded-xl border-2 border-slate-900 bg-white shadow-xl max-h-96 overflow-y-auto">
+                {/* max-h-96 (24rem) ≈ search bar + 6 rows visible — the rest scrolls
+                    inside the popover instead of the list spilling past the fold. */}
             {/* Quick search — lets an agent type a few letters instead of expanding
                 every אב מק"ט by hand to find where an item lives. */}
             <div className="sticky top-0 z-10 bg-white border-b-2 border-slate-200 p-2">
@@ -772,19 +774,19 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
 
           {/* Empty placeholder columns — filled once a מק"ט is chosen */}
           <Field label="אורך (מ')" width="w-24">
-            <div className={`${READONLY} text-slate-300`}>—</div>
+            <div className={`${READONLY} text-slate-500`}>—</div>
           </Field>
           <Field label="גובה (מ')" width="w-24">
-            <div className={`${READONLY} text-slate-300`}>—</div>
+            <div className={`${READONLY} text-slate-500`}>—</div>
           </Field>
           <Field label="כמות" width="w-16">
-            <div className={`${READONLY} text-slate-300`}>1</div>
+            <div className={`${READONLY} text-slate-500`}>1</div>
           </Field>
           <Field label="מחיר יח' (ללא מע״מ)" width="w-24">
-            <div className={`${READONLY} text-slate-300`}>—</div>
+            <div className={`${READONLY} text-slate-500`}>—</div>
           </Field>
           <Field label="סה״כ (ללא מע״מ)" width="w-28">
-            <div className={`${READONLY} text-slate-300`}>—</div>
+            <div className={`${READONLY} text-slate-500`}>—</div>
           </Field>
         </div>
       </div>

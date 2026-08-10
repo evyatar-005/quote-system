@@ -703,7 +703,7 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
                     setMorningClientId(c.id);
                   }}
                   placeholder="שם הלקוח — חפש לקוח קיים או הקלד חדש"
-                  className={`w-full h-11 rounded-xl border-2 px-3 text-base font-medium placeholder:text-slate-300 placeholder:font-normal focus-visible:outline-none transition-colors ${
+                  className={`w-full h-11 rounded-xl border-2 px-3 text-base font-medium placeholder:text-slate-500 placeholder:font-normal focus-visible:outline-none transition-colors ${
                     clientName.trim()
                       ? "border-emerald-300 bg-emerald-50/40 text-black focus-visible:border-emerald-400"
                       : "border-red-300 bg-red-50/40 focus-visible:border-red-400"
@@ -718,7 +718,7 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
                   value={documentTitle}
                   onChange={(e) => setDocumentTitle(e.target.value)}
                   placeholder="לדוגמה: שילוט חזית לחנות"
-                  className={`w-full h-11 rounded-xl border-2 px-3 text-base font-medium placeholder:text-slate-300 placeholder:font-normal focus-visible:outline-none transition-colors ${
+                  className={`w-full h-11 rounded-xl border-2 px-3 text-base font-medium placeholder:text-slate-500 placeholder:font-normal focus-visible:outline-none transition-colors ${
                     documentTitle.trim()
                       ? "border-emerald-300 bg-emerald-50/40 text-black focus-visible:border-emerald-400"
                       : "border-red-300 bg-red-50/40 focus-visible:border-red-400"
@@ -950,7 +950,7 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
                     value={shipping}
                     onChange={(e) => setShipping(e.target.value.replace(/[^\d.]/g, "").replace(/(\..*)\./g, "$1"))}
                     placeholder="מחיר משלוח (לפני מע״מ)"
-                    className="flex h-11 w-full rounded-md border-2 border-black bg-slate-50 pl-7 pr-3 text-base font-semibold text-left placeholder:text-slate-300 placeholder:font-normal focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    className="flex h-11 w-full rounded-md border-2 border-black bg-slate-50 pl-7 pr-3 text-base font-semibold text-left placeholder:text-slate-500 placeholder:font-normal focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   />
                   <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-lg text-black pointer-events-none">₪</span>
                 </div>
@@ -965,7 +965,7 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
                 value={clientAddress}
                 onChange={(e) => setClientAddress(e.target.value)}
                 placeholder={delivery === "pickup" ? "לא חובה — נבחר איסוף עצמי" : "רחוב, עיר"}
-                className={`w-full h-11 rounded-xl border-2 px-3 text-base font-medium placeholder:text-slate-300 placeholder:font-normal focus-visible:outline-none transition-colors ${
+                className={`w-full h-11 rounded-xl border-2 px-3 text-base font-medium placeholder:text-slate-500 placeholder:font-normal focus-visible:outline-none transition-colors ${
                   delivery === "pickup"
                     ? "border-black bg-white text-black focus-visible:border-amber-400"
                     : clientAddress.trim()
@@ -1080,7 +1080,7 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
                 onChange={(e) => setAgentNote(e.target.value)}
                 placeholder="לדוגמה: הלקוח ביקש הנחה כי הוא מזמין קבוע, סוכם על משלוח מהיר..."
                 rows={4}
-                className="w-full flex-1 rounded-lg border-2 border-dashed border-black bg-white px-3 py-2.5 text-base placeholder:text-slate-300 focus-visible:outline-none focus-visible:border-amber-400 focus-visible:ring-2 focus-visible:ring-amber-200 resize-none"
+                className="w-full flex-1 rounded-lg border-2 border-dashed border-black bg-white px-3 py-2.5 text-base placeholder:text-slate-500 focus-visible:outline-none focus-visible:border-amber-400 focus-visible:ring-2 focus-visible:ring-amber-200 resize-none"
               />
             </div>
             <div className="w-full sm:w-[15%] flex flex-col">
