@@ -298,6 +298,10 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
     : CATALOG;
 
   const set = (key, val) => onChange({ ...values, [key]: val });
+  // Starts open when the item already carries graphics notes (editing a
+  // duplicated/existing quote) — otherwise collapsed, since most lines never
+  // need it and a permanently-visible textarea just adds clutter.
+  const [graphicsNoteOpen, setGraphicsNoteOpen] = useState(() => !!values.graphicsNote?.trim());
   const [extrasOpen, setExtrasOpen] = useState(false);
   const extrasRef = useRef(null);
   const [expandedParent, setExpandedParent] = useState(() => (filteredCatalog.length === 1 ? filteredCatalog[0].parent : null));
@@ -1192,6 +1196,52 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
           className="bg-transparent border-0 border-b-2 border-slate-300 rounded-none px-1 text-base font-semibold text-slate-800 resize-y focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-amber-400"
           placeholder="תיאור המוצר..."
         />
+      </div>
+
+      {/* Graphics notes — collapsed by default, kept separate from the
+          general free-text description above so it prints as its own
+          clearly-labeled "גרפיקה:" line in the Morning document instead of
+          being buried in the general note (see buildSpecLines). */}
+      <div className="space-y-1.5">
+        {graphicsNoteOpen ? (
+          <>
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">הערות גרפיקה</label>
+              <button
+                type="button"
+                onClick={() => setGraphicsNoteOpen(false)}
+                className="text-xs font-semibold text-amber-600 hover:text-amber-700 transition-colors"
+              >
+                אישור
+              </button>
+            </div>
+            <Textarea
+              rows={2}
+              autoFocus
+              value={values.graphicsNote || ""}
+              onChange={(e) => set("graphicsNote", e.target.value)}
+              className="bg-transparent border-0 border-b-2 border-slate-300 rounded-none px-1 text-base font-semibold text-slate-800 resize-y focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-amber-400"
+              placeholder="הערות לגרפיקה..."
+            />
+          </>
+        ) : values.graphicsNote?.trim() ? (
+          <button
+            type="button"
+            onClick={() => setGraphicsNoteOpen(true)}
+            className="flex items-start gap-1.5 text-xs text-slate-600 hover:text-amber-700 transition-colors text-right"
+          >
+            <span className="font-semibold text-amber-600 shrink-0">גרפיקה:</span>
+            <span className="truncate">{values.graphicsNote.trim()}</span>
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setGraphicsNoteOpen(true)}
+            className="text-xs font-semibold text-amber-600 hover:text-amber-700 transition-colors"
+          >
+            + הערות גרפיקה
+          </button>
+        )}
       </div>
 
     </div>

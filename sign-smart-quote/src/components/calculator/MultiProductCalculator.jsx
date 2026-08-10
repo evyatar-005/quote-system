@@ -454,6 +454,22 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
         unitPrice: formData.result?.sellingPricePerUnit ?? 0,
         sku: lineSku(formData),
       });
+      // Graphics notes as their own zero-price line, right under the product
+      // they belong to — a real separate row in the Morning document (not
+      // just an extra sentence inside the product's own description block),
+      // so it reads as "this note is about the item above" without affecting
+      // the product's price.
+      if (formData.graphicsNote?.trim()) {
+        lines.push({
+          groupLabel,
+          description: `גרפיקה: ${formData.graphicsNote.trim()}`,
+          freeText: "",
+          quantity: 1,
+          unitPrice: 0,
+          sku: null,
+          isNote: true, // skipped as the document-minimum top-up target below
+        });
+      }
       (formData.extraRows || []).forEach((row) => {
         if (!row.result) return;
         lines.push({
@@ -485,7 +501,11 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
     // SalesResults badges in this app, never in the Morning document.)
     if (docMinTopUpCash > 0.01 && lines.length > 0) {
       const topUpPreVat = docMinTopUpCash / (vatMultiplier * orderMultiplier);
-      const lastLine = lines[lines.length - 1];
+      // Skip note-only rows (graphics notes) — the top-up must land on an
+      // actual priced product line, not silently attach a price to what's
+      // meant to read as a zero-cost note.
+      const pricedLines = lines.filter((l) => !l.isNote);
+      const lastLine = pricedLines[pricedLines.length - 1] || lines[lines.length - 1];
       lastLine.unitPrice = (lastLine.unitPrice || 0) + topUpPreVat / (lastLine.quantity || 1);
     }
     // משלוח/איסוף עצמי — תמיד שורה משלו במורנינג, גם כשאיסוף עצמי (מחיר 0),

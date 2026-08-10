@@ -51,6 +51,19 @@ export function economicsOf(quote) {
   return { cost, revenue, profit: revenue - cost };
 }
 
+// Shipping is never its own DB column — it's a synthetic line pushed onto
+// `line_items` (not `calculation_data`, which linesOf/economicsOf read) at
+// save time, sku==="משלוח" (see buildLineItems in MultiProductCalculator.jsx).
+// Used to derive "סכום עסקה" (deal amount excluding shipping only — VAT,
+// document-minimum top-up and manager discounts all stay in) from
+// economicsOf's revenue, which otherwise includes shipping.
+export function shippingOf(quote) {
+  const items = safeParse(quote.line_items, []);
+  const line = Array.isArray(items) ? items.find((it) => it?.sku === "משלוח") : null;
+  if (!line) return 0;
+  return (parseFloat(line.unitPrice) || 0) * (parseFloat(line.quantity) || 1);
+}
+
 // Per-product rollup across a set of quotes, at the LINE level — deliberately
 // excludes VAT, shipping and installation, none of which live on a line (see
 // linesOf/economicsOf above). Used by the product-analytics charts, where

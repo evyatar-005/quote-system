@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
-import { Search, Loader2, User, Calendar, BarChart3, ChevronDown, X, Eye, FileText, List as ListIcon, PackageSearch, Trash2 } from "lucide-react";
+import { Search, Loader2, BarChart3, ChevronDown, X, Eye, List as ListIcon, PackageSearch, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import QuoteDetailsModal from "@/components/QuoteDetailsModal";
@@ -10,8 +10,7 @@ import { getLatestMorningDocuments } from "@/api/morningClient";
 import printellaLogo from "@/assets/printella-logo.png";
 import ManagerSidebar from "@/components/layout/ManagerSidebar";
 import {
-  fmt, STATUS_LABELS, STATUS_COLORS, CATEGORY_LABELS, CATEGORY_COLORS,
-  MORNING_TYPE_LABELS, MORNING_ORDER_TYPE, toLocalDateStr,
+  fmt, STATUS_LABELS, CATEGORY_LABELS, CATEGORY_COLORS, MORNING_ORDER_TYPE, toLocalDateStr,
 } from "@/lib/quoteLabels";
 // calculation_data stores the fine-grained productType (pvc_white, rollup_magnetic…),
 // not the coarse product_category — so names come from the calculator's canonical
@@ -426,83 +425,77 @@ export default function QuotesArchive() {
         ) : filtered.length === 0 ? (
           <div className="text-center py-20 text-slate-400 text-sm">לא נמצאו הצעות מחיר</div>
         ) : (
-          <div className="space-y-2">
-            {filtered.map((q) => (
-              // Deliberately does NOT write viewed_at (unlike openQuote in
-              // QuotesHistory). viewed_at is the sole input to the review
-              // queue's "לא נפתחו בלבד" badge — browsing the archive would
-              // silently mark old quotes as reviewed, with no way back.
-              <div
-                key={q.id}
-                onClick={() => setSelectedQuote(q)}
-                className="w-full text-right bg-white border border-black rounded-2xl p-4 hover:border-slate-500 hover:bg-slate-50 transition-all cursor-pointer"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-foreground">{q.client_name}</span>
-                      <span className="text-xs text-slate-400 font-mono">{q.quote_number}</span>
-                      {q.parent_quote_number && (
-                        <span className="text-xs bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full">תיקון ל-{q.parent_quote_number}</span>
-                      )}
-                      {productTypesOf(q).sort(compareSku).map((type) => (
-                        <span key={type} className={`text-xs px-2 py-0.5 rounded-full ${productBadgeClass(type)}`}>
-                          {productSku(type) ? `${productSku(type)} · ${productLabel(type)}` : productLabel(type)}
+          <div className="overflow-x-auto rounded-2xl border border-black">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 border-b border-black text-right">
+                  <th className="px-3 py-2 font-semibold text-slate-600 whitespace-nowrap">סוכן</th>
+                  <th className="px-3 py-2 font-semibold text-slate-600 whitespace-nowrap">לקוח</th>
+                  <th className="px-3 py-2 font-semibold text-slate-600">מוצרים</th>
+                  <th className="px-3 py-2 font-semibold text-slate-600 whitespace-nowrap">מס' מסמך</th>
+                  <th className="px-3 py-2 font-semibold text-slate-600 whitespace-nowrap">סוג מסמך</th>
+                  <th className="px-3 py-2 font-semibold text-slate-600 whitespace-nowrap">סך הכל</th>
+                  <th className="px-3 py-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((q) => {
+                  const doc = morningDocs[q.id];
+                  const docNumber = isOrder(q) && doc ? (doc.morning_document_number || doc.morning_document_id) : q.quote_number;
+                  // Deliberately does NOT write viewed_at (unlike openQuote in
+                  // QuotesHistory). viewed_at is the sole input to the review
+                  // queue's "לא נפתחו בלבד" badge — browsing the archive would
+                  // silently mark old quotes as reviewed, with no way back.
+                  return (
+                    <tr
+                      key={q.id}
+                      onClick={() => setSelectedQuote(q)}
+                      className="border-b border-slate-100 last:border-b-0 hover:bg-slate-50 cursor-pointer transition-colors"
+                    >
+                      <td className="px-3 py-2 text-slate-500 whitespace-nowrap">{sellers[q.created_by] || q.created_by}</td>
+                      <td className="px-3 py-2 font-semibold text-foreground whitespace-nowrap">{q.client_name}</td>
+                      <td className="px-3 py-2">
+                        <div className="flex flex-wrap gap-1">
+                          {productTypesOf(q).sort(compareSku).map((type) => (
+                            <span key={type} className={`text-xs px-2 py-0.5 rounded-full ${productBadgeClass(type)}`}>
+                              {productSku(type) ? `${productSku(type)} · ${productLabel(type)}` : productLabel(type)}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 font-mono text-slate-500 whitespace-nowrap">{docNumber}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        {/* Order vs quote — not the internal admin-review status
+                            (q.status), which isn't shown here at all anymore. */}
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${isOrder(q) ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-500"}`}>
+                          {isOrder(q) ? "הזמנה" : "הצעת מחיר"}
                         </span>
-                      ))}
-                      {isOrder(q) && (
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600 flex items-center gap-1">
-                          <FileText className="w-3 h-3" /> הזמנה
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-3 mt-1.5 text-sm text-slate-500 flex-wrap">
-                      <span className="flex items-center gap-1"><User className="w-3 h-3" />{sellers[q.created_by] || q.created_by}</span>
-                      <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{new Date(q.created_date).toLocaleDateString("he-IL")}</span>
-                      {q.notes && <span className="text-slate-400 truncate max-w-xs">{q.notes}</span>}
-                    </div>
-                    {morningDocs[q.id] && (
-                      <div className="flex items-center gap-2 mt-1 text-xs text-slate-400" onClick={(e) => e.stopPropagation()}>
-                        <span>
-                          מסמך מורנינג: {MORNING_TYPE_LABELS[morningDocs[q.id].morning_document_type] || "מסמך"} #{morningDocs[q.id].morning_document_number || morningDocs[q.id].morning_document_id}
-                        </span>
-                        {morningDocs[q.id].document_url && (
-                          <button onClick={() => setPreviewUrl(morningDocs[q.id].document_url)} className="flex items-center gap-1 text-primary hover:underline">
-                            <Eye className="w-3 h-3" /> הצג מסמך
-                          </button>
-                        )}
-                      </div>
-                    )}
-                    {q.agent_note && (
-                      <div className="flex items-start gap-1.5 mt-1.5 text-sm bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 max-w-xl">
-                        <span className="text-amber-600 font-semibold shrink-0">הערת סוכן:</span>
-                        <span className="text-amber-800">{q.agent_note}</span>
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <div className="text-left">
-                      <div className="text-base font-bold text-primary tabular-nums">{fmt(q.price_with_vat)}</div>
-                      <div className="text-sm text-slate-400">כולל מע״מ</div>
-                    </div>
-                    {/* Static badge — status is never editable from the archive. */}
-                    <span className={`text-xs px-2 py-1.5 rounded-lg ${STATUS_COLORS[q.status || "draft"]}`}>
-                      {STATUS_LABELS[q.status || "draft"]}
-                    </span>
-                    {canDelete && (
-                      <button
-                        onClick={(e) => deleteQuote(e, q)}
-                        disabled={deletingIds.has(q.id)}
-                        title="מחק הצעה"
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-30 disabled:pointer-events-none"
-                      >
-                        {deletingIds.has(q.id) ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
+                      </td>
+                      <td className="px-3 py-2 font-bold text-primary tabular-nums whitespace-nowrap">{fmt(q.price_with_vat)}</td>
+                      <td className="px-3 py-2 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center gap-2">
+                          {doc?.document_url && (
+                            <button onClick={() => setPreviewUrl(doc.document_url)} className="flex items-center gap-1 text-primary hover:underline text-xs">
+                              <Eye className="w-3.5 h-3.5" /> הצג מסמך
+                            </button>
+                          )}
+                          {canDelete && (
+                            <button
+                              onClick={(e) => deleteQuote(e, q)}
+                              disabled={deletingIds.has(q.id)}
+                              title="מחק הצעה"
+                              className="p-1 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                            >
+                              {deletingIds.has(q.id) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
         </>

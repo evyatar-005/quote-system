@@ -518,6 +518,8 @@ export default function QuotesHistory() {
       {selectedQuote && (
         <QuoteDetailsModal
           quote={selectedQuote}
+          morningDoc={morningDocs[selectedQuote.id]}
+          onOpenMorningDoc={setPreviewUrl}
           onClose={() => setSelectedQuote(null)}
           onSaved={() => { setSelectedQuote(null); loadQuotes(); }}
         />

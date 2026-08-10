@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
 import {
   ResponsiveContainer, BarChart, Bar, LineChart, Line,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, LabelList,
 } from "recharts";
 import { Award, AlertTriangle, Target, ChevronDown } from "lucide-react";
 import { fmt, MORNING_ORDER_TYPE, DATE_PRESETS, computeDateRange, toLocalDateStr } from "@/lib/quoteLabels";
-import { economicsOf, linesOf, productLabel, productSku, compareSku } from "@/lib/quoteEconomics";
+import { economicsOf, linesOf, shippingOf, productLabel, productSku, compareSku } from "@/lib/quoteEconomics";
 
 // Printella brand hues — one stable colour per series so an agent keeps the
 // same colour across every chart on the page.
@@ -75,13 +75,13 @@ export default function QuotesAnalytics({ quotes, sellers, morningDocs = {} }) {
   // quote, regardless of its `status`.
   const isClosed = (q) => morningDocs[q.id]?.morning_document_type === MORNING_ORDER_TYPE;
 
-  const { agents, missingCost, months, agentNames, agentProducts, productTypes, totals } = useMemo(() => {
+  const { agents, missingCost, months, agentNames, agentProducts, productTypes, agentClosedProducts, closedProductTypes, totals } = useMemo(() => {
     const byAgent = {};
     let missingCost = 0;
 
     for (const q of rangedQuotes) {
       const key = q.created_by || "—";
-      if (!byAgent[key]) byAgent[key] = { key, name: sellers[key] || key, count: 0, orders: 0, closedRevenue: 0, closedCost: 0, closedProfit: 0, closedNetSales: 0 };
+      if (!byAgent[key]) byAgent[key] = { key, name: sellers[key] || key, count: 0, orders: 0, closedRevenue: 0, closedCost: 0, closedProfit: 0, closedNetSales: 0, closedDealAmount: 0 };
       const a = byAgent[key];
       a.count += 1;
 
@@ -98,6 +98,9 @@ export default function QuotesAnalytics({ quotes, sellers, morningDocs = {} }) {
         a.closedRevenue += e.revenue;
         a.closedCost += e.cost;
         a.closedProfit += e.profit;
+        // "סכום עסקה" — the deal amount excluding ONLY shipping (VAT, document
+        // minimum top-up and manager discounts all stay in, unlike closedNetSales).
+        a.closedDealAmount += e.revenue - shippingOf(q);
       } else {
         missingCost += 1; // a closed order with no saved cost breakdown
       }
@@ -107,7 +110,7 @@ export default function QuotesAnalytics({ quotes, sellers, morningDocs = {} }) {
       .map((a) => ({
         ...a,
         marginPct: a.closedRevenue > 0 ? (a.closedProfit / a.closedRevenue) * 100 : 0,
-        avgClosedDeal: a.orders > 0 ? a.closedRevenue / a.orders : 0,
+        avgClosedDeal: a.orders > 0 ? a.closedDealAmount / a.orders : 0,
         closeRatePct: a.count > 0 ? (a.orders / a.count) * 100 : 0,
       }))
       .sort((a, b) => b.closedProfit - a.closedProfit);
@@ -151,17 +154,40 @@ export default function QuotesAnalytics({ quotes, sellers, morningDocs = {} }) {
       total: Object.values(agentProductMap[a.key] || {}).reduce((s, n) => s + n, 0),
     }));
 
+    // ₪ net sales per agent, broken down by product type — CLOSED orders only
+    // (unlike agentProducts' unit counts above, which cover every issued
+    // quote), so the leading "מכירה נטו לפי סוכן" chart can stack by product
+    // type and still sum to exactly each agent's closedNetSales.
+    const agentClosedProductMap = {};
+    for (const q of rangedQuotes) {
+      if (!isClosed(q)) continue;
+      const key = q.created_by || "—";
+      for (const l of linesOf(q)) {
+        const t = l.productType || "—";
+        if (!agentClosedProductMap[key]) agentClosedProductMap[key] = {};
+        agentClosedProductMap[key][t] = (agentClosedProductMap[key][t] || 0) + (l.result.sellingPriceAll || 0);
+      }
+    }
+    const closedProductTypes = [...new Set(Object.values(agentClosedProductMap).flatMap((m) => Object.keys(m)))].sort(compareSku);
+    const agentClosedProducts = agents.map((a) => ({
+      key: a.key,
+      name: a.name,
+      byType: agentClosedProductMap[a.key] || {},
+      total: a.closedNetSales,
+    }));
+
     const totals = agents.reduce(
       (t, a) => ({
         closedRevenue: t.closedRevenue + a.closedRevenue,
         closedProfit: t.closedProfit + a.closedProfit,
+        closedDealAmount: t.closedDealAmount + a.closedDealAmount,
         count: t.count + a.count,
         orders: t.orders + a.orders,
       }),
-      { closedRevenue: 0, closedProfit: 0, count: 0, orders: 0 }
+      { closedRevenue: 0, closedProfit: 0, closedDealAmount: 0, count: 0, orders: 0 }
     );
 
-    return { agents, missingCost, months, agentNames, agentProducts, productTypes, totals };
+    return { agents, missingCost, months, agentNames, agentProducts, productTypes, agentClosedProducts, closedProductTypes, totals };
   }, [rangedQuotes, sellers, morningDocs]);
 
   const dateFilterBar = (
@@ -204,7 +230,7 @@ export default function QuotesAnalytics({ quotes, sellers, morningDocs = {} }) {
   const leader = agents[0];
   const totalMarginPct = totals.closedRevenue > 0 ? (totals.closedProfit / totals.closedRevenue) * 100 : 0;
   const totalCloseRatePct = totals.count > 0 ? (totals.orders / totals.count) * 100 : 0;
-  const totalAvgClosedDeal = totals.orders > 0 ? totals.closedRevenue / totals.orders : 0;
+  const totalAvgClosedDeal = totals.orders > 0 ? totals.closedDealAmount / totals.orders : 0;
 
   return (
     <div className="space-y-4">

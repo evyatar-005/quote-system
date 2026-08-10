@@ -3,6 +3,7 @@ import { X, Loader2, CheckCircle2, Save, FileText, Receipt, Paperclip, Image as 
 import { PRODUCT_NAMES } from "@/components/calculator/CalculatorForm";
 import { base44 } from "@/api/base44Client";
 import { convertMorningDocument, getMorningHistory } from "@/api/morningClient";
+import { MORNING_TYPE_LABELS } from "@/lib/quoteLabels";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
@@ -422,7 +423,7 @@ const MORNING_ACTIONS = [
 // this quote. Kept as its own component so a Morning API hiccup (history
 // fetch failing) can only ever blank out this one card, never the rest of
 // the modal's pricing UI.
-function MorningSection({ quoteId, readOnly = false }) {
+function MorningSection({ quoteId, readOnly = false, morningDoc, onOpenMorningDoc }) {
   const [busyType, setBusyType] = useState(null);
   const [history, setHistory] = useState(null);
   const [historyError, setHistoryError] = useState(false);
@@ -458,6 +459,24 @@ function MorningSection({ quoteId, readOnly = false }) {
     <div>
       <h3 className="text-sm font-semibold text-zinc-300 mb-2 uppercase tracking-wider">מורנינג</h3>
       <div className="bg-[#16161F] rounded-xl p-3 space-y-3">
+        {/* Same document (quote/order/invoice) the list rows in
+            QuotesArchive/QuotesHistory already link to — surfaced here too so
+            a manager who opened this modal doesn't have to close it and hunt
+            for the row's own link just to see the actual Morning document. */}
+        {morningDoc?.document_url && (
+          <div className="flex items-center justify-between gap-2 text-xs bg-[#0C0C12] border border-white/10 rounded-lg px-2.5 py-2">
+            <span className="text-zinc-300">
+              {MORNING_TYPE_LABELS[morningDoc.morning_document_type] || "מסמך"} #{morningDoc.morning_document_number || morningDoc.morning_document_id}
+            </span>
+            <button
+              onClick={() => onOpenMorningDoc?.(morningDoc.document_url)}
+              className="flex items-center gap-1 text-[#C9A84C] hover:underline shrink-0"
+            >
+              <FileText className="w-3.5 h-3.5" /> פתח מסמך
+            </button>
+          </div>
+        )}
+
         {/* readOnly (the general-history archive screen) keeps the audit trail
             below but hides these — they issue REAL Morning documents. */}
         {!readOnly && (
@@ -641,7 +660,7 @@ function ItemPricingFields({ discount, onChange, area, originalPrice, itemKey })
 // and approves the original), and the Morning document actions. It is a
 // clarity/misclick guard, not a security boundary: both screens are admin-only,
 // and an admin can do all of this from /quotes anyway.
-export default function QuoteDetailsModal({ quote, onClose, onSaved, readOnly = false }) {
+export default function QuoteDetailsModal({ quote, onClose, onSaved, readOnly = false, morningDoc, onOpenMorningDoc }) {
   // Everything needed to render this quote is already in the saved row — no
   // network round-trip, and nothing here can drift from admin price edits made
   // after the quote was issued, because we render the breakdown as computed
@@ -1123,7 +1142,7 @@ export default function QuoteDetailsModal({ quote, onClose, onSaved, readOnly = 
           </div>
 
           <div className="mt-4">
-            <MorningSection quoteId={quote.id} readOnly={readOnly} />
+            <MorningSection quoteId={quote.id} readOnly={readOnly} morningDoc={morningDoc} onOpenMorningDoc={onOpenMorningDoc} />
           </div>
         </div>
       </div>
