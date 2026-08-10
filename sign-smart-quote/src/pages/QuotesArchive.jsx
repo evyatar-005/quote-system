@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
-import { Search, Loader2, User, Calendar, BarChart3, ChevronDown, X, Eye, FileText, List as ListIcon, PackageSearch } from "lucide-react";
+import { Search, Loader2, User, Calendar, BarChart3, ChevronDown, X, Eye, FileText, List as ListIcon, PackageSearch, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import QuoteDetailsModal from "@/components/QuoteDetailsModal";
 import QuotesAnalytics from "@/components/quotes/QuotesAnalytics";
@@ -99,7 +100,7 @@ export default function QuotesArchive() {
 
   // Filters
   const [search, setSearch] = useState("");
-  const [datePreset, setDatePreset] = useState("all");
+  const [datePreset, setDatePreset] = useState("today");
   const [customFrom, setCustomFrom] = useState(toLocalDateStr(new Date()));
   const [customTo, setCustomTo] = useState(toLocalDateStr(new Date()));
   const [selectedAgent, setSelectedAgent] = useState(null);
@@ -270,6 +271,47 @@ export default function QuotesArchive() {
       <div className="w-full mx-auto px-4 sm:px-8 py-8 flex flex-col lg:flex-row gap-8 items-start">
         <ManagerSidebar />
         <div className="flex-1 min-w-0 w-full max-w-5xl space-y-6">
+        {/* "רשימת הצעות" reads the top filter bar (`filtered`). "אנליטיקה" and
+            "ניתוח מוצרים" both read the full unfiltered `quotes` set and own
+            their own time filter instead — a per-agent comparison report
+            would be meaningless if the top bar's "סוכן" filter (meant for
+            browsing the list) silently collapsed it down to one agent. */}
+        <div className="flex items-center gap-2 border-b border-slate-200">
+          {[
+            { key: "list", label: "רשימת הצעות", Icon: ListIcon },
+            { key: "analytics", label: "אנליטיקה", Icon: BarChart3 },
+            { key: "products", label: "ניתוח מוצרים", Icon: PackageSearch },
+          ].map(({ key, label, Icon }) => (
+            <button
+              key={key}
+              onClick={() => setTab(key)}
+              className={`flex items-center gap-1.5 px-4 py-2 text-sm -mb-px border-b-2 transition-colors ${
+                tab === key ? "border-primary text-primary font-semibold" : "border-transparent text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              <Icon className="w-4 h-4" />
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {tab === "analytics" ? (
+          <QuotesAnalytics quotes={quotes} sellers={sellers} morningDocs={morningDocs} />
+        ) : tab === "products" ? (
+          <ProductAnalytics quotes={quotes} morningDocs={morningDocs} />
+        ) : (
+        <>
+        {/* Search */}
+        <div className="relative">
+          <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="חיפוש לפי לקוח, מס׳ הצעה או סוכן..."
+            className="h-10 bg-white border-black text-foreground placeholder:text-slate-400 pr-9"
+          />
+        </div>
+
         {/* Every filter is a labelled dropdown on one wrapping row, so the whole
             filter set reads as a single control strip instead of stacked rows. */}
         <div className="space-y-3">
@@ -330,47 +372,6 @@ export default function QuotesArchive() {
           )}
         </div>
 
-        {/* "רשימת הצעות" reads the top filter bar (`filtered`). "אנליטיקה" and
-            "ניתוח מוצרים" both read the full unfiltered `quotes` set and own
-            their own time filter instead — a per-agent comparison report
-            would be meaningless if the top bar's "סוכן" filter (meant for
-            browsing the list) silently collapsed it down to one agent. */}
-        <div className="flex items-center gap-2 border-b border-slate-200">
-          {[
-            { key: "list", label: "רשימת הצעות", Icon: ListIcon },
-            { key: "analytics", label: "אנליטיקה", Icon: BarChart3 },
-            { key: "products", label: "ניתוח מוצרים", Icon: PackageSearch },
-          ].map(({ key, label, Icon }) => (
-            <button
-              key={key}
-              onClick={() => setTab(key)}
-              className={`flex items-center gap-1.5 px-4 py-2 text-sm -mb-px border-b-2 transition-colors ${
-                tab === key ? "border-primary text-primary font-semibold" : "border-transparent text-slate-500 hover:text-slate-700"
-              }`}
-            >
-              <Icon className="w-4 h-4" />
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {tab === "analytics" ? (
-          <QuotesAnalytics quotes={quotes} sellers={sellers} morningDocs={morningDocs} />
-        ) : tab === "products" ? (
-          <ProductAnalytics quotes={quotes} morningDocs={morningDocs} />
-        ) : (
-        <>
-        {/* Search */}
-        <div className="relative">
-          <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="חיפוש לפי לקוח, מס׳ הצעה או סוכן..."
-            className="h-10 bg-white border-black text-foreground placeholder:text-slate-400 pr-9"
-          />
-        </div>
-
         {/* Summary — the slot future per-day/month/product analytics will extend. */}
         <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">סיכום לפי הסינון הנוכחי</h3>
         <div className="grid grid-cols-3 gap-3">
@@ -418,7 +419,8 @@ export default function QuotesArchive() {
           </div>
         )}
 
-        {/* Rows — read-only */}
+        {/* Rows — read-only for everyone except deleteQuote/canDelete, which
+            is restricted to a single account server-side. */}
         {loading ? (
           <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-slate-400" /></div>
         ) : filtered.length === 0 ? (
@@ -487,6 +489,16 @@ export default function QuotesArchive() {
                     <span className={`text-xs px-2 py-1.5 rounded-lg ${STATUS_COLORS[q.status || "draft"]}`}>
                       {STATUS_LABELS[q.status || "draft"]}
                     </span>
+                    {canDelete && (
+                      <button
+                        onClick={(e) => deleteQuote(e, q)}
+                        disabled={deletingIds.has(q.id)}
+                        title="מחק הצעה"
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-30 disabled:pointer-events-none"
+                      >
+                        {deletingIds.has(q.id) ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -499,7 +511,13 @@ export default function QuotesArchive() {
       </div>
 
       {selectedQuote && (
-        <QuoteDetailsModal quote={selectedQuote} readOnly onClose={() => setSelectedQuote(null)} />
+        <QuoteDetailsModal
+          quote={selectedQuote}
+          readOnly
+          morningDoc={morningDocs[selectedQuote.id]}
+          onOpenMorningDoc={setPreviewUrl}
+          onClose={() => setSelectedQuote(null)}
+        />
       )}
 
       {previewUrl && (
