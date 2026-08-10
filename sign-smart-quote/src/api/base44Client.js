@@ -124,6 +124,7 @@ const ENTITY_NAMES = [
   'LokobondAreaTier',
   'GlassPriceTier',
   'NumberPriceTier',
+  'GraphicsPriceTier',
   'User',
   // Production recipes (תפ"י) — phase 1, template only, no timing.
   'Station',

@@ -110,6 +110,7 @@ export default function CostsDashboard() {
   const [lokobondAreaTiers, setLokobondAreaTiers] = useState([]);
   const [glassPriceTiers, setGlassPriceTiers] = useState([]);
   const [numberPriceTiers, setNumberPriceTiers] = useState([]);
+  const [graphicsPriceTiers, setGraphicsPriceTiers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
@@ -127,7 +128,8 @@ export default function CostsDashboard() {
       base44.entities.LokobondAreaTier.list(),
       base44.entities.GlassPriceTier.list(),
       base44.entities.NumberPriceTier.list(),
-    ]).then(([configs, tiers, stickerTiers, paintTiers, kapaTiers, rollupTiers, lokobondAreaTiers, glassTiers, numberTiers]) => {
+      base44.entities.GraphicsPriceTier.list(),
+    ]).then(([configs, tiers, stickerTiers, paintTiers, kapaTiers, rollupTiers, lokobondAreaTiers, glassTiers, numberTiers, graphicsTiers]) => {
       if (configs.length > 0) setConfig(configs[0]);
       setPriceTiers(tiers);
       setStickerPriceTiers(stickerTiers);
@@ -137,6 +139,7 @@ export default function CostsDashboard() {
       setLokobondAreaTiers(lokobondAreaTiers);
       setGlassPriceTiers(glassTiers);
       setNumberPriceTiers(numberTiers);
+      setGraphicsPriceTiers(graphicsTiers);
       setLoading(false);
     }).catch((err) => {
       console.error("[CostsDashboard] failed to load pricing data:", err);
@@ -228,6 +231,7 @@ export default function CostsDashboard() {
               lokobondAreaTiers={lokobondAreaTiers}
               glassPriceTiers={glassPriceTiers}
               numberPriceTiers={numberPriceTiers}
+              graphicsPriceTiers={graphicsPriceTiers}
               allTabs={TABS}
               initialBuilderState={initialBuilderState}
               sourceQuoteNumber={sourceQuoteNumber}

@@ -3,7 +3,7 @@
 // should only ever call into this module, never ./client directly.
 
 const { request } = require('./client');
-const { CURRENCY, VAT_TYPE_DEFAULT, LANG } = require('./mappings');
+const { CURRENCY, VAT_TYPE_DEFAULT, LANG, DOCUMENT_TYPE } = require('./mappings');
 const { sendDocumentToWhatsApp } = require('../greenapi/send');
 
 // Shared shape for both client creation and updates — every field we've
@@ -277,6 +277,19 @@ async function createPaymentForm(db, quoteId) {
        VALUES (?, ?, ?, ?, 1, NULL)`
     ).run(quoteId, action, JSON.stringify(body), JSON.stringify(response));
 
+    // Tracks this payment link against the quote so the payment/received
+    // webhook (which only ever carries Morning's own payment id) can find its
+    // way back to a local quote. ON CONFLICT rather than a plain INSERT: an
+    // agent regenerating the link for the same quote must not leave two
+    // "pending" rows racing to claim the same webhook.
+    if (response.id) {
+      db.prepare(
+        `INSERT INTO morning_payment_requests (quote_id, morning_payment_id, status, amount)
+         VALUES (?, ?, 'pending', ?)
+         ON CONFLICT(morning_payment_id) DO UPDATE SET quote_id = excluded.quote_id, amount = excluded.amount`
+      ).run(quoteId, String(response.id), quote.price_with_vat || 0);
+    }
+
     return response.url;
   } catch (err) {
     db.prepare(
@@ -285,6 +298,71 @@ async function createPaymentForm(db, quoteId) {
     ).run(quoteId || null, action, err.message);
     throw err;
   }
+}
+
+// Best-effort lookup of the receipt Morning creates automatically once a
+// /payments/form link is actually paid (see the big comment on
+// createPaymentForm above — there's no direct "receipt for this payment id"
+// endpoint, so this searches the client's recent receipts and takes the
+// newest one). Called right after a payment/received webhook, when the
+// receipt should already exist — but Morning's own creation can lag the
+// webhook by a second or two, hence the couple of short retries.
+async function findReceiptDocument(db, quote) {
+  const clientRow = db.prepare(`SELECT morning_client_id FROM morning_clients_map WHERE local_client_name = ?`).get((quote.client_name || '').trim());
+  if (!clientRow) return null;
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, 2500));
+    try {
+      const found = await request(db, 'POST', '/documents/search', {
+        type: [DOCUMENT_TYPE.receipt],
+        clientId: clientRow.morning_client_id,
+        pageSize: 1,
+      });
+      const doc = found && found.items && found.items[0];
+      if (doc) return doc;
+    } catch (err) {
+      console.error(`[findReceiptDocument] search failed for quote #${quote.id}:`, err.message);
+    }
+  }
+  return null;
+}
+
+// Applies a payment/received webhook payload — marks the matching
+// morning_payment_requests row paid, best-effort attaches the resulting
+// receipt, and returns the affected quote (for the caller to notify). Returns
+// null if the payload's payment id doesn't match anything we generated (a
+// payment made through some other Morning flow, or a webhook arriving twice —
+// this function is idempotent either way since the row is only marked once).
+async function handlePaymentReceived(db, payload) {
+  const morningPaymentId = payload && payload.id != null ? String(payload.id) : null;
+  if (!morningPaymentId) return null;
+
+  const row = db.prepare(`SELECT * FROM morning_payment_requests WHERE morning_payment_id = ?`).get(morningPaymentId);
+  if (!row) return null;
+  if (row.status === 'paid') return null; // already processed — webhook redelivery
+
+  const quote = db.prepare(`SELECT * FROM signshop_quotes WHERE id = ?`).get(row.quote_id);
+  if (!quote) return null;
+
+  const total = payload.total != null ? Number(payload.total) : row.amount;
+  db.prepare(
+    `UPDATE morning_payment_requests SET status = 'paid', paid_at = CURRENT_TIMESTAMP, amount = ?, transaction_json = ? WHERE id = ?`
+  ).run(total, JSON.stringify(payload.transactions || []), row.id);
+
+  const receipt = await findReceiptDocument(db, quote);
+  if (receipt) {
+    db.prepare(
+      `UPDATE morning_payment_requests SET receipt_document_id = ?, receipt_number = ?, receipt_url = ? WHERE id = ?`
+    ).run(String(receipt.id), receipt.number || null, (receipt.url && (receipt.url.he || receipt.url.en)) || null, row.id);
+  }
+
+  db.prepare(
+    `INSERT INTO morning_sync_log (quote_id, action, request_json, success, created_by)
+     VALUES (?, 'payment_received', ?, 1, NULL)`
+  ).run(quote.id, JSON.stringify(payload));
+
+  return { quote, amount: total, receiptUrl: receipt ? ((receipt.url && (receipt.url.he || receipt.url.en)) || null) : null };
 }
 
 // Latest Morning document per quote — powers the QuotesHistory list (one row
@@ -310,4 +388,4 @@ function getHistory(db, quoteId) {
   };
 }
 
-module.exports = { ensureMorningClient, createOrConvertDocument, createPaymentForm, getHistory, buildIncomeRows, searchClients, createClient, getLatestDocuments };
+module.exports = { ensureMorningClient, createOrConvertDocument, createPaymentForm, handlePaymentReceived, getHistory, buildIncomeRows, searchClients, createClient, getLatestDocuments };

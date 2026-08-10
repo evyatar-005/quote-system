@@ -15,6 +15,8 @@ export default function MorningSettingsSection() {
   const [secretMasked, setSecretMasked] = useState("");
   const [sandbox, setSandbox] = useState(true);
   const [baseUrl, setBaseUrl] = useState("");
+  const [webhookSecret, setWebhookSecret] = useState("");
+  const [webhookSecretMasked, setWebhookSecretMasked] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -24,6 +26,7 @@ export default function MorningSettingsSection() {
         setSecretMasked(cfg.client_secret_masked || "");
         setSandbox(!!cfg.sandbox);
         setBaseUrl(cfg.base_url || "");
+        setWebhookSecretMasked(cfg.webhook_secret_masked || "");
       } catch {
         toast.error("שגיאה בטעינת הגדרות מורנינג");
       }
@@ -42,14 +45,24 @@ export default function MorningSettingsSection() {
         client_secret: clientSecret,
         sandbox,
         base_url: baseUrl,
+        webhook_secret: webhookSecret,
       });
       setClientSecret("");
+      setWebhookSecret("");
       setSecretMasked(result?.client_secret_masked || secretMasked);
+      setWebhookSecretMasked(result?.webhook_secret_masked || webhookSecretMasked);
       toast.success("הגדרות מורנינג נשמרו בהצלחה");
     } catch (err) {
       toast.error(err?.message || "שגיאה בשמירת הגדרות מורנינג");
     }
     setSaving(false);
+  };
+
+  const webhookUrl = `${window.location.origin}/api/morning/webhooks/payment-received`;
+  const copyWebhookUrl = () => {
+    navigator.clipboard.writeText(webhookUrl)
+      .then(() => toast.success("הקישור הועתק"))
+      .catch(() => toast.error("ההעתקה נכשלה — יש להעתיק ידנית"));
   };
 
   if (loading) {
@@ -102,6 +115,31 @@ export default function MorningSettingsSection() {
             <p className="text-sm text-muted-foreground mt-0.5">כשמופעל, המסמכים מונפקים בסביבת הבדיקות של מורנינג ולא מול לקוחות אמיתיים</p>
           </div>
           <Switch checked={sandbox} onCheckedChange={setSandbox} />
+        </div>
+      </div>
+
+      <div className="border-t border-border pt-4 space-y-3">
+        <div>
+          <p className="text-sm font-semibold text-slate-700">התראה על תשלום שהתקבל</p>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            כדי לקבל התראה במערכת (וכפתור להנפקת הזמנה) ברגע שלקוח משלם דרך קישור תשלום, יש להגדיר
+            Webhook בממשק של מורנינג (Developer Tools ← Webhooks) לאירוע <span dir="ltr" className="font-mono">payment/received</span>, עם הכתובת הבאה:
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Input dir="ltr" readOnly value={webhookUrl} className="font-mono text-xs" />
+          <Button type="button" variant="outline" onClick={copyWebhookUrl}>העתק</Button>
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-semibold text-slate-600">Webhook Secret (אופציונלי)</label>
+          <Input
+            type="password"
+            dir="ltr"
+            value={webhookSecret}
+            onChange={(e) => setWebhookSecret(e.target.value)}
+            placeholder={webhookSecretMasked ? `סיסמה נוכחית: ${webhookSecretMasked}` : "לא הוגדר עדיין"}
+          />
+          <p className="text-xs text-muted-foreground">אותו סוד שהוגדר עבור ה-Webhook בממשק מורנינג — לאימות שהקריאה אכן הגיעה ממורנינג</p>
         </div>
       </div>
 

@@ -67,6 +67,7 @@ export const PRODUCT_CODES = {
   numbers_perspex_milky: "012-4",
   numbers_perspex_mirror: "012-5",
   numbers_perspex_metallic: "012-6",
+  graphics: "0000",
 };
 
 // Product image for a given productType, resolved via its מק"ט's parent code
@@ -110,6 +111,7 @@ export const PRODUCT_NAMES = {
   numbers_perspex_milky: "מספרים בחיתוך לייזר פרספקס חלבי",
   numbers_perspex_mirror: "מספרים בחיתוך לייזר פרספקס מראה",
   numbers_perspex_metallic: "מספרים בחיתוך לייזר פרספקס מטאלי",
+  graphics: "גרפיקה",
 };
 
 const STICKER_TYPES = ["vinyl_sticker", "texture_sticker"];
@@ -119,6 +121,7 @@ const LOKOBOND_TYPES = ["lokobond_plain", "lokobond_diecut"];
 const FOAMEX_TYPES = ["foamex_white", "foamex_black"];
 const GLASS_TYPES = ["glass_extra_clear"];
 const PVC_CARPET_TYPES = ["pvc_carpet"];
+const GRAPHICS_TYPES = ["graphics"];
 // Laser-cut numbers (012) — same perspex finishes as the logo family, but
 // priced per single digit by height+thickness, not per m².
 const NUMBER_TYPES = [
@@ -192,6 +195,7 @@ export const CATALOG = [
   { parent: "010", label: "זכוכית אקסטרה קליר", subs: ["glass_extra_clear"] },
   { parent: "012", label: "מספרים בחיתוך לייזר", subs: NUMBER_TYPES },
   { parent: "013", label: "שטיח פיויסי", subs: ["pvc_carpet"] },
+  { parent: "0000", label: "גרפיקה", subs: ["graphics"] },
 ];
 
 // One muted brand hue per product family (Printela palette) — every category
@@ -234,6 +238,8 @@ const CATEGORY_DEFAULTS = {
   pvcCarpet: { widthM: "", heightM: "", thicknessMm: "2", quantity: "1", extras: [] },
   // No dimension inputs — the chosen tier already carries height + thickness.
   numbers: { quantity: "1", extras: [] },
+  // Graphics is a fixed-price catalog row (like kapa/rollup/glass) — no dimensions.
+  graphics: { quantity: "1", extras: [] },
 };
 
 export function categoryOf(pt) {
@@ -246,6 +252,7 @@ export function categoryOf(pt) {
   if (GLASS_TYPES.includes(pt)) return "glass";
   if (PVC_CARPET_TYPES.includes(pt)) return "pvcCarpet";
   if (NUMBER_TYPES.includes(pt)) return "numbers";
+  if (GRAPHICS_TYPES.includes(pt)) return "graphics";
   return "logo";
 }
 
@@ -290,7 +297,7 @@ function availableThicknesses(category, productType, priceTiers) {
   return priced.length ? priced : all;
 }
 
-export default function CalculatorForm({ values, onChange, allowedProducts, extrasInfo, basePrice, unitPriceExVat, priceRangeMin, priceRangeMax, paymentKey = 'full', installmentCount = 2, config, priceTiers = [], kapaPriceTiers = [], rollupPriceTiers = [], glassPriceTiers = [], numberPriceTiers = [], priceMissing = false, priceErrorMessage = null }) {
+export default function CalculatorForm({ values, onChange, allowedProducts, extrasInfo, basePrice, unitPriceExVat, priceRangeMin, priceRangeMax, paymentKey = 'full', installmentCount = 2, config, priceTiers = [], kapaPriceTiers = [], rollupPriceTiers = [], glassPriceTiers = [], numberPriceTiers = [], graphicsPriceTiers = [], priceMissing = false, priceErrorMessage = null }) {
   // Restrict the catalog to the products this instance is allowed to offer —
   // e.g. the קאפה test section should only ever show the קאפה category.
   const filteredCatalog = allowedProducts && allowedProducts.length
@@ -407,11 +414,19 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
     setPickerOpen(false);
     setPickerSearch("");
   };
-  const clearProduct = () => onChange({ productType: "", kapaTierId: null, rollupTierId: null, glassTierId: null, numberTierId: null, lineLabel: values.lineLabel || "", extras: [] });
+  // Graphics sub-SKU = a fixed-price row from the price list (מחיר קבוע × כמות).
+  const selectGraphics = (tier) => {
+    onChange({ ...CATEGORY_DEFAULTS.graphics, productType: "graphics", graphicsTierId: tier.id, lineLabel: values.lineLabel || "" });
+    setExpandedParent(null);
+    setPickerOpen(false);
+    setPickerSearch("");
+  };
+  const clearProduct = () => onChange({ productType: "", kapaTierId: null, rollupTierId: null, glassTierId: null, numberTierId: null, graphicsTierId: null, lineLabel: values.lineLabel || "", extras: [] });
   const kapaTier = values.kapaTierId != null ? kapaPriceTiers.find(t => String(t.id) === String(values.kapaTierId)) : null;
   const rollupTier = values.rollupTierId != null ? rollupPriceTiers.find(t => String(t.id) === String(values.rollupTierId)) : null;
   const glassTier = values.glassTierId != null ? glassPriceTiers.find(t => String(t.id) === String(values.glassTierId)) : null;
   const numberTier = values.numberTierId != null ? numberPriceTiers.find(t => String(t.id) === String(values.numberTierId)) : null;
+  const graphicsTier = values.graphicsTierId != null ? graphicsPriceTiers.find(t => String(t.id) === String(values.graphicsTierId)) : null;
 
   // Calculate price multiplier based on payment key
   const installmentSurchargePct = (parseFloat(config?.payment_installment_surcharge_percent) || 2.5) / 100;
@@ -461,7 +476,8 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
   const isRollup = ROLLUP_TYPES.includes(values.productType);
   const isGlass = GLASS_TYPES.includes(values.productType);
   const isNumbers = NUMBER_TYPES.includes(values.productType);
-  const isFixedPrice = isKapa || isRollup || isGlass || isNumbers;
+  const isGraphics = GRAPHICS_TYPES.includes(values.productType);
+  const isFixedPrice = isKapa || isRollup || isGlass || isNumbers || isGraphics;
   const category = categoryOf(values.productType);
   const isLogo = category === "logo";
   const categoryExtras = EXTRAS_BY_CATEGORY[category] || [];
@@ -517,6 +533,7 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
     // freshly-added height/thickness row defaults to ₪0 in NumberPriceTable.jsx
     // until someone fills it in, and must never be quotable at ₪0 in the meantime.
     const numberSubs = cat.parent === "012" ? numberPriceTiers.filter((t) => Number(t.price_per_unit) > 0) : null;
+    const graphicsSubs = cat.parent === "0000" ? graphicsPriceTiers : null;
     if (kapaSubs) {
       return kapaSubs.map((t) => ({ key: `kapa-${t.id}`, image: CATEGORY_IMAGES[cat.parent], code: cat.parent, title: t.description, sub: cat.label, price: paymentAdjustedPrice(t.price), onClick: () => selectKapa(t) }));
     }
@@ -528,6 +545,9 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
     }
     if (numberSubs) {
       return numberSubs.map((t) => ({ key: `number-${t.id}`, image: CATEGORY_IMAGES[cat.parent], code: PRODUCT_CODES[t.product_type] || cat.parent, title: `${PRODUCT_NAMES[t.product_type]} — ${t.height_cm} ס"מ / ${t.thickness_mm} מ"מ`, sub: cat.label, price: paymentAdjustedPrice(t.price_per_unit), onClick: () => selectNumberTier(t) }));
+    }
+    if (graphicsSubs) {
+      return graphicsSubs.map((t) => ({ key: `graphics-${t.id}`, image: CATEGORY_IMAGES[cat.parent], code: cat.parent, title: t.description, sub: cat.label, price: paymentAdjustedPrice(t.price), onClick: () => selectGraphics(t) }));
     }
     return cat.subs.map((pt) => ({ key: pt, image: CATEGORY_IMAGES[cat.parent], code: PRODUCT_CODES[pt], title: PRODUCT_NAMES[pt], sub: cat.label, price: null, onClick: () => selectSub(pt) }));
   }).filter((entry) => `${entry.title} ${entry.code} ${entry.sub}`.toLowerCase().includes(pickerSearchQuery)) : [];
@@ -615,6 +635,7 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
               const rollupSubs = cat.parent === "009" ? rollupPriceTiers : null;
               const glassSubs = cat.parent === "010" ? glassPriceTiers : null;
               const numberSubs = cat.parent === "012" ? numberPriceTiers.filter((t) => Number(t.price_per_unit) > 0) : null;
+              const graphicsSubs = cat.parent === "0000" ? graphicsPriceTiers : null;
               const [, accentBg] = (CATEGORY_ACCENT[cat.parent] || "border-slate-300 bg-black").split(" ");
               return (
                 <div>
@@ -697,6 +718,21 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
                               <span className="text-lg font-semibold text-slate-700 truncate">{PRODUCT_NAMES[t.product_type]} — {t.height_cm} ס"מ / {t.thickness_mm} מ"מ</span>
                             </div>
                             <span className="text-lg font-bold text-amber-600 shrink-0">₪{paymentAdjustedPrice(t.price_per_unit)}</span>
+                          </button>
+                        ))
+                      : graphicsSubs
+                      ? graphicsSubs.map((t) => (
+                          <button
+                            type="button"
+                            key={t.id}
+                            onClick={() => selectGraphics(t)}
+                            className="w-full flex items-center justify-between gap-3 px-4 py-1.5 text-right hover:bg-amber-50 transition-colors"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <span className="text-base font-mono text-slate-400 w-14 shrink-0">{cat.parent}</span>
+                              <span className="text-lg font-semibold text-slate-700 truncate">{t.description}</span>
+                            </div>
+                            <span className="text-lg font-bold text-amber-600 shrink-0">₪{paymentAdjustedPrice(t.price)}</span>
                           </button>
                         ))
                       : cat.subs.map((pt) => (
@@ -866,14 +902,17 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
     : isRollup && rollupTier ? rollupTier.description
     : isGlass && glassTier ? glassTier.description
     : isNumbers && numberTier ? `${PRODUCT_NAMES[numberTier.product_type]} — ${numberTier.height_cm} ס"מ / ${numberTier.thickness_mm} מ"מ`
+    : isGraphics && graphicsTier ? graphicsTier.description
     : PRODUCT_NAMES[values.productType];
   const skuCode = isKapa ? "008"
     : isRollup ? PRODUCT_CODES[values.productType]
     : isGlass ? "010"
+    : isGraphics ? "0000"
     : PRODUCT_CODES[values.productType];
   const skuImg = isKapa ? CATEGORY_IMAGES["008"]
     : isRollup ? CATEGORY_IMAGES[PRODUCT_CODES[values.productType]]
     : isGlass ? CATEGORY_IMAGES["010"]
+    : isGraphics ? CATEGORY_IMAGES["0000"]
     : CATEGORY_IMAGES[PRODUCT_CODES[values.productType]?.split("-")[0]];
 
   // Note: this component used to have its own "אישור פרטי מוצר" lock/confirm

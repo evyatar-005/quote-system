@@ -111,6 +111,13 @@ for (const col of [
 }
 
 
+// Payment-webhook signing secret + structured notification payload — both
+// added after morning_credentials/notifications already shipped, so existing
+// DBs need the column added explicitly (schema.sql's CREATE TABLE IF NOT
+// EXISTS only applies to a brand-new table).
+try { db.exec('ALTER TABLE morning_credentials ADD COLUMN webhook_secret TEXT'); } catch (_) {}
+try { db.exec('ALTER TABLE notifications ADD COLUMN payload_json TEXT'); } catch (_) {}
+
 // Add stand/mechanism cost column to roll-up tiers if it doesn't exist yet.
 try { db.exec('ALTER TABLE signshop_rollup_tiers ADD COLUMN stand_cost REAL NOT NULL DEFAULT 0'); } catch (_) {}
 

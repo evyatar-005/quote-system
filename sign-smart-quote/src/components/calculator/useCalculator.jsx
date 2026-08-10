@@ -115,7 +115,7 @@ function perspexBoardMaterialCostPerSqm(config, productType, thicknessMm) {
   return (parseFloat(config?.[key]) || 0) * T;
 }
 
-export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknessMm, quantity = 1, productType, region = 'מרכז', includeInstallation = 'yes', delivery = 'pickup', priceTiers = [], stickerPriceTiers = [], paintSurchargeTiers = [], kapaPriceTiers = [], kapaTierId = null, rollupPriceTiers = [], rollupTierId = null, lokobondAreaTiers = [], glassPriceTiers = [], glassTierId = null, numberPriceTiers = [], numberTierId = null, cutType = 'straight', standardShelves = 0, customShelves = 0, elements, extras = [], enforceMinimumPrice = true, customPricePerSqm = null, orderAreaOverride = null }) {
+export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknessMm, quantity = 1, productType, region = 'מרכז', includeInstallation = 'yes', delivery = 'pickup', priceTiers = [], stickerPriceTiers = [], paintSurchargeTiers = [], kapaPriceTiers = [], kapaTierId = null, rollupPriceTiers = [], rollupTierId = null, lokobondAreaTiers = [], glassPriceTiers = [], glassTierId = null, numberPriceTiers = [], numberTierId = null, graphicsPriceTiers = [], graphicsTierId = null, cutType = 'straight', standardShelves = 0, customShelves = 0, elements, extras = [], enforceMinimumPrice = true, customPricePerSqm = null, orderAreaOverride = null }) {
   const W = widthM != null && widthM !== '' ? parseFloat(widthM) : (parseFloat(widthCm) || 0) / 100;
   const H = heightM != null && heightM !== '' ? parseFloat(heightM) : (parseFloat(heightCm) || 0) / 100;
   // A dimension must be a real positive number — "0", a blank field, or a
@@ -135,12 +135,15 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
   // sends a fixed placeholder thicknessMm (just a price-tier lookup key, same
   // as lokobond's fixed "3"), same reasoning as the lokobond exclusion below.
   const isPvcCarpet = productType === 'pvc_carpet';
+  // Graphics (0000) — flat design-work time, sold as a fixed-price catalog row
+  // like kapa/glass/numbers. No dimensions, no cost model (yet).
+  const isGraphics = productType === 'graphics';
   if (!config) return null;
-  // Kapa / roll-up / glass are fixed-price catalog items chosen directly (מחיר קבוע × כמות) —
+  // Kapa / roll-up / glass / graphics are fixed-price catalog items chosen directly (מחיר קבוע × כמות) —
   // no dimensions needed. Everything else still needs width/height (+ thickness for logo/foamex).
   // Lokobond has a fixed 3mm thickness — the form always sends it, but don't require it here.
-  if (!isKapa && !isRollup && !isGlass && !isNumbers && (!hasWidth || !hasHeight)) return null;
-  if (!isSticker && !isKapa && !isRollup && !isLokobond && !isGlass && !isPvcCarpet && !isNumbers && !thicknessMm) return null;
+  if (!isKapa && !isRollup && !isGlass && !isNumbers && !isGraphics && (!hasWidth || !hasHeight)) return null;
+  if (!isSticker && !isKapa && !isRollup && !isLokobond && !isGlass && !isPvcCarpet && !isNumbers && !isGraphics && !thicknessMm) return null;
 
   const Q = parseInt(quantity) || 1;
   const area = (W || 0) * (H || 0);
@@ -465,6 +468,54 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
       isKapa: false,
       isRollup: false,
       productFamily: 'numbers',
+      breakdown: {
+        salesAgentCommissionCost: round(salesAgentCommissionCost),
+        marketingCommissionCost: round(marketingCommissionCost),
+      },
+    };
+  }
+
+  // --- GRAPHICS PATH (0000) — flat design-work time, fixed price × quantity.
+  // No cost model yet (explicit request) — same never-price-silently
+  // guarantee as the other fixed-price families: the picker only ever offers
+  // rows that already have a real price set, so `tier` is guaranteed here. ---
+  if (isGraphics) {
+    const tier = graphicsTierId != null ? graphicsPriceTiers.find(t => String(t.id) === String(graphicsTierId)) : null;
+    if (!tier) return null;
+
+    const sellingPricePerUnit = parseFloat(tier.price) || 0;
+    const sellingPriceAll = sellingPricePerUnit * Q;
+
+    const salesAgentCommissionCost = sellingPriceAll * (parseFloat(config.sales_agent_commission_percent) || 0) / 100;
+    const marketingCommissionCost = sellingPriceAll * (parseFloat(config.marketing_commission_percent) || 0) / 100;
+    const totalCostAll = salesAgentCommissionCost + marketingCommissionCost;
+
+    const profitPerUnit = (sellingPriceAll - totalCostAll) / Q;
+    const profitMarginPct = sellingPriceAll > 0 ? ((sellingPriceAll - totalCostAll) / sellingPriceAll) * 100 : 0;
+    const priceWithVat = sellingPriceAll * (1 + (parseFloat(config.vat_percent) || 18) / 100);
+
+    return {
+      area: 0,
+      totalArea: 0,
+      graphicsDescription: tier.description,
+      rawMaterialCost: 0,
+      rawMaterialBeforeWaste: 0,
+      wasteAmount: 0,
+      laborCost: 0,
+      overheadCost: 0,
+      baseCost: 0,
+      totalCostPerUnit: round(totalCostAll / Q),
+      totalCostAll: round(totalCostAll),
+      sellingPricePerUnit: round(sellingPricePerUnit),
+      sellingPriceAll: round(sellingPriceAll),
+      profitPerUnit: round(profitPerUnit),
+      profitMarginPct: round(profitMarginPct),
+      priceWithVat: round(priceWithVat),
+      extrasBreakdown: [],
+      isSticker: false,
+      isKapa: false,
+      isRollup: false,
+      productFamily: 'graphics',
       breakdown: {
         salesAgentCommissionCost: round(salesAgentCommissionCost),
         marketingCommissionCost: round(marketingCommissionCost),

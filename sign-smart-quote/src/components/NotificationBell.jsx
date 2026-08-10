@@ -1,18 +1,27 @@
 import { useState, useEffect, useRef } from "react";
-import { Bell, CheckCircle2, XCircle, Send, Clock, Loader2, X, Trash2 } from "lucide-react";
+import { Bell, CheckCircle2, XCircle, Send, Clock, Loader2, X, Trash2, Wallet, FileDown, PackagePlus } from "lucide-react";
 import { base44 } from "@/api/base44Client";
-import { issueQuoteToMorning } from "@/api/morningClient";
+import { issueQuoteToMorning, convertMorningDocument } from "@/api/morningClient";
 import { toast } from "sonner";
 
 // 'sent' = an agent sent a quote for review — lands on every admin, created
 // server-side by notifyAdminsOfSentQuote (src/services/notifyAdmins.js).
-const TYPE_ICON = { approved: CheckCircle2, rejected: XCircle, sent: Clock };
-const TYPE_COLOR = { approved: "text-emerald-400", rejected: "text-red-400", sent: "text-amber-400" };
+// 'payment_received' = a payment link (createPaymentForm) got paid — created
+// server-side by notifyPaymentReceived, triggered by the Morning
+// payment/received webhook (see routes/morning.js).
+const TYPE_ICON = { approved: CheckCircle2, rejected: XCircle, sent: Clock, payment_received: Wallet };
+const TYPE_COLOR = { approved: "text-emerald-400", rejected: "text-red-400", sent: "text-amber-400", payment_received: "text-emerald-400" };
+
+function parsePayload(n) {
+  if (!n.payload_json) return null;
+  try { return JSON.parse(n.payload_json); } catch { return null; }
+}
 
 export default function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState([]);
   const [issuingId, setIssuingId] = useState(null);
+  const [issuingOrderId, setIssuingOrderId] = useState(null);
   const ref = useRef(null);
 
   // Silent on failure (e.g. session expired — base44Client already redirects
@@ -63,6 +72,21 @@ export default function NotificationBell() {
         description: "הנתונים מוכנים לשליחה — ההנפקה תתחיל לעבוד ברגע שיהיה חשבון/מפתח API של מורנינג.",
       });
     }
+  };
+
+  // Straight from the notification to an issued order — no navigating back to
+  // the quote first. Only meaningful when the notification carries a real
+  // quote_id (always true for payment_received, generated server-side against
+  // a real quote row).
+  const handleIssueOrder = async (n) => {
+    setIssuingOrderId(n.id);
+    try {
+      await convertMorningDocument(n.quote_id, "order");
+      toast.success(`הזמנה הונפקה עבור הצעה ${n.quote_number}`);
+    } catch (err) {
+      toast.error(err?.message || "שגיאה בהנפקת ההזמנה");
+    }
+    setIssuingOrderId(null);
   };
 
   return (
@@ -125,6 +149,38 @@ export default function NotificationBell() {
                         הנפק הצעת מחיר ללקוח
                       </button>
                     )}
+                    {n.type === "payment_received" && (() => {
+                      const payload = parsePayload(n);
+                      return (
+                        <div className="flex gap-1.5">
+                          <button
+                            onClick={() => handleIssueOrder(n)}
+                            disabled={issuingOrderId === n.id}
+                            className="flex-1 flex items-center justify-center gap-1.5 text-xs py-1.5 rounded-lg border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+                          >
+                            {issuingOrderId === n.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PackagePlus className="w-3.5 h-3.5" />}
+                            הנפק הזמנה
+                          </button>
+                          {payload?.receiptUrl ? (
+                            <a
+                              href={payload.receiptUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex-1 flex items-center justify-center gap-1.5 text-xs py-1.5 rounded-lg border border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100"
+                            >
+                              <FileDown className="w-3.5 h-3.5" /> הורד קבלה
+                            </a>
+                          ) : (
+                            <span
+                              title="הקבלה עדיין לא זוהתה במורנינג — נסה שוב בעוד רגע"
+                              className="flex-1 flex items-center justify-center gap-1.5 text-xs py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-slate-400 cursor-default"
+                            >
+                              <FileDown className="w-3.5 h-3.5" /> קבלה בהמתנה
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 );
               })}

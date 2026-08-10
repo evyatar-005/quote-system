@@ -40,4 +40,26 @@ function notifyAdminsOfSentQuote(db, quote) {
     .catch((err) => console.error(`[notifyAdmins] email failed for quote #${quote.id}:`, err.message));
 }
 
-module.exports = { notifyAdminsOfSentQuote };
+// Notifies the agent who owns the quote AND every admin when a payment link
+// (createPaymentForm) actually gets paid — this is the one Morning event
+// nobody would otherwise see without manually re-checking the payment link.
+// receiptUrl is best-effort (see findReceiptDocument in services/morning/sync.js)
+// and may be null if Morning hadn't created the receipt yet by the time the
+// webhook was handled — the bell just omits the download button in that case.
+function notifyPaymentReceived(db, quote, amount, receiptUrl) {
+  const recipients = new Set();
+  if (quote.created_by) recipients.add(quote.created_by);
+  for (const admin of db.prepare(`SELECT username FROM users WHERE role = 'admin'`).all()) recipients.add(admin.username);
+  if (!recipients.size) return;
+
+  const amountStr = Number(amount || 0).toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const message = `התקבל תשלום של ₪${amountStr} עבור הצעה ${quote.quote_number} (${quote.client_name}). ניתן להנפיק הזמנה.`;
+  const payload = JSON.stringify({ receiptUrl: receiptUrl || null, amount: amount || null });
+
+  const insert = db.prepare(
+    `INSERT INTO notifications (recipient_username, quote_id, quote_number, type, message, payload_json) VALUES (?, ?, ?, 'payment_received', ?, ?)`
+  );
+  for (const username of recipients) insert.run(username, quote.id, quote.quote_number, message, payload);
+}
+
+module.exports = { notifyAdminsOfSentQuote, notifyPaymentReceived };

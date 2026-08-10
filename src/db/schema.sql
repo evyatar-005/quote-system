@@ -94,6 +94,15 @@ CREATE TABLE IF NOT EXISTS signshop_lokobond_area_tiers (
   agent_min_price_per_sqm REAL NOT NULL DEFAULT 0  -- floor of the agent-adjustable price range (0 = no range, price_per_sqm is fixed)
 );
 
+-- Graphics (0000) — flat design/graphics-work time sold as its own line item,
+-- selling price only, no cost model (yet) per explicit request.
+CREATE TABLE IF NOT EXISTS signshop_graphics_tiers (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  sku           TEXT NOT NULL DEFAULT '0000',
+  description   TEXT NOT NULL,
+  price         REAL NOT NULL DEFAULT 0
+);
+
 -- Glass (extra clear) tiers: fixed size catalog, cost + selling price set directly per size
 -- (like kapa/rollup) — no per-sqm formula, glass panels are bought pre-cut to size.
 CREATE TABLE IF NOT EXISTS signshop_glass_tiers (
@@ -214,9 +223,14 @@ CREATE TABLE IF NOT EXISTS notifications (
   recipient_username  TEXT NOT NULL,
   quote_id            INTEGER,
   quote_number        TEXT,
-  type                TEXT NOT NULL,     -- 'approved' | 'rejected' | 'sent' (agent → admin, awaiting a discount decision)
+  type                TEXT NOT NULL,     -- 'approved' | 'rejected' | 'sent' (agent → admin, awaiting a discount decision) | 'payment_received'
   message             TEXT NOT NULL,
   is_read             INTEGER NOT NULL DEFAULT 0,
+  -- Structured extras a given notification type needs beyond plain text —
+  -- e.g. 'payment_received' stores { receiptUrl, amount } here so the bell
+  -- can render a direct "הורד קבלה" link without a second API round-trip.
+  -- NULL for every type that doesn't need it.
+  payload_json        TEXT,
   created_at          TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -228,13 +242,38 @@ CREATE TABLE IF NOT EXISTS notifications (
 -- plaintext here (same trust boundary as database.sqlite itself, which is
 -- gitignored and never leaves the host) — never returned as-is over the API.
 CREATE TABLE IF NOT EXISTS morning_credentials (
-  id            INTEGER PRIMARY KEY,
-  client_id     TEXT,
-  client_secret TEXT,
-  base_url      TEXT,
-  sandbox       INTEGER NOT NULL DEFAULT 1,
-  updated_at    TEXT DEFAULT CURRENT_TIMESTAMP
+  id             INTEGER PRIMARY KEY,
+  client_id      TEXT,
+  client_secret  TEXT,
+  base_url       TEXT,
+  sandbox        INTEGER NOT NULL DEFAULT 1,
+  -- Signing secret configured for this webhook in Morning's own UI (Developer
+  -- Tools → Webhooks) — used to best-effort verify the x-webhook-signature
+  -- header on incoming payment webhooks. Optional: left blank, incoming
+  -- webhooks are still processed, just unverified.
+  webhook_secret TEXT,
+  updated_at     TEXT DEFAULT CURRENT_TIMESTAMP
 );
+
+-- One row per payment link generated via POST /payments/form (createPaymentForm
+-- in services/morning/sync.js) — lets the payment/received webhook look up
+-- which quote a payment belongs to (Morning's payload only carries its own
+-- payment id, never our quote id), and holds the resulting receipt once found.
+CREATE TABLE IF NOT EXISTS morning_payment_requests (
+  id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+  quote_id             INTEGER NOT NULL,
+  morning_payment_id   TEXT NOT NULL UNIQUE,
+  status               TEXT NOT NULL DEFAULT 'pending', -- 'pending' | 'paid'
+  amount               REAL,
+  paid_at              TEXT,
+  transaction_json     TEXT,
+  receipt_document_id  TEXT,
+  receipt_number       TEXT,
+  receipt_url          TEXT,
+  created_at           TEXT DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_morning_payment_requests_quote      ON morning_payment_requests(quote_id);
+CREATE INDEX IF NOT EXISTS idx_morning_payment_requests_payment_id ON morning_payment_requests(morning_payment_id);
 
 -- Caches local free-text client_name → Morning client id so ensureMorningClient
 -- doesn't re-search/re-create a client on every document call.

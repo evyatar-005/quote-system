@@ -25,6 +25,7 @@ const REGISTRY = {
   LokobondAreaTier:     { table: 'signshop_lokobond_area_tiers', cols: ['product_type', 'area_from', 'price_per_sqm', 'min_price', 'agent_min_price_per_sqm'] },
   GlassPriceTier:       { table: 'signshop_glass_tiers', cols: ['product_type', 'sku', 'description', 'width_cm', 'height_cm', 'cost_price', 'selling_price'] },
   NumberPriceTier:      { table: 'signshop_number_tiers', cols: ['product_type', 'height_cm', 'thickness_mm', 'price_per_unit', 'min_price'] },
+  GraphicsPriceTier:    { table: 'signshop_graphics_tiers', cols: ['sku', 'description', 'price'] },
   // Production recipes (תפ"י) — phase 1, template only, no timing.
   Station:              { table: 'production_stations',     cols: ['key', 'name', 'kind'] },
   Operation:             { table: 'production_operations',   cols: ['key', 'name'] },
@@ -35,7 +36,7 @@ const REGISTRY = {
 // Which entities require admin for writes.
 const ADMIN_WRITE = new Set([
   'PriceTier', 'StickerPriceTier', 'PaintSurchargeTier',
-  'LightboxSizeTier', 'LightboxSellingPrice', 'PricingConfig', 'KapaPriceTier', 'RollupPriceTier', 'LokobondAreaTier', 'GlassPriceTier', 'NumberPriceTier',
+  'LightboxSizeTier', 'LightboxSellingPrice', 'PricingConfig', 'KapaPriceTier', 'RollupPriceTier', 'LokobondAreaTier', 'GlassPriceTier', 'NumberPriceTier', 'GraphicsPriceTier',
 ]);
 
 // Production recipe (תפ"י) entities: editable by 'operations' role staff

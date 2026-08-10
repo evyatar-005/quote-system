@@ -3,8 +3,10 @@
 //
 // deps: { requireAuth, requireAdmin }
 
+const crypto = require('crypto');
 const sync = require('../services/morning/sync');
 const { DOCUMENT_TYPE } = require('../services/morning/mappings');
+const { notifyPaymentReceived } = require('../services/notifyAdmins');
 
 module.exports = function registerMorning(app, db, deps) {
   const { requireAuth, requireAdmin } = deps;
@@ -21,24 +23,28 @@ module.exports = function registerMorning(app, db, deps) {
       client_secret_masked: row && row.client_secret ? '••••' + row.client_secret.slice(-4) : '',
       sandbox: !!(row && row.sandbox),
       base_url: (row && row.base_url) || '',
+      webhook_secret_masked: row && row.webhook_secret ? '••••' + row.webhook_secret.slice(-4) : '',
     });
   });
 
   // ── PUT /api/morning/config ───────────────────────────────────────────────
   app.put('/api/morning/config', requireAdmin, (req, res) => {
-    const { client_id, client_secret, sandbox, base_url } = req.body || {};
+    const { client_id, client_secret, sandbox, base_url, webhook_secret } = req.body || {};
     const existing = credRow.get();
     // Blank/omitted secret means "leave it as-is" — lets an admin update
     // client_id/base_url/sandbox without having to re-paste the secret.
     const secretToStore = (client_secret && client_secret.trim())
       ? client_secret.trim()
       : (existing ? existing.client_secret : null);
+    const webhookSecretToStore = (webhook_secret && webhook_secret.trim())
+      ? webhook_secret.trim()
+      : (existing ? existing.webhook_secret : null);
 
     db.prepare(
-      `INSERT INTO morning_credentials (id, client_id, client_secret, base_url, sandbox) VALUES (1, ?, ?, ?, ?)
+      `INSERT INTO morning_credentials (id, client_id, client_secret, base_url, sandbox, webhook_secret) VALUES (1, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET client_id=excluded.client_id, client_secret=excluded.client_secret,
-         base_url=excluded.base_url, sandbox=excluded.sandbox, updated_at=CURRENT_TIMESTAMP`
-    ).run(client_id || null, secretToStore, base_url || null, sandbox ? 1 : 0);
+         base_url=excluded.base_url, sandbox=excluded.sandbox, webhook_secret=excluded.webhook_secret, updated_at=CURRENT_TIMESTAMP`
+    ).run(client_id || null, secretToStore, base_url || null, sandbox ? 1 : 0, webhookSecretToStore);
 
     console.log(`[PUT /api/morning/config] client_id="${client_id || ''}" sandbox=${!!sandbox}`);
     res.json({ ok: true });
@@ -123,6 +129,63 @@ module.exports = function registerMorning(app, db, deps) {
     } catch (err) {
       res.status(400).json({ error: err.message });
     }
+  });
+
+  // ── POST /api/morning/webhooks/payment-received ──────────────────────────
+  // Public — Morning calls this directly (configured in their web UI under
+  // Developer Tools → Webhooks, event "payment/received"; there's no API to
+  // register it, see docs/morning-api-reference.md). No requireAuth: Morning
+  // has no session cookie to send. Verified instead by the HMAC signature
+  // Morning attaches (x-webhook-signature) when a webhook_secret is configured
+  // in "הגדרות מורנינג" — matching the same secret set on Morning's side.
+  //
+  // Acks 2xx immediately (Morning retries on timeout/failure, and the receipt
+  // lookup below can take several seconds) — the actual work happens after
+  // the response is sent.
+  app.post('/api/morning/webhooks/payment-received', (req, res) => {
+    const row = credRow.get();
+    const secret = row && row.webhook_secret;
+    if (secret) {
+      const signature = req.get('x-webhook-signature');
+      if (signature) {
+        // Best-effort check: Morning's exact HMAC scheme (payload encoding,
+        // digest format) isn't confirmed against a real delivery yet, so a
+        // mismatch is logged, not rejected — refusing to process a genuine
+        // payment because of an unconfirmed signature scheme would be worse
+        // than accepting an unverified one. Tighten this once a real
+        // delivery's signature has been checked against this computation.
+        try {
+          const computed = crypto.createHmac('sha256', secret).update(JSON.stringify(req.body)).digest('base64');
+          if (computed !== signature) console.warn('[morning webhook] signature mismatch — processing anyway');
+        } catch (err) {
+          console.warn('[morning webhook] signature check error:', err.message);
+        }
+      } else {
+        console.warn('[morning webhook] webhook_secret is configured but no x-webhook-signature header was sent');
+      }
+    }
+
+    res.status(200).json({ ok: true });
+
+    sync.handlePaymentReceived(db, req.body)
+      .then((result) => {
+        if (result) notifyPaymentReceived(db, result.quote, result.amount, result.receiptUrl);
+      })
+      .catch((err) => console.error('[POST /api/morning/webhooks/payment-received] failed:', err.message));
+  });
+
+  // ── GET /api/morning/quotes/:id/payment-status ────────────────────────────
+  // Latest payment-link status for this quote (pending/paid + receipt once
+  // found) — powers the "שולם"/"הורד קבלה" UI without re-deriving it from the
+  // notification bell, which a manager may have already cleared.
+  app.get('/api/morning/quotes/:id/payment-status', requireAuth, (req, res) => {
+    if (!loadOwnedQuote(req, res)) return;
+    const row = db.prepare(
+      `SELECT * FROM morning_payment_requests WHERE quote_id = ? ORDER BY id DESC LIMIT 1`
+    ).get(req.params.id);
+    res.json(row
+      ? { status: row.status, amount: row.amount, paidAt: row.paid_at, receiptUrl: row.receipt_url, receiptNumber: row.receipt_number }
+      : { status: null });
   });
 
   // ── GET /api/morning/quotes/:id/history ───────────────────────────────────

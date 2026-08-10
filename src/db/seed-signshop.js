@@ -188,6 +188,12 @@ const GLASS_TIERS = [
   ['glass_extra_clear', 'GLASS-100X100', 'זכוכית אקסטרה קליר 100×100', 100, 100, 179.90, 690.00],
 ];
 
+// Graphics (0000) — flat design-work line item, price only, no cost model yet.
+const GRAPHICS_TIERS = [
+  ['0000', 'שעת גרפיקה', 180],
+  ['0000', 'חצי שעת גרפיקה', 50],
+];
+
 function seedSignshop(db) {
   const isEmpty = (table) => db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get().n === 0;
   const summary = [];
@@ -233,6 +239,11 @@ function seedSignshop(db) {
       const ins = db.prepare(`INSERT INTO signshop_glass_tiers (product_type, sku, description, width_cm, height_cm, cost_price, selling_price) VALUES (?, ?, ?, ?, ?, ?, ?)`);
       for (const r of GLASS_TIERS) ins.run(...r);
       summary.push(`signshop_glass_tiers: ${GLASS_TIERS.length} שורות`);
+    }
+    if (isEmpty('signshop_graphics_tiers')) {
+      const ins = db.prepare(`INSERT INTO signshop_graphics_tiers (sku, description, price) VALUES (?, ?, ?)`);
+      for (const r of GRAPHICS_TIERS) ins.run(...r);
+      summary.push(`signshop_graphics_tiers: ${GRAPHICS_TIERS.length} שורות`);
     }
     if (isEmpty('signshop_lightbox_selling_prices')) {
       const ins = db.prepare(`INSERT INTO signshop_lightbox_selling_prices (sub_type, size_label, selling_base_price, selling_price_per_sqm) VALUES (?, ?, ?, ?)`);

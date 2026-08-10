@@ -22,11 +22,12 @@ export default function AdminCalculatorTest({ config, allowedProducts }) {
   const [lokobondAreaTiers, setLokobondAreaTiers] = useState([]);
   const [glassPriceTiers, setGlassPriceTiers] = useState([]);
   const [numberPriceTiers, setNumberPriceTiers] = useState([]);
+  const [graphicsPriceTiers, setGraphicsPriceTiers] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
 
   const loadTiers = async () => {
     setRefreshing(true);
-    const [price, sticker, paint, kapa, rollup, lokobondArea, glass, numbers] = await Promise.all([
+    const [price, sticker, paint, kapa, rollup, lokobondArea, glass, numbers, graphics] = await Promise.all([
       base44.entities.PriceTier.list(),
       base44.entities.StickerPriceTier.list(),
       base44.entities.PaintSurchargeTier.list(),
@@ -35,6 +36,7 @@ export default function AdminCalculatorTest({ config, allowedProducts }) {
       base44.entities.LokobondAreaTier.list(),
       base44.entities.GlassPriceTier.list(),
       base44.entities.NumberPriceTier.list(),
+      base44.entities.GraphicsPriceTier.list(),
     ]);
     setPriceTiers(price);
     setStickerPriceTiers(sticker);
@@ -44,6 +46,7 @@ export default function AdminCalculatorTest({ config, allowedProducts }) {
     setLokobondAreaTiers(lokobondArea);
     setGlassPriceTiers(glass);
     setNumberPriceTiers(numbers);
+    setGraphicsPriceTiers(graphics);
     setRefreshing(false);
   };
 
@@ -63,12 +66,12 @@ export default function AdminCalculatorTest({ config, allowedProducts }) {
   }, []);
 
   let result = null;
-  try { result = config ? calculate({ config, priceTiers, stickerPriceTiers, paintSurchargeTiers, kapaPriceTiers, rollupPriceTiers, lokobondAreaTiers, glassPriceTiers, numberPriceTiers, ...form }) : null; } catch(e) { console.error('calculate error:', e); }
+  try { result = config ? calculate({ config, priceTiers, stickerPriceTiers, paintSurchargeTiers, kapaPriceTiers, rollupPriceTiers, lokobondAreaTiers, glassPriceTiers, numberPriceTiers, graphicsPriceTiers, ...form }) : null; } catch(e) { console.error('calculate error:', e); }
 
   // Recalculate whenever tiers or form changes
   useEffect(() => {
     if (result) console.log('Calculation result:', result);
-  }, [result, priceTiers, stickerPriceTiers, paintSurchargeTiers, kapaPriceTiers, rollupPriceTiers, lokobondAreaTiers, glassPriceTiers, numberPriceTiers, form, config]);
+  }, [result, priceTiers, stickerPriceTiers, paintSurchargeTiers, kapaPriceTiers, rollupPriceTiers, lokobondAreaTiers, glassPriceTiers, numberPriceTiers, graphicsPriceTiers, form, config]);
 
   return (
     <Card className="shadow-sm">
@@ -90,7 +93,7 @@ export default function AdminCalculatorTest({ config, allowedProducts }) {
             <span className="text-sm font-semibold">עדכן</span>
           </Button>
         </div>
-        <CalculatorForm values={form} onChange={setForm} allowedProducts={allowedProducts} kapaPriceTiers={kapaPriceTiers} rollupPriceTiers={rollupPriceTiers} glassPriceTiers={glassPriceTiers} numberPriceTiers={numberPriceTiers} unitPriceExVat={result ? result.sellingPricePerUnit : null} priceRangeMin={result ? result.priceRangeMin : null} priceRangeMax={result ? result.priceRangeMax : null} />
+        <CalculatorForm values={form} onChange={setForm} allowedProducts={allowedProducts} kapaPriceTiers={kapaPriceTiers} rollupPriceTiers={rollupPriceTiers} glassPriceTiers={glassPriceTiers} numberPriceTiers={numberPriceTiers} graphicsPriceTiers={graphicsPriceTiers} unitPriceExVat={result ? result.sellingPricePerUnit : null} priceRangeMin={result ? result.priceRangeMin : null} priceRangeMax={result ? result.priceRangeMax : null} />
         
         <div className="space-y-4">
           {/* מחיר למ"ר - למדבקות בלבד */}

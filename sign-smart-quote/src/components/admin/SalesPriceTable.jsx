@@ -10,6 +10,7 @@ import RollupPriceTable from "./RollupPriceTable";
 import LokobondAreaPriceTable from "./LokobondAreaPriceTable";
 import GlassPriceTable from "./GlassPriceTable";
 import NumberPriceTable from "./NumberPriceTable";
+import GraphicsPriceTable from "./GraphicsPriceTable";
 import AdminCalculatorTest from "./AdminCalculatorTest";
 import LightboxCalculator from "../calculator/LightboxCalculator";
 import CollapsibleSection from "./CollapsibleSection";
@@ -69,6 +70,7 @@ const ITEMS = [
   { key: "011", sku: "011", label: "ארגז מואר", badgeClass: "bg-amber-100 text-amber-700", ringClass: "border-amber-400/60 bg-amber-50 shadow-amber-100", image: lightbox003 },
   { key: "012", sku: "012", label: "חיתוך מספרים בלייזר", badgeClass: "bg-orange-100 text-orange-700", ringClass: "border-orange-400/60 bg-orange-50 shadow-orange-100", image: numbers012 },
   { key: "013", sku: "013", label: "שטיח פיויסי", badgeClass: "bg-fuchsia-100 text-fuchsia-700", ringClass: "border-fuchsia-400/60 bg-fuchsia-50 shadow-fuchsia-100", image: pvcCarpet013 },
+  { key: "0000", sku: "0000", label: "גרפיקה", badgeClass: "bg-slate-100 text-slate-700", ringClass: "border-slate-400/60 bg-slate-50 shadow-slate-100", image: null },
 ];
 
 // מוצרים חדשים שטרם הוגדרו — מק"ט שמור, מסכי ניהול קיימים אבל ריקים.
@@ -298,6 +300,17 @@ export default function SalesPriceTable({ config, onConfigChange }) {
           </CollapsibleSection>
           <CollapsibleSection title="בדיקת מחשבון" defaultOpen={false}>
             <AdminCalculatorTest config={config} allowedProducts={["pvc_carpet"]} />
+          </CollapsibleSection>
+          </div>
+        )}
+
+        {selected === "0000" && (
+          <div className="mt-5 flex flex-wrap gap-3 items-start">
+          <CollapsibleSection title="טבלת מחירי גרפיקה">
+            <GraphicsPriceTable />
+          </CollapsibleSection>
+          <CollapsibleSection title="בדיקת מחשבון" defaultOpen={false}>
+            <AdminCalculatorTest config={config} allowedProducts={["graphics"]} />
           </CollapsibleSection>
           </div>
         )}
