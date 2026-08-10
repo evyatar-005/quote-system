@@ -289,7 +289,7 @@ export default function QuotesAnalytics({ quotes, sellers, morningDocs = {} }) {
             <XAxis dataKey="name" tick={{ fontSize: 11 }} />
             <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `₪${(v / 1000).toFixed(0)}k`} />
             <Tooltip {...tooltipProps} />
-            <Bar dataKey="closedNetSales" name="מכירה נטו" fill="#C9A84C" radius={[6, 6, 0, 0]} />
+            <Bar dataKey="closedNetSales" name="מכירה נטו" fill="#C9A84C" radius={[6, 6, 0, 0]} maxBarSize={36} />
           </BarChart>
         </ChartBox>
 
@@ -373,6 +373,7 @@ export default function QuotesAnalytics({ quotes, sellers, morningDocs = {} }) {
                 stackId="units"
                 fill={SERIES_COLORS[i % SERIES_COLORS.length]}
                 radius={i === productTypes.length - 1 ? [6, 6, 0, 0] : 0}
+                maxBarSize={36}
               />
             ))}
           </BarChart>

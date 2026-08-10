@@ -99,7 +99,7 @@ function ProductMetricCard({ title, subtitle, orders, metricKey }) {
                   labelFormatter={(sku) => rows.find((r) => r.sku === sku)?.label || sku}
                   contentStyle={{ direction: "rtl", borderRadius: 12, border: "1px solid #000", fontSize: 12 }}
                 />
-                <Bar dataKey={metricKey} radius={[6, 6, 0, 0]}>
+                <Bar dataKey={metricKey} radius={[6, 6, 0, 0]} maxBarSize={36}>
                   {rows.map((r, i) => (
                     <Cell key={r.type} fill={SERIES_COLORS[i % SERIES_COLORS.length]} />
                   ))}
@@ -254,7 +254,7 @@ function ProductPieCard({ orders }) {
                     labelFormatter={(sku) => rows.find((r) => r.sku === sku)?.label || sku}
                     contentStyle={{ direction: "rtl", borderRadius: 12, border: "1px solid #000", fontSize: 12 }}
                   />
-                  <Bar dataKey={metricKey} radius={[6, 6, 0, 0]}>
+                  <Bar dataKey={metricKey} radius={[6, 6, 0, 0]} maxBarSize={36}>
                     {rows.map((r, i) => (
                       <Cell key={r.type} fill={SERIES_COLORS[i % SERIES_COLORS.length]} />
                     ))}
