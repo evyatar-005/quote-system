@@ -474,6 +474,20 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
         });
       });
     });
+    // documentMinimumPrice (grandTotal) is a floor applied on top of the raw
+    // per-product prices above. Morning must still see the real charged
+    // amount, but the top-up is never called out as its own line — the
+    // customer isn't told "minimum order" was applied. Instead it's folded
+    // silently into the last product line's unit price. Convert the
+    // cash/incl-VAT/incl-installments shortfall back to the same pre-VAT,
+    // pre-installment-surcharge basis the other unitPrice values are in.
+    // (Only the agent sees the minimum was hit — via the CostResults/
+    // SalesResults badges in this app, never in the Morning document.)
+    if (docMinTopUpCash > 0.01 && lines.length > 0) {
+      const topUpPreVat = docMinTopUpCash / (vatMultiplier * orderMultiplier);
+      const lastLine = lines[lines.length - 1];
+      lastLine.unitPrice = (lastLine.unitPrice || 0) + topUpPreVat / (lastLine.quantity || 1);
+    }
     // משלוח/איסוף עצמי — תמיד שורה משלו במורנינג, גם כשאיסוף עצמי (מחיר 0),
     // כדי שהמסמך ישקף איך הלקוח מקבל את ההזמנה, וגם שסכום השורות יכלול בפועל
     // את עלות המשלוח (לא רק את מחירי המוצרים). משלוח כולל את כתובת הלקוח
@@ -489,22 +503,6 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
       unitPrice: delivery === "shipping" ? (parseFloat(shipping) || 0) : 0,
       sku: delivery === "shipping" ? "משלוח" : "איסוף עצמי",
     });
-    // documentMinimumPrice (grandTotal) is a floor applied on top of the raw
-    // per-product prices above — without this line, Morning would only ever
-    // see the raw (below-minimum) sum and issue a document under the real
-    // charged amount. Convert the cash/incl-VAT/incl-installments shortfall
-    // back to the same pre-VAT, pre-installment-surcharge basis the other
-    // unitPrice values above are in.
-    if (docMinTopUpCash > 0.01) {
-      lines.push({
-        groupLabel: null,
-        description: "השלמה למחיר מינימום להזמנה",
-        freeText: "",
-        quantity: 1,
-        unitPrice: docMinTopUpCash / (vatMultiplier * orderMultiplier),
-        sku: null,
-      });
-    }
     return lines;
   };
 
