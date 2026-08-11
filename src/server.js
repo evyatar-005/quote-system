@@ -23,6 +23,8 @@ const registerInbox    = require('./routes/inbox');
 const registerWhatsapp  = require('./routes/whatsapp');
 const registerCampaigns = require('./routes/campaigns');
 const registerMyDay    = require('./routes/myDay');
+const registerLeadQueue = require('./routes/leadQueue');
+const registerDrive     = require('./routes/drive');
 const { startCrmJobs } = require('./services/crm/jobs');
 const { startReportScheduler } = require('./services/reports/scheduledReports');
 const deliveryNotesReport = require('./services/reports/deliveryNotesReport');
@@ -105,8 +107,29 @@ for (const col of [
   // NULL on quotes saved before this existed (duplicate falls back to
   // client-fields-only prefill for those).
   'ALTER TABLE signshop_quotes ADD COLUMN builder_state TEXT',
+  // 'new' | 'duplicate' | 'manager_discount' — see schema.sql. Deliberately
+  // added WITHOUT a default: SQLite backfills a DEFAULT into every existing
+  // row, which would stamp old duplicates and manager revisions as 'new' and
+  // destroy the very information the backfill below reconstructs from
+  // parent_quote_number + the notes text.
+  'ALTER TABLE signshop_quotes ADD COLUMN origin TEXT',
 ]) {
   try { db.exec(col); } catch (_) {}
+}
+
+// One-time backfill of `origin` for quotes saved before the column existed.
+// A manager revision is the only flow that writes a "תיקון להצעה …" note, so
+// that separates the two parented kinds; everything else is an original.
+try {
+  db.exec(`
+    UPDATE signshop_quotes SET origin = 'manager_discount'
+     WHERE origin IS NULL AND parent_quote_number IS NOT NULL AND notes LIKE 'תיקון להצעה%';
+    UPDATE signshop_quotes SET origin = 'duplicate'
+     WHERE origin IS NULL AND parent_quote_number IS NOT NULL;
+    UPDATE signshop_quotes SET origin = 'new' WHERE origin IS NULL;
+  `);
+} catch (err) {
+  console.error('[db] signshop_quotes.origin backfill failed:', err.message);
 }
 
 // Stores the Morning-returned PDF download link at document-creation time, so
@@ -254,6 +277,78 @@ for (const col of [
 ]) { try { db.exec(col); } catch (_) {} }
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_crm_leads_followup ON crm_leads(assigned_to, follow_up_date)`); } catch (_) {}
 
+// ─── CRM (Phase 5) — lead pull-queue + Drive materials ────────────────────
+// crm_settings / crm_leads / monday_* all already exist from earlier phases'
+// unguarded CREATE TABLE IF NOT EXISTS, so every one of these is an ALTER
+// here, never an edit to schema.sql.
+for (const col of [
+  // Requirement 3 — the "ממתין לתשובה — איחור" threshold, manager-tunable.
+  'ALTER TABLE crm_settings ADD COLUMN reply_overdue_minutes INTEGER NOT NULL DEFAULT 60',
+  // Requirement 7 — the concurrent-lead cap, manager-tunable.
+  'ALTER TABLE crm_settings ADD COLUMN max_claimed_leads     INTEGER NOT NULL DEFAULT 4',
+  // 0 = a claim never auto-expires (the intended default: a lead is freed by
+  // an outcome, not by a timer). >0 arms the sweeper in jobs.js as a safety
+  // net for an agent who leaves and never comes back.
+  'ALTER TABLE crm_settings ADD COLUMN lead_claim_ttl_hours  INTEGER NOT NULL DEFAULT 0',
+  // Requirement 5 — the manager can hide "פולואפ להיום" from agents.
+  'ALTER TABLE crm_settings ADD COLUMN agents_see_follow_ups INTEGER NOT NULL DEFAULT 1',
+
+  // The lead's REAL arrival time (monday Item.created_at), not our pull time.
+  // crm_leads.created_at is worthless for queue ordering — the existing 525
+  // rows all landed inside 4 minutes of one import.
+  'ALTER TABLE crm_leads ADD COLUMN source_created_at TEXT',
+  'ALTER TABLE monday_item_map ADD COLUMN monday_created_at TEXT',
+  // Cached [{id,title,type}] from the board, so the lead workspace can put a
+  // friendly Hebrew title on every raw_json column_value. raw_json stores
+  // only column IDs — titles exist nowhere in our DB today.
+  'ALTER TABLE monday_board_map ADD COLUMN columns_json TEXT',
+]) { try { db.exec(col); } catch (_) {} }
+
+// Covering index for the pull-queue's hot path (see leadClaims.js nextClaimable).
+try {
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_crm_leads_pool
+             ON crm_leads(status, assigned_to, source_created_at)`);
+} catch (_) {}
+
+// (A) Release the 524 monday leads from the 'monday-sync' pseudo-owner into
+// the claimable pool. Naturally idempotent — after it runs nothing matches.
+// The poller itself is fixed in mondaySync.js so this never recurs.
+try {
+  const { changes } = db.prepare(
+    `UPDATE crm_leads SET assigned_to = NULL WHERE assigned_to = 'monday-sync'`
+  ).run();
+  if (changes) console.log(`[crm] lead pool: released ${changes} lead(s) from the 'monday-sync' pseudo-owner`);
+} catch (err) {
+  console.error('[crm] monday-sync pool migration failed (continuing anyway):', err.message);
+}
+
+// (B) A mapped monday board IS a קמפיין. Nothing ever created the
+// crm_campaigns rows, so campaign_id is NULL on every board AND every lead —
+// which makes per-agent campaign restrictions a no-op. Create one campaign
+// per board, link the board, and backfill the leads through monday_item_map.
+try {
+  const boards = db.prepare(`SELECT id, board_id, board_name FROM monday_board_map WHERE campaign_id IS NULL`).all();
+  for (const b of boards) {
+    const name = b.board_name || `בורד ${b.board_id}`;
+    let camp = db.prepare(`SELECT id FROM crm_campaigns WHERE name = ?`).get(name);
+    if (!camp) {
+      const { lastInsertRowid } = db.prepare(
+        `INSERT INTO crm_campaigns (name, channel, status) VALUES (?, 'monday', 'active')`
+      ).run(name);
+      camp = { id: lastInsertRowid };
+    }
+    db.prepare(`UPDATE monday_board_map SET campaign_id = ? WHERE id = ?`).run(camp.id, b.id);
+    db.prepare(
+      `UPDATE crm_leads SET campaign_id = ?
+        WHERE campaign_id IS NULL
+          AND id IN (SELECT lead_id FROM monday_item_map WHERE board_id = ? AND lead_id IS NOT NULL)`
+    ).run(camp.id, b.board_id);
+  }
+  if (boards.length) console.log(`[crm] campaigns: linked ${boards.length} monday board(s)`);
+} catch (err) {
+  console.error('[crm] board→campaign backfill failed (continuing anyway):', err.message);
+}
+
 try {
   const { backfillMarketingConsent } = require('./services/crm/consentBackfill');
   const consentResult = backfillMarketingConsent(db);
@@ -302,6 +397,8 @@ registerInbox(app, db, { requireAuth, requireAdmin });
 registerWhatsapp(app, db, { requireAuth, requireAdmin });
 registerCampaigns(app, db, { requireAuth, requireAdmin, requireCampaigns });
 registerMyDay(app, db, { requireAuth });
+registerLeadQueue(app, db, { requireAuth, requireAdmin });
+registerDrive(app, db, { requireAuth, requireAdmin });
 
 startReportScheduler(db, {
   [deliveryNotesReport.REPORT_TYPE]: deliveryNotesReport.sendReport,

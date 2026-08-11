@@ -193,7 +193,13 @@ CREATE TABLE IF NOT EXISTS signshop_quotes (
   created_by       TEXT,
   parent_quote_number TEXT,
   viewed_at        TEXT,  -- set the first time a manager opens this quote's detail view; NULL = not yet opened
-  agent_note       TEXT   -- free-text background from the agent when sending for review; manager-only, never shown on the client-facing document
+  agent_note       TEXT,  -- free-text background from the agent when sending for review; manager-only, never shown on the client-facing document
+  -- How this quote came into being, so a list can say WHY two rows look like the
+  -- same deal. 'new' = built from scratch; 'duplicate' = "שכפל" of an existing
+  -- quote; 'manager_discount' = saved out of the manager review screen after a
+  -- discount/pricing-mode change. The last two always carry parent_quote_number
+  -- and supersede that parent in every count.
+  origin           TEXT DEFAULT 'new'
 );
 
 -- Reference images/PDFs an agent attaches when saving/sending a quote (e.g. a
@@ -866,6 +872,77 @@ CREATE TABLE IF NOT EXISTS wa_campaign_recipients (
 );
 CREATE INDEX IF NOT EXISTS idx_wa_recipients_campaign ON wa_campaign_recipients(campaign_id, status);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_wa_recipients_unique ON wa_campaign_recipients(campaign_id, phone_e164);
+
+-- ════════════════════════════════════════════════════════════════════════════
+-- CRM — Phase 5: the lead pull-queue ("משוך ליד"), per-agent campaign scoping,
+-- and the Drive-backed marketing-materials sender.
+--
+-- The claim model mirrors Phase 3's conversation locking, with ONE difference:
+-- a conversation lock is a 2-minute heartbeat; a lead claim is an OUTCOME
+-- lock — released when the agent produces a result (follow-up / lost / quote),
+-- not when they stop typing. Hence expires_at is NULLABLE here.
+-- ════════════════════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS crm_lead_claims (
+  lead_id     INTEGER PRIMARY KEY REFERENCES crm_leads(id) ON DELETE CASCADE,
+  username    TEXT NOT NULL,
+  acquired_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  expires_at  TEXT              -- NULL = never auto-expires (the normal case)
+);
+CREATE INDEX IF NOT EXISTS idx_crm_lead_claims_user ON crm_lead_claims(username);
+
+-- Closed claim spans — input for "טופל לאחרונה ע״י" and agent metrics.
+CREATE TABLE IF NOT EXISTS crm_lead_handling (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  lead_id      INTEGER NOT NULL,
+  username     TEXT NOT NULL,
+  started_at   TEXT NOT NULL,
+  ended_at     TEXT,
+  end_reason   TEXT,   -- released | follow_up_set | quoted | won | lost | disqualified | expired | stolen
+  duration_sec INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_crm_lead_handling_lead ON crm_lead_handling(lead_id, id);
+CREATE INDEX IF NOT EXISTS idx_crm_lead_handling_user ON crm_lead_handling(username, started_at);
+
+-- Per-agent campaign scoping. NO rows for a username = UNRESTRICTED (draws
+-- the globally oldest lead regardless of board). One or more rows = restricted
+-- to exactly those campaigns. Allow-list only; no deny-list.
+CREATE TABLE IF NOT EXISTS crm_agent_campaigns (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  username    TEXT NOT NULL,
+  campaign_id INTEGER NOT NULL REFERENCES crm_campaigns(id) ON DELETE CASCADE,
+  created_by  TEXT,
+  created_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (username, campaign_id)
+);
+CREATE INDEX IF NOT EXISTS idx_crm_agent_campaigns_user ON crm_agent_campaigns(username);
+
+-- Google Drive — same one-row / masked-GET / blank-means-keep credential
+-- pattern as morning_credentials, greenapi_credentials, smtp_credentials.
+CREATE TABLE IF NOT EXISTS google_drive_credentials (
+  id             INTEGER PRIMARY KEY CHECK (id = 1),
+  auth_mode      TEXT NOT NULL DEFAULT 'api_key',  -- api_key | service_account (reserved)
+  api_key        TEXT,
+  root_folder_id TEXT,                              -- the link-shared "חומרי שיווק" folder
+  sa_json        TEXT,                              -- reserved for auth_mode='service_account'
+  cache_ttl_sec  INTEGER NOT NULL DEFAULT 300,
+  max_send_mb    INTEGER NOT NULL DEFAULT 16,
+  updated_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS drive_file_cache (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  folder_id     TEXT NOT NULL,
+  file_id       TEXT NOT NULL,
+  name          TEXT,
+  mime_type     TEXT,
+  size_bytes    INTEGER,
+  modified_time TEXT,
+  is_folder     INTEGER NOT NULL DEFAULT 0,
+  fetched_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (folder_id, file_id)
+);
+CREATE INDEX IF NOT EXISTS idx_drive_file_cache_folder ON drive_file_cache(folder_id, fetched_at);
 
 -- SQLite doesn't auto-index FK-like columns — these are all looked up by value.
 CREATE INDEX IF NOT EXISTS idx_notifications_recipient  ON notifications(recipient_username);

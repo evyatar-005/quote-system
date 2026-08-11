@@ -11,6 +11,7 @@ import printellaLogo from "@/assets/printella-logo.png";
 import ManagerSidebar from "@/components/layout/ManagerSidebar";
 import {
   fmt, STATUS_LABELS, CATEGORY_LABELS, CATEGORY_COLORS, MORNING_ORDER_TYPE, toLocalDateStr, formatDocNumber,
+  ORIGIN_LABELS, ORIGIN_COLORS, originOf,
 } from "@/lib/quoteLabels";
 // calculation_data stores the fine-grained productType (pvc_white, rollup_magnetic…),
 // not the coarse product_category — so names come from the calculator's canonical
@@ -518,10 +519,23 @@ export default function QuotesArchive() {
                       <td className="px-3 py-2 font-mono text-slate-500 whitespace-nowrap">{docNumber}</td>
                       <td className="px-3 py-2 whitespace-nowrap">
                         {/* Order vs quote — not the internal admin-review status
-                            (q.status), which isn't shown here at all anymore. */}
-                        <span className={`text-xs px-2 py-0.5 rounded-full ${isOrder(q) ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-500"}`}>
-                          {isOrder(q) ? "הזמנה" : "הצעת מחיר"}
-                        </span>
+                            (q.status), which isn't shown here at all anymore.
+                            A quote also says WHICH of the three kinds it is
+                            (original / duplicated / after a manager discount),
+                            so three rows that are really one deal read as such
+                            instead of looking like three separate quotes. */}
+                        {isOrder(q) ? (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600">הזמנה</span>
+                        ) : (
+                          <span
+                            className={`text-xs px-2 py-0.5 rounded-full ${ORIGIN_COLORS[originOf(q)]}`}
+                            title={q.parent_quote_number
+                              ? `${ORIGIN_LABELS[originOf(q)]} — מחליפה את ${q.parent_quote_number}`
+                              : ORIGIN_LABELS[originOf(q)]}
+                          >
+                            {ORIGIN_LABELS[originOf(q)]}
+                          </span>
+                        )}
                       </td>
                       <td className="px-3 py-2 font-bold text-primary tabular-nums whitespace-nowrap">{fmt(dealAmount(q))}</td>
                       <td className="px-3 py-2 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>

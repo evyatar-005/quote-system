@@ -884,6 +884,7 @@ export default function QuoteDetailsModal({ quote, onClose, onSaved, readOnly = 
         notes,
         status: "approved",
         parent_quote_number: quote.quote_number,
+        origin: "manager_discount",
       });
 
       // "עריכה ושמירה" = "מאשר" — מסמן את ההצעה המקורית כמאושרת ומודיע לסוכן

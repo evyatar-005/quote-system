@@ -559,7 +559,9 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
     price_with_vat: Math.round(grandTotal * 100) / 100,
     line_items: JSON.stringify(buildLineItems()),
     builder_state: JSON.stringify(buildBuilderState()),
-    ...(sourceQuoteNumber ? { parent_quote_number: sourceQuoteNumber } : {}),
+    // Opened via "שכפל" from an existing quote — the new row replaces that one
+    // everywhere it is counted, and says so on the list via `origin`.
+    ...(sourceQuoteNumber ? { parent_quote_number: sourceQuoteNumber, origin: "duplicate" } : { origin: "new" }),
     calculation_data: JSON.stringify({
       items: items.map((item, index) => ({
         index,

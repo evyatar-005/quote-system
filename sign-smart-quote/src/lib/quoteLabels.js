@@ -15,6 +15,38 @@ export const STATUS_COLORS = {
   rejected: "bg-red-50 text-red-500",
 };
 
+// Where a quote came from (signshop_quotes.origin) — a different axis from
+// `status` (draft/sent/approved/rejected), which is about its lifecycle. This
+// one answers "why does this look like the same deal as another row": a
+// duplicate and a manager revision both REPLACE the quote they came from, and
+// are the only two that carry parent_quote_number.
+export const ORIGIN_LABELS = {
+  new: "הצעת מחיר",
+  duplicate: "הצעת מחיר משוכפלת ממקור",
+  manager_discount: "הצעת מחיר לאחר הנחת מנהל",
+};
+
+export const ORIGIN_COLORS = {
+  new: "bg-slate-100 text-slate-500",
+  duplicate: "bg-amber-50 text-amber-700",
+  manager_discount: "bg-violet-50 text-violet-700",
+};
+
+// Short form for narrow rows — the full sentence above is the tooltip.
+export const ORIGIN_SHORT = {
+  new: "מקורית",
+  duplicate: "משוכפלת",
+  manager_discount: "לאחר הנחת מנהל",
+};
+
+// Rows saved before the `origin` column existed can still be classified from
+// what they do carry, so an old quote never renders a blank badge.
+export function originOf(quote) {
+  if (quote?.origin && ORIGIN_LABELS[quote.origin]) return quote.origin;
+  if (!quote?.parent_quote_number) return "new";
+  return String(quote.notes || "").startsWith("תיקון להצעה") ? "manager_discount" : "duplicate";
+}
+
 export const CATEGORY_LABELS = { logo: "לוגו", sticker: "מדבקות", kapa: "קאפה", lokobond: "לוקובונד", foamex: "פיוויסי", rollup: "רול אפ", glass: "זכוכית", lightbox: "ארגז מואר" };
 
 // Same muted Printela-brand hues used in the product picker (CalculatorForm),

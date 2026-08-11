@@ -20,7 +20,7 @@ import { Input } from "@/components/ui/input";
 import { convertMorningDocument, createPaymentLink, getLatestMorningDocuments } from "@/api/morningClient";
 import QuoteDocument from "@/components/calculator/QuoteDocument";
 import DocumentIssuedModal from "@/components/DocumentIssuedModal";
-import { MORNING_ORDER_TYPE, toLocalDateStr, DATE_PRESETS, computeDateRange, formatDocNumber } from "@/lib/quoteLabels";
+import { MORNING_ORDER_TYPE, toLocalDateStr, DATE_PRESETS, computeDateRange, formatDocNumber, ORIGIN_LABELS, ORIGIN_COLORS, originOf } from "@/lib/quoteLabels";
 import { latestRevisionsOnly } from "@/lib/quoteEconomics";
 
 const fmt = (val) =>
@@ -459,11 +459,17 @@ export default function MyQuotes() {
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-foreground">{q.client_name}</span>
                         <span className="text-xs text-slate-400 font-mono">{q.quote_number}</span>
-                        {q.parent_quote_number && (
-                          <span className="text-xs bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full">
-                            שכפול מ-{q.parent_quote_number}
-                          </span>
-                        )}
+                        {/* Which of the three kinds this row is. A duplicate and
+                            a manager revision both REPLACE the quote they name,
+                            so the agent can see at a glance that an older row of
+                            theirs is no longer the live version of the deal. */}
+                        <span
+                          className={`text-xs px-2 py-0.5 rounded-full ${ORIGIN_COLORS[originOf(q)]}`}
+                          title={ORIGIN_LABELS[originOf(q)]}
+                        >
+                          {ORIGIN_LABELS[originOf(q)]}
+                          {q.parent_quote_number && ` — מחליפה את ${q.parent_quote_number}`}
+                        </span>
                         {/* "אושרה" is no longer tied to the admin's internal review
                             decision (q.status === "approved") — an agent doesn't
                             care that a manager clicked approve, only that the

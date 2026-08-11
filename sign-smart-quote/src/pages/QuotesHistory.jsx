@@ -7,7 +7,7 @@ import { convertMorningDocument, getLatestMorningDocuments } from "@/api/morning
 import { toast } from "sonner";
 import printellaLogo from "@/assets/printella-logo.png";
 import ManagerSidebar from "@/components/layout/ManagerSidebar";
-import { fmt, STATUS_LABELS, STATUS_COLORS, CATEGORY_LABELS, CATEGORY_COLORS, MORNING_TYPE_LABELS, toLocalDateStr, formatDocNumber } from "@/lib/quoteLabels";
+import { fmt, STATUS_LABELS, STATUS_COLORS, CATEGORY_LABELS, CATEGORY_COLORS, MORNING_TYPE_LABELS, toLocalDateStr, formatDocNumber, ORIGIN_LABELS, ORIGIN_COLORS, originOf } from "@/lib/quoteLabels";
 
 const DATE_PRESETS = [
   { key: "today", label: "היום" },
@@ -452,9 +452,15 @@ export default function QuotesHistory() {
                       )}
                       <span className="font-semibold text-foreground">{q.client_name}</span>
                       <span className="text-xs text-slate-400 font-mono">{q.quote_number}</span>
-                      {q.parent_quote_number && (
-                        <span className="text-xs bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full">תיקון ל-{q.parent_quote_number}</span>
-                      )}
+                      {/* Which of the three kinds this row is — and, for the two
+                          that replace something, which quote it replaces. */}
+                      <span
+                        className={`text-xs px-2 py-0.5 rounded-full ${ORIGIN_COLORS[originOf(q)]}`}
+                        title={ORIGIN_LABELS[originOf(q)]}
+                      >
+                        {ORIGIN_LABELS[originOf(q)]}
+                        {q.parent_quote_number && ` — מחליפה את ${q.parent_quote_number}`}
+                      </span>
                       {q.product_category && (
                         <span className={`text-xs px-2 py-0.5 rounded-full ${CATEGORY_COLORS[q.product_category] || "bg-slate-100 text-slate-500"}`}>{CATEGORY_LABELS[q.product_category] || q.product_category}</span>
                       )}

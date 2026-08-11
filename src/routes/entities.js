@@ -83,6 +83,9 @@ module.exports = function registerEntities(app, db, deps) {
   // Quote columns (signshop_quotes) — resolved after ALTER at boot
   const quoteCols = db.prepare(`PRAGMA table_info(signshop_quotes)`).all().map(c => c.name);
 
+  // How a quote came into being — see schema.sql's `origin` column.
+  const QUOTE_ORIGINS = new Set(['new', 'duplicate', 'manager_discount']);
+
   // ── auth dispatch helpers ────────────────────────────────────────────────
   const writeMw = (name) => (ADMIN_WRITE.has(name) ? requireAdmin : OPERATIONS_WRITE.has(name) ? requireOperations : requireAuth);
 
@@ -182,6 +185,18 @@ module.exports = function registerEntities(app, db, deps) {
     const provided = quoteCols.filter(c => c !== 'id' && c !== 'quote_number' && c in body);
     const row = {};
     for (const c of provided) row[c] = body[c];
+    // `origin` is a closed vocabulary, and it must agree with
+    // parent_quote_number: nothing without a parent can be a duplicate or a
+    // manager revision, and anything WITH a parent is at least a duplicate.
+    // Derived here rather than trusted, so an older client that doesn't send it
+    // still lands on the right value.
+    if (quoteCols.includes('origin')) {
+      const claimed = QUOTE_ORIGINS.has(body.origin) ? body.origin : null;
+      row.origin = body.parent_quote_number
+        ? (claimed && claimed !== 'new' ? claimed : 'duplicate')
+        : 'new';
+      if (!provided.includes('origin')) provided.push('origin');
+    }
     // username, not email — email is optional on a user account in this
     // internal system (several accounts have it blank), but username never is,
     // so this is the only field guaranteed to tie a quote back to its author.
