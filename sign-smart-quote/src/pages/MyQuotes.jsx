@@ -22,6 +22,7 @@ import QuoteDocument from "@/components/calculator/QuoteDocument";
 import DocumentIssuedModal from "@/components/DocumentIssuedModal";
 import { MORNING_ORDER_TYPE, toLocalDateStr, DATE_PRESETS, computeDateRange, formatDocNumber, ORIGIN_LABELS, ORIGIN_COLORS, originOf } from "@/lib/quoteLabels";
 import { latestRevisionsOnly } from "@/lib/quoteEconomics";
+import { useAuth } from "@/lib/AuthContext";
 
 const fmt = (val) =>
   val != null ? `₪ ${Number(val).toLocaleString("he-IL", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : "—";
@@ -52,9 +53,19 @@ const TABS = [
 
 export default function MyQuotes() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const [quotes, setQuotes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [morningDocs, setMorningDocs] = useState({});
+  // Manager-only: who this list is scoped to. "" (default) = just me, exactly
+  // like every non-admin sees; a username scopes to that one agent; "__all__"
+  // drops the scope entirely. Never persisted — a manager opening this screen
+  // always starts on their own quotes, same as before this existed, and has
+  // to deliberately widen it each time.
+  const [agentScope, setAgentScope] = useState("");
+  const [agentOptions, setAgentOptions] = useState([]);
+  const [sellers, setSellers] = useState({});
   const [issuingIds, setIssuingIds] = useState(() => new Set());
   const [documentQuote, setDocumentQuote] = useState(null);
   // Raw Morning document URL currently previewed — resolved to a blob URL
@@ -70,12 +81,16 @@ export default function MyQuotes() {
   const [customFrom, setCustomFrom] = useState(toLocalDateStr(new Date()));
   const [customTo, setCustomTo] = useState(toLocalDateStr(new Date()));
 
-  const loadQuotes = async () => {
+  const loadQuotes = async (scope) => {
     setLoading(true);
-    // `own: 1` forces server-side scoping to the logged-in user's own quotes
-    // even for an admin — otherwise an admin viewing "ההצעות שלי" saw every
-    // agent's quotes too (see quoteList in routes/entities.js).
-    const data = await base44.entities.Quote.filter({ own: 1 }, "-created_date", 200);
+    // Default (scope === ""): `own: 1` forces server-side scoping to the
+    // logged-in user's own quotes even for an admin — otherwise an admin
+    // viewing "ההצעות שלי" saw every agent's quotes too on first load (see
+    // quoteList in routes/entities.js). A manager widening the scope sends
+    // either a specific created_by (one agent) or neither flag at all (every
+    // agent) — both allowed for admins server-side, never for anyone else.
+    const params = scope === "__all__" ? {} : scope ? { created_by: scope } : { own: 1 };
+    const data = await base44.entities.Quote.filter(params, "-created_date", 200);
     setQuotes(data);
     if (data.length > 0) {
       try {
@@ -88,8 +103,25 @@ export default function MyQuotes() {
   };
 
   useEffect(() => {
-    loadQuotes();
-  }, []);
+    loadQuotes(agentScope);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agentScope]);
+
+  // The scope PICKER itself — every agent who has ever created a quote, not
+  // just the ones in the currently loaded (possibly already-scoped) list.
+  // Admin-only: a non-admin has nothing to pick, they only ever see themselves.
+  useEffect(() => {
+    if (!isAdmin) return;
+    (async () => {
+      try {
+        const { users } = await base44.adminUsers.list();
+        setAgentOptions(users.filter((u) => u.username !== user.username));
+        setSellers(Object.fromEntries(users.map((u) => [u.username, u.full_name || u.username])));
+      } catch {
+        // Not fatal — the scope picker just won't have anyone to switch to.
+      }
+    })();
+  }, [isAdmin, user?.username]);
 
   // The document-proxy route needs the Bearer token, which a plain
   // <iframe src="/api/morning/document-proxy?..."> can't attach — fetch it
@@ -363,6 +395,30 @@ export default function MyQuotes() {
               </select>
               <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>
+
+            {/* Manager-only — everyone else only ever sees their own quotes,
+                so there's nothing to switch. Defaults to "" (just me) on
+                every visit, never remembered. */}
+            {isAdmin && (
+              <>
+                <span className="text-sm font-semibold text-slate-500 shrink-0 mr-2">סוכן:</span>
+                <div className="relative">
+                  <select
+                    value={agentScope}
+                    onChange={(e) => setAgentScope(e.target.value)}
+                    dir="rtl"
+                    className="h-10 rounded-lg border border-black bg-white pl-3 pr-8 text-sm text-slate-700 appearance-none"
+                  >
+                    <option value="">ההצעות שלי</option>
+                    <option value="__all__">כל הסוכנים</option>
+                    {agentOptions.map((a) => (
+                      <option key={a.username} value={a.username}>{a.full_name || a.username}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="w-4 h-4 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+                </div>
+              </>
+            )}
           </div>
           {datePreset === "custom" && (
             <div className="flex items-center gap-2">
@@ -459,6 +515,14 @@ export default function MyQuotes() {
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-foreground">{q.client_name}</span>
                         <span className="text-xs text-slate-400 font-mono">{q.quote_number}</span>
+                        {/* Only shown once the scope is widened past "just me" —
+                            a manager looking at their own quotes doesn't need
+                            to be told every row is theirs. */}
+                        {agentScope && q.created_by && (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                            {sellers[q.created_by] || q.created_by}
+                          </span>
+                        )}
                         {/* Which of the three kinds this row is. A duplicate and
                             a manager revision both REPLACE the quote they name,
                             so the agent can see at a glance that an older row of
