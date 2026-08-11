@@ -15,4 +15,15 @@ function getActiveWhatsApp(db) {
   return provider;
 }
 
-module.exports = { getActiveWhatsApp, WHATSAPP_PROVIDERS };
+// bulk_provider has existed unused on crm_settings since Phase 1 — Phase 4's
+// broadcast drainer is the first consumer. NULL/'' falls back to the 1:1
+// provider, which keeps today's behavior for anyone who never touches it.
+function getBulkWhatsApp(db) {
+  const settings = db.prepare(`SELECT whatsapp_provider, bulk_provider FROM crm_settings WHERE id = 1`).get();
+  const name = (settings && settings.bulk_provider) || (settings && settings.whatsapp_provider) || 'greenapi';
+  const provider = WHATSAPP_PROVIDERS[name];
+  if (!provider) throw new Error(`Unknown bulk WhatsApp provider: ${name}`);
+  return provider;
+}
+
+module.exports = { getActiveWhatsApp, getBulkWhatsApp, WHATSAPP_PROVIDERS };

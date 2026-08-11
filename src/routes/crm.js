@@ -14,7 +14,13 @@ module.exports = function registerCrm(app, db, deps) {
   });
   app.put('/api/crm/settings', requireAdmin, (req, res) => {
     const body = req.body || {};
-    const editable = ['whatsapp_provider', 'bulk_provider', 'telephony_provider', 'monday_poll_enabled', 'global_daily_send_cap', 'queue_min_delay_sec', 'queue_max_delay_sec', 'idle_timeout_sec', 'lock_ttl_sec', 'auto_optout_keywords'];
+    const editable = [
+      'whatsapp_provider', 'bulk_provider', 'telephony_provider', 'monday_poll_enabled',
+      'global_daily_send_cap', 'queue_min_delay_sec', 'queue_max_delay_sec', 'idle_timeout_sec',
+      'lock_ttl_sec', 'auto_optout_keywords',
+      // Phase 4 — bulk WhatsApp broadcasts (דיוור)
+      'send_window_start', 'send_window_end', 'send_days', 'optout_footer', 'optout_reply_text',
+    ];
     const row = { id: 1 };
     const setCols = [];
     for (const c of editable) {

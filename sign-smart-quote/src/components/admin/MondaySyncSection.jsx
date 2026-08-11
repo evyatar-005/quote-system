@@ -2,8 +2,10 @@ import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from "@/components/ui/command";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, Save, RefreshCw, Trash2, Plus, GitMerge } from "lucide-react";
+import { Loader2, Save, RefreshCw, Trash2, Plus, GitMerge, Check, ChevronsUpDown } from "lucide-react";
 import { toast } from "sonner";
 import { listMondayBoards } from "@/api/mondayClient";
 import { mondaySync, crmSettings } from "@/api/mondaySyncClient";
@@ -173,12 +175,7 @@ export default function MondaySyncSection() {
 
       <div className="space-y-3 border-t border-slate-200 pt-4">
         <div className="text-sm font-semibold text-slate-600">מיפוי בורד חדש</div>
-        <Select value={selectedBoardId} onValueChange={onBoardSelect}>
-          <SelectTrigger><SelectValue placeholder="בחר בורד מ-monday.com" /></SelectTrigger>
-          <SelectContent>
-            {mondayBoards.map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
-          </SelectContent>
-        </Select>
+        <BoardCombobox boards={mondayBoards} value={selectedBoardId} onChange={onBoardSelect} />
 
         {loadingColumns && <Loader2 className="w-5 h-5 animate-spin text-slate-400" />}
 
@@ -214,6 +211,45 @@ export default function MondaySyncSection() {
         )}
       </div>
     </CostSectionCard>
+  );
+}
+
+// Searchable board picker — a plain <Select> is unusable once an account has
+// dozens/hundreds of boards, so this is a Popover+Command combobox (same
+// primitives as shadcn's standard combobox recipe) instead.
+function BoardCombobox({ boards, value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const selected = boards.find((b) => b.id === value);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="outline" role="combobox" aria-expanded={open} className="w-full justify-between font-normal">
+          {selected ? selected.name : "בחר בורד מ-monday.com..."}
+          <ChevronsUpDown className="w-4 h-4 opacity-50 shrink-0" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+        <Command>
+          <CommandInput placeholder="חפש בורד לפי שם..." />
+          <CommandList>
+            <CommandEmpty>לא נמצא בורד</CommandEmpty>
+            <CommandGroup>
+              {boards.map((b) => (
+                <CommandItem
+                  key={b.id}
+                  value={b.name}
+                  onSelect={() => { onChange(b.id); setOpen(false); }}
+                >
+                  <Check className={`w-4 h-4 ${value === b.id ? "opacity-100" : "opacity-0"}`} />
+                  {b.name}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }
 

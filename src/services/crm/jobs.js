@@ -4,12 +4,18 @@
 // dependency (no node-cron/queue library).
 
 const { pullBoard, pushBoard } = require('./mondaySync');
-const { getActiveWhatsApp } = require('../channels');
+const { getActiveWhatsApp, getBulkWhatsApp } = require('../channels');
 const { publish } = require('./realtime');
 
 const POLL_TICK_MS = 60 * 1000;
 const QUEUE_TICK_MS = 5 * 1000;
 const IDLE_TICK_MS = 60 * 1000;
+
+// Module-level pacing state for bulk (priority > 10) sends — deliberately
+// in-memory, not persisted: a restart resuming immediately (one un-jittered
+// send) is strictly safer than a persisted lock that could wedge the queue
+// forever. See CLAUDE.md CRM plan Phase 4 §10.
+let nextAllowedBulkSendAt = 0;
 
 function startCrmJobs(db) {
   setInterval(() => {
@@ -25,19 +31,106 @@ function startCrmJobs(db) {
   console.log('[crm jobs] started (monday poller/pusher 60s, wa queue drainer 5s, idle sweeper 60s)');
 }
 
-// Drains one ready row per tick — highest priority (1:1 replies = 10) first.
-// Bulk-campaign pacing (random delay between sends) is added in Phase 4;
-// today every row is a 1:1 reply, so near-immediate delivery is correct.
-async function waQueueDrainerTick(db) {
-  const row = db.prepare(
-    `SELECT * FROM wa_send_queue WHERE status = 'pending' AND next_attempt_at <= CURRENT_TIMESTAMP ORDER BY priority ASC, id ASC LIMIT 1`
-  ).get();
-  if (!row) return;
+function crmSettingsRow(db) {
+  return db.prepare(`SELECT * FROM crm_settings WHERE id = 1`).get() || {};
+}
 
-  db.prepare(`UPDATE wa_send_queue SET status = 'sending', attempts = attempts + 1 WHERE id = ?`).run(row.id);
+// LOCAL time — the host is on Israel time and SQLite's CURRENT_TIMESTAMP is
+// UTC (2-3h off). Window/day checks must never use strftime('%H','now').
+function inSendWindow(s) {
+  const now = new Date();
+  const days = (s.send_days || '0,1,2,3,4').split(',').map(Number);
+  if (!days.includes(now.getDay())) return false;
+  const mins = now.getHours() * 60 + now.getMinutes();
+  const [sh, sm] = (s.send_window_start || '09:00').split(':').map(Number);
+  const [eh, em] = (s.send_window_end || '20:00').split(':').map(Number);
+  return mins >= sh * 60 + sm && mins < eh * 60 + em;
+}
+
+// Cap counting on wa_send_queue.sent_at (the actual wire event), scoped to
+// the LOCAL calendar day via SQLite's 'localtime' modifier — not UTC.
+function sentToday(db, campaignId) {
+  const where = campaignId ? `AND campaign_id = ?` : `AND campaign_id IS NOT NULL`;
+  const args = campaignId ? [campaignId] : [];
+  return db.prepare(
+    `SELECT COUNT(*) c FROM wa_send_queue
+     WHERE status = 'sent' AND sent_at IS NOT NULL
+       AND date(sent_at, 'localtime') = date('now', 'localtime') ${where}`
+  ).get(...args).c;
+}
+
+function pickRow(db, extraWhere, extraArgs = []) {
+  return db.prepare(
+    `SELECT q.* FROM wa_send_queue q
+     LEFT JOIN wa_campaigns c ON c.id = q.campaign_id
+     WHERE q.status = 'pending' AND q.next_attempt_at <= CURRENT_TIMESTAMP AND (${extraWhere})
+     ORDER BY q.priority ASC, q.id ASC LIMIT 1`
+  ).get(...extraArgs);
+}
+
+// A campaign completes when nothing is left in flight. Called after every
+// terminal outcome rather than on a timer, so the UI flips the moment the
+// last recipient resolves.
+function finalizeCampaignIfDone(db, campaignId) {
+  const { n } = db.prepare(
+    `SELECT COUNT(*) n FROM wa_campaign_recipients WHERE campaign_id = ? AND status IN ('pending','queued')`
+  ).get(campaignId);
+  if (n > 0) return;
+  const { changes } = db.prepare(
+    `UPDATE wa_campaigns SET status='completed', completed_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='running'`
+  ).run(campaignId);
+  if (changes) publish('campaign.completed', { campaignId });
+}
+
+// Two-pass pick, then dispatch. Pass 1: 1:1 replies (priority <= 10) are
+// NEVER paced, capped or window-restricted — a customer waiting for an
+// answer at 21:30 gets one. Pass 2: bulk rows (priority > 10), gated by
+// pacing/window/global-cap, and only from a campaign that is actually
+// 'running' — pausing must stop the queue, not just the UI.
+async function waQueueDrainerTick(db) {
+  let row = pickRow(db, `q.priority <= 10`);
+
+  if (!row) {
+    const s = crmSettingsRow(db);
+    if (Date.now() < nextAllowedBulkSendAt) return;
+    if (!inSendWindow(s)) return;
+    if (sentToday(db) >= (s.global_daily_send_cap || 300)) return;
+
+    row = pickRow(db, `q.priority > 10 AND (c.id IS NULL OR c.status = 'running')`);
+    if (!row) return;
+
+    if (row.campaign_id) {
+      const camp = db.prepare(`SELECT daily_cap FROM wa_campaigns WHERE id = ?`).get(row.campaign_id);
+      if (camp && camp.daily_cap && sentToday(db, row.campaign_id) >= camp.daily_cap) {
+        // Push this campaign's remaining pending rows to tomorrow rather than
+        // stalling the tick, so one capped campaign can't starve another.
+        db.prepare(
+          `UPDATE wa_send_queue SET next_attempt_at = datetime(CURRENT_TIMESTAMP, '+1 day') WHERE campaign_id = ? AND status = 'pending'`
+        ).run(row.campaign_id);
+        return;
+      }
+    }
+
+    // Arm the next bulk slot BEFORE awaiting the provider, so a slow send can
+    // never collapse the gap. Uniform jitter — a fixed cadence is exactly the
+    // fingerprint an anti-spam heuristic looks for.
+    const min = s.queue_min_delay_sec || 25;
+    const max = Math.max(min, s.queue_max_delay_sec || 90);
+    nextAllowedBulkSendAt = Date.now() + (min + Math.random() * (max - min)) * 1000;
+  }
+
+  // row.attempts is read BEFORE this UPDATE — attemptNo below must be
+  // row.attempts + 1, never row.attempts, or the first retry fires
+  // immediately and a "3 attempts" cap becomes 4 sends.
+  const attemptNo = row.attempts + 1;
+  db.prepare(`UPDATE wa_send_queue SET status = 'sending', attempts = ? WHERE id = ?`).run(attemptNo, row.id);
+  if (row.recipient_id) {
+    db.prepare(`UPDATE wa_campaign_recipients SET status = 'queued' WHERE id = ? AND status = 'pending'`).run(row.recipient_id);
+  }
+
   let provider;
   try {
-    provider = getActiveWhatsApp(db);
+    provider = row.priority > 10 ? getBulkWhatsApp(db) : getActiveWhatsApp(db);
   } catch (err) {
     db.prepare(`UPDATE wa_send_queue SET status = 'pending', last_error = ? WHERE id = ?`).run(err.message, row.id);
     return;
@@ -60,14 +153,34 @@ async function waQueueDrainerTick(db) {
         .run(provider.name, result.providerMessageId || null, row.message_id);
     }
     if (row.conversation_id) publish('message.sent', { conversationId: row.conversation_id, messageId: row.message_id });
-  } else if (result.retryable && row.attempts < 3) {
-    // Exponential-ish backoff: 30s, 60s, 90s.
-    const delaySec = 30 * row.attempts;
+    if (row.campaign_id) {
+      db.prepare(`UPDATE wa_campaigns SET sent_count = sent_count + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(row.campaign_id);
+      if (row.recipient_id) {
+        db.prepare(`UPDATE wa_campaign_recipients SET status = 'sent', sent_at = CURRENT_TIMESTAMP, message_id = ? WHERE id = ?`)
+          .run(row.message_id, row.recipient_id);
+      }
+      publish('campaign.progress', { campaignId: row.campaign_id });
+      finalizeCampaignIfDone(db, row.campaign_id);
+    }
+  } else if (result.retryable && attemptNo < 3) {
+    // 30s then 60s — 3 attempts total. MUST be computed by SQLite via
+    // datetime(): a JS ISO string sorts ABOVE CURRENT_TIMESTAMP (it's UTC
+    // with a 'T' separator, which is lexicographically > ' ') and the row
+    // would never become ready again.
+    const delaySec = 30 * attemptNo;
     db.prepare(`UPDATE wa_send_queue SET status = 'pending', last_error = ?, next_attempt_at = datetime(CURRENT_TIMESTAMP, '+' || ? || ' seconds') WHERE id = ?`)
       .run(result.error, delaySec, row.id);
   } else {
     db.prepare(`UPDATE wa_send_queue SET status = 'failed', last_error = ? WHERE id = ?`).run(result.error, row.id);
     if (row.message_id) db.prepare(`UPDATE crm_messages SET status = 'failed', error_message = ? WHERE id = ?`).run(result.error, row.message_id);
+    if (row.campaign_id) {
+      db.prepare(`UPDATE wa_campaigns SET failed_count = failed_count + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(row.campaign_id);
+      if (row.recipient_id) {
+        db.prepare(`UPDATE wa_campaign_recipients SET status = 'failed', error_message = ? WHERE id = ?`).run(result.error, row.recipient_id);
+      }
+      publish('campaign.progress', { campaignId: row.campaign_id });
+      finalizeCampaignIfDone(db, row.campaign_id);
+    }
   }
 }
 

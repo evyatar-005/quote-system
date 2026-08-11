@@ -5,6 +5,7 @@
 const { request } = require('./client');
 const { CURRENCY, VAT_TYPE_DEFAULT, LANG, DOCUMENT_TYPE } = require('./mappings');
 const { sendDocumentToWhatsApp } = require('../greenapi/send');
+const { pushQuoteDocument } = require('../crm/mondaySync');
 
 // Shared shape for both client creation and updates — every field we've
 // collected on the quote form, so the Morning-side record is always a full
@@ -201,6 +202,15 @@ async function createOrConvertDocument(db, { quoteId, targetType, actorUsername 
     // caller is waiting on — sendDocumentToWhatsApp swallows its own errors.
     sendDocumentToWhatsApp(db, quote, response)
       .catch(err => console.error(`[createOrConvertDocument] WhatsApp send failed for quote #${quoteId}:`, err.message));
+
+    // Fire-and-forget: if this quote traces back to a monday.com lead (see
+    // CrmLeads.jsx convert flow), push the issued PDF into that lead's item
+    // in monday — a silent no-op when there's no monday origin or the board
+    // has no quote-file column mapped (see mondaySync.pushQuoteDocument).
+    if (documentUrl && quote.lead_id) {
+      pushQuoteDocument(db, { leadId: quote.lead_id, documentUrl, fileName: `${response.number || quote.quote_number || 'document'}.pdf` })
+        .catch(err => console.error(`[createOrConvertDocument] monday quote-file push failed for quote #${quoteId}:`, err.message));
+    }
 
     return response;
   } catch (err) {

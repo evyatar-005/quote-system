@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Plus, Trash2, KeyRound, Mail, Users as UsersIcon, DollarSign } from "lucide-react";
+import { Loader2, Plus, Trash2, KeyRound, Mail, Users as UsersIcon, DollarSign, Send } from "lucide-react";
 import { toast } from "sonner";
 
 const ROLE_LABEL = { admin: "מנהל מכירות", agent: "סוכן מכירות", operations: "תפעול (תפ\"י)" };
@@ -72,6 +72,20 @@ export default function UsersManagementSection() {
   const handleToggleCosts = async (u) => {
     try {
       await base44.adminUsers.update(u.id, { can_view_costs: u.can_view_costs ? 0 : 1 });
+      loadUsers();
+    } catch (err) {
+      toast.error("שגיאה בעדכון ההרשאה");
+    }
+  };
+
+  // Second slice of the granular permission model — who may START a
+  // WhatsApp דיוור (bulk broadcast). Deliberately NOT implied by the admin
+  // role at runtime; a 200-recipient blast is the most damaging misclick in
+  // this system, so even admins are just grandfathered once and can be
+  // toggled off like anyone else.
+  const handleToggleCampaigns = async (u) => {
+    try {
+      await base44.adminUsers.update(u.id, { can_send_campaigns: u.can_send_campaigns ? 0 : 1 });
       loadUsers();
     } catch (err) {
       toast.error("שגיאה בעדכון ההרשאה");
@@ -240,6 +254,15 @@ export default function UsersManagementSection() {
                     onClick={() => handleToggleCosts(u)}
                   >
                     <DollarSign className="w-4 h-4" /> {u.can_view_costs ? "רואה עלויות" : "לא רואה עלויות"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className={`gap-1.5 h-9 ${u.can_send_campaigns ? "border-emerald-400 text-emerald-700 bg-emerald-50 hover:bg-emerald-100" : ""}`}
+                    title="הרשאה לשליחת דיוור ווצאפ (תפוצת מבצעים)"
+                    onClick={() => handleToggleCampaigns(u)}
+                  >
+                    <Send className="w-4 h-4" /> {u.can_send_campaigns ? "מורשה דיוור" : "ללא הרשאת דיוור"}
                   </Button>
                   <Button
                     variant="outline"

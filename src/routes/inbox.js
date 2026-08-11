@@ -6,6 +6,7 @@
 // deps: { requireAuth, requireAdmin }
 
 const { enqueueText } = require('../services/channels/whatsapp/outbox');
+const { fromChatId } = require('../services/crm/phone');
 const { publish, subscribe } = require('../services/crm/realtime');
 
 module.exports = function registerInbox(app, db, deps) {
@@ -29,9 +30,14 @@ module.exports = function registerInbox(app, db, deps) {
 
   // ── List / detail ──────────────────────────────────────────────────────
   app.get('/api/inbox/conversations', requireAuth, (req, res) => {
-    const { status, channel } = req.query;
+    const { status, channel, include_broadcast } = req.query;
     const where = [];
     const params = [];
+    // Conversations created purely by a דיוור (bulk broadcast) are hidden
+    // from the default list until the customer replies — otherwise one
+    // 200-recipient blast buries every real conversation. The campaign
+    // detail screen passes ?include_broadcast=1 to see them anyway.
+    if (!include_broadcast) where.push('c.is_broadcast_only = 0');
     if (status) { where.push('c.status = ?'); params.push(status); }
     if (channel) { where.push('c.channel = ?'); params.push(channel); }
     let sql = `
@@ -154,7 +160,7 @@ module.exports = function registerInbox(app, db, deps) {
       return res.status(409).json({ error: 'יש לנעול את השיחה לפני מענה' });
     }
     const customer = conversation.customer_id ? db.prepare(`SELECT phone_e164 FROM customers WHERE id = ?`).get(conversation.customer_id) : null;
-    const toE164 = customer?.phone_e164 || conversation.channel_thread_id?.replace(/@.*/, '').replace(/^/, '+');
+    const toE164 = customer?.phone_e164 || fromChatId(conversation.channel_thread_id);
     try {
       const messageId = enqueueText(db, { conversationId: id, toE164, body: req.body?.body, sentBy: req.user.username, priority: 10 });
       publish('message.created', { conversationId: id, messageId });

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { Loader2, Save, LayoutGrid } from "lucide-react";
+import { Loader2, Save, LayoutGrid, X } from "lucide-react";
 import { toast } from "sonner";
 import { getMondayConfig, saveMondayConfig, listMondayBoards, listMondayGroups } from "@/api/mondayClient";
 import CostSectionCard from "./CostSectionCard";
@@ -113,29 +113,43 @@ export default function MondaySettingsSection() {
           <>
             <div className="space-y-1.5">
               <label className="text-sm font-semibold text-slate-600">בורד</label>
-              <Select value={boardId} onValueChange={handleBoardChange} disabled={loadingBoards}>
-                <SelectTrigger>
-                  <SelectValue placeholder={loadingBoards ? "טוען..." : "בחר בורד"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {boards.map((b) => (
-                    <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex gap-1.5">
+                <Select value={boardId} onValueChange={handleBoardChange} disabled={loadingBoards}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={loadingBoards ? "טוען..." : "בחר בורד"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {boards.map((b) => (
+                      <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {boardId && (
+                  <Button type="button" variant="outline" size="icon" title="נקה בחירה" onClick={() => { setBoardId(""); setGroupId(""); setGroups([]); }}>
+                    <X className="w-4 h-4" />
+                  </Button>
+                )}
+              </div>
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-semibold text-slate-600">קבוצה בתוך הבורד</label>
-              <Select value={groupId} onValueChange={setGroupId} disabled={!boardId || loadingGroups}>
-                <SelectTrigger>
-                  <SelectValue placeholder={loadingGroups ? "טוען..." : "בחר קבוצה"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {groups.map((g) => (
-                    <SelectItem key={g.id} value={g.id}>{g.title}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex gap-1.5">
+                <Select value={groupId} onValueChange={setGroupId} disabled={!boardId || loadingGroups}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={loadingGroups ? "טוען..." : "בחר קבוצה"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {groups.map((g) => (
+                      <SelectItem key={g.id} value={g.id}>{g.title}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {groupId && (
+                  <Button type="button" variant="outline" size="icon" title="נקה בחירה" onClick={() => setGroupId("")}>
+                    <X className="w-4 h-4" />
+                  </Button>
+                )}
+              </div>
             </div>
           </>
         )}

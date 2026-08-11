@@ -766,6 +766,107 @@ CREATE TABLE IF NOT EXISTS wa_send_queue (
 );
 CREATE INDEX IF NOT EXISTS idx_wa_queue_ready ON wa_send_queue(status, next_attempt_at, priority);
 
+-- ════════════════════════════════════════════════════════════════════════════
+-- CRM — Phase 4: bulk WhatsApp broadcasts ("דיוור"), reusable templates, and
+-- the opt-out register.
+--
+-- Naming, deliberately: crm_campaigns = a LEAD SOURCE ("קמפיין"). wa_campaigns
+-- = an OUTBOUND BLAST ("דיוור"). They are joined, not confused: a דיוור can
+-- target everyone whose lead came from a given קמפיין.
+--
+-- Sends never bypass wa_send_queue — a דיוור is just N queued rows at priority
+-- 100, paced by the drainer in jobs.js. There is no second sender.
+-- ════════════════════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS message_templates (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  name          TEXT NOT NULL,
+  category      TEXT NOT NULL DEFAULT 'marketing',  -- marketing | service | utility
+  channel       TEXT NOT NULL DEFAULT 'whatsapp',
+  body          TEXT NOT NULL,      -- may contain {{name}} {{first_name}} {{company}} {{agent}} {{last_quote_date}}
+  media_url     TEXT,               -- non-NULL = send as media with `body` as the caption
+  media_filename TEXT,
+  provider_template_name TEXT,      -- Meta Cloud pre-approved id; NULL for GreenAPI (supportsTemplates=false)
+  is_active     INTEGER NOT NULL DEFAULT 1,
+  created_by    TEXT,
+  created_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_message_templates_active ON message_templates(is_active, category);
+
+-- The legal record of "do not market to this number". Keyed by phone_e164, NOT
+-- customer_id: the same person may exist under two customer rows before a
+-- merge, and an inbound reply arrives carrying only a phone number. Rows are
+-- never hard-deleted — an opt-IN writes revoked_at and keeps the history.
+CREATE TABLE IF NOT EXISTS crm_opt_outs (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  phone_e164  TEXT NOT NULL,
+  customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL,
+  channel     TEXT NOT NULL DEFAULT 'whatsapp',
+  source      TEXT NOT NULL DEFAULT 'keyword',  -- keyword | manual | import | complaint
+  keyword     TEXT,        -- the exact inbound text that triggered it (audit)
+  message_id  INTEGER,     -- crm_messages.id of the triggering inbound message
+  campaign_id INTEGER,     -- wa_campaigns.id being reacted to, when known
+  actor       TEXT,        -- users.username for source='manual'
+  revoked_at  TEXT,        -- non-NULL = re-subscribed; suppression applies only when NULL
+  created_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_crm_opt_outs_phone ON crm_opt_outs(phone_e164, revoked_at);
+
+-- One row per דיוור. audience_json is the SAVED FILTER (not the resolved list)
+-- so the wizard can be reopened and re-run; the resolved list is frozen into
+-- wa_campaign_recipients at build time. `body` is a SNAPSHOT of the template —
+-- editing a template later must never change an already-sent דיוור.
+CREATE TABLE IF NOT EXISTS wa_campaigns (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  name           TEXT NOT NULL,
+  status         TEXT NOT NULL DEFAULT 'draft',  -- draft|ready|running|paused|completed|cancelled
+  template_id    INTEGER REFERENCES message_templates(id),
+  body           TEXT NOT NULL,
+  media_url      TEXT,
+  media_filename TEXT,
+  audience_json  TEXT NOT NULL DEFAULT '{}',
+  daily_cap      INTEGER,        -- NULL = only crm_settings.global_daily_send_cap applies
+  -- Denormalized progress counters, maintained by the drainer: the campaigns
+  -- list must not COUNT() over wa_campaign_recipients once per row.
+  total_count    INTEGER NOT NULL DEFAULT 0,
+  sent_count     INTEGER NOT NULL DEFAULT 0,
+  failed_count   INTEGER NOT NULL DEFAULT 0,
+  skipped_count  INTEGER NOT NULL DEFAULT 0,   -- excluded at build time
+  replied_count  INTEGER NOT NULL DEFAULT 0,
+  optout_count   INTEGER NOT NULL DEFAULT 0,
+  created_by     TEXT NOT NULL,
+  approved_by    TEXT,           -- who pressed "שלח" (a can_send_campaigns holder)
+  started_at     TEXT,
+  completed_at   TEXT,
+  created_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_wa_campaigns_status ON wa_campaigns(status, created_at);
+
+-- The frozen recipient list, written once at build time then flipped by the
+-- drainer. UNIQUE(campaign_id, phone_e164) is what makes "same person under
+-- two customer rows" impossible to double-send.
+CREATE TABLE IF NOT EXISTS wa_campaign_recipients (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  campaign_id   INTEGER NOT NULL REFERENCES wa_campaigns(id) ON DELETE CASCADE,
+  customer_id   INTEGER REFERENCES customers(id) ON DELETE SET NULL,
+  phone_e164    TEXT NOT NULL,
+  display_name  TEXT,
+  rendered_body TEXT NOT NULL,  -- {{placeholders}} already substituted + footer applied = the exact final text
+  status        TEXT NOT NULL DEFAULT 'pending', -- pending|queued|sent|failed|skipped|replied|opted_out
+  skip_reason   TEXT,           -- opted_out | no_consent | no_phone | duplicate | blocked
+  conversation_id INTEGER REFERENCES crm_conversations(id) ON DELETE SET NULL,
+  message_id    INTEGER REFERENCES crm_messages(id) ON DELETE SET NULL,
+  queue_id      INTEGER,        -- wa_send_queue.id, for cancel-on-pause
+  error_message TEXT,
+  sent_at       TEXT,
+  replied_at    TEXT,
+  created_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_wa_recipients_campaign ON wa_campaign_recipients(campaign_id, status);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_wa_recipients_unique ON wa_campaign_recipients(campaign_id, phone_e164);
+
 -- SQLite doesn't auto-index FK-like columns — these are all looked up by value.
 CREATE INDEX IF NOT EXISTS idx_notifications_recipient  ON notifications(recipient_username);
 CREATE INDEX IF NOT EXISTS idx_signshop_quotes_created_by ON signshop_quotes(created_by);

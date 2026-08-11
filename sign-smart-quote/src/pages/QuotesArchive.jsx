@@ -16,6 +16,12 @@ import {
 // not the coarse product_category — so names come from the calculator's canonical
 // PRODUCT_NAMES map, and the badge colour from the category that type rolls up to.
 import { PRODUCT_NAMES, PRODUCT_CODES, categoryOf } from "@/components/calculator/CalculatorForm";
+import { shippingOf } from "@/lib/quoteEconomics";
+
+// Deal amount excluding VAT and shipping — same definition as "סכום עסקה" in
+// the אנליטיקה screen (QuotesAnalytics.jsx), applied here too so every ₪
+// figure in this list means the same thing everywhere in the app.
+const dealAmount = (q) => (q.price_before_vat || 0) - shippingOf(q);
 
 // General quote history — read-only. Distinct from /quotes (QuotesHistory),
 // which is the manager's daily review queue: same underlying rows, but this
@@ -222,9 +228,10 @@ export default function QuotesArchive() {
   const agentStats = Object.values(
     byDate.reduce((acc, q) => {
       const key = q.created_by || "—";
-      if (!acc[key]) acc[key] = { key, name: sellers[key] || key, count: 0, total: 0 };
+      if (!acc[key]) acc[key] = { key, name: sellers[key] || key, count: 0, orders: 0, total: 0 };
       acc[key].count += 1;
-      acc[key].total += q.price_with_vat || 0;
+      if (isOrder(q)) acc[key].orders += 1;
+      acc[key].total += dealAmount(q);
       return acc;
     }, {})
   ).sort((a, b) => b.total - a.total);
@@ -274,7 +281,7 @@ export default function QuotesArchive() {
   };
 
   const orderCount = filtered.filter(isOrder).length;
-  const filteredTotal = filtered.reduce((s, q) => s + (q.price_with_vat || 0), 0);
+  const filteredTotal = filtered.reduce((s, q) => s + dealAmount(q), 0);
 
   const selectedAgentStats = selectedAgent ? agentStats.find((a) => a.key === selectedAgent) : null;
 
@@ -409,7 +416,7 @@ export default function QuotesArchive() {
           </div>
           <div className="bg-white border border-black rounded-2xl p-4 text-center">
             <div className="text-2xl font-bold text-primary tabular-nums">{fmt(filteredTotal)}</div>
-            <div className="text-sm text-slate-500 mt-1">שווי כולל</div>
+            <div className="text-sm text-slate-500 mt-1">שווי כולל (ללא מע״מ, ללא משלוח)</div>
           </div>
         </div>
 
@@ -425,20 +432,33 @@ export default function QuotesArchive() {
                 </button>
               )}
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {agentStats.map((a) => (
-                <button
-                  key={a.key}
-                  onClick={() => setSelectedAgent(a.key === selectedAgent ? null : a.key)}
-                  className={`text-right rounded-2xl border bg-white p-4 transition-all ${
-                    a.key === selectedAgent ? "border-primary/60" : "border-black hover:border-slate-500"
-                  }`}
-                >
-                  <div className="font-semibold text-foreground">{a.name}</div>
-                  <div className="text-sm text-slate-500 mt-1">{a.count} הצעות · {fmt(a.total)} סה״כ</div>
-                  <div className="text-xs text-slate-400 mt-0.5">ממוצע להצעה: {fmt(a.count > 0 ? a.total / a.count : 0)}</div>
-                </button>
-              ))}
+            <div className="overflow-x-auto rounded-2xl border border-black">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-black text-right">
+                    <th className="px-3 py-2 font-semibold text-slate-600 whitespace-nowrap">סוכן</th>
+                    <th className="px-3 py-2 font-semibold text-slate-600 whitespace-nowrap">מס' הצעות מחיר</th>
+                    <th className="px-3 py-2 font-semibold text-slate-600 whitespace-nowrap">מס' הזמנות</th>
+                    <th className="px-3 py-2 font-semibold text-slate-600 whitespace-nowrap" title="ללא מע״מ, ללא משלוח">סך הכל</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {agentStats.map((a) => (
+                    <tr
+                      key={a.key}
+                      onClick={() => setSelectedAgent(a.key === selectedAgent ? null : a.key)}
+                      className={`border-b border-slate-100 last:border-b-0 cursor-pointer transition-colors ${
+                        a.key === selectedAgent ? "bg-primary/5" : "hover:bg-slate-50"
+                      }`}
+                    >
+                      <td className="px-3 py-2 font-semibold text-foreground whitespace-nowrap">{a.name}</td>
+                      <td className="px-3 py-2 tabular-nums text-slate-600">{a.count}</td>
+                      <td className="px-3 py-2 tabular-nums text-slate-600">{a.orders}</td>
+                      <td className="px-3 py-2 font-bold text-primary tabular-nums whitespace-nowrap">{fmt(a.total)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
@@ -459,7 +479,7 @@ export default function QuotesArchive() {
                   <th className="px-3 py-2 font-semibold text-slate-600">מוצרים</th>
                   <th className="px-3 py-2 font-semibold text-slate-600 whitespace-nowrap">מס' מסמך</th>
                   <th className="px-3 py-2 font-semibold text-slate-600 whitespace-nowrap">סוג מסמך</th>
-                  <th className="px-3 py-2 font-semibold text-slate-600 whitespace-nowrap">סך הכל</th>
+                  <th className="px-3 py-2 font-semibold text-slate-600 whitespace-nowrap" title="ללא מע״מ, ללא משלוח">סך הכל</th>
                   <th className="px-3 py-2"></th>
                 </tr>
               </thead>
@@ -498,7 +518,7 @@ export default function QuotesArchive() {
                           {isOrder(q) ? "הזמנה" : "הצעת מחיר"}
                         </span>
                       </td>
-                      <td className="px-3 py-2 font-bold text-primary tabular-nums whitespace-nowrap">{fmt(q.price_with_vat)}</td>
+                      <td className="px-3 py-2 font-bold text-primary tabular-nums whitespace-nowrap">{fmt(dealAmount(q))}</td>
                       <td className="px-3 py-2 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center gap-2">
                           {doc?.document_url && (

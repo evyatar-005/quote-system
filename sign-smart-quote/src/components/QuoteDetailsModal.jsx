@@ -788,6 +788,14 @@ export default function QuoteDetailsModal({ quote, onClose, onSaved, readOnly = 
 
       const revised = await base44.entities.Quote.create({
         client_name: quote.client_name,
+        // Required by the server on every Quote create (routes/entities.js
+        // quoteCreate) — omitting it here made every "שמור הצעה מתוקנת" 400,
+        // always, unconditionally. The rest of the client fields travel along
+        // too so the revised quote keeps the same Morning client details.
+        client_phone: quote.client_phone,
+        client_address: quote.client_address,
+        client_vat_id: quote.client_vat_id,
+        client_email: quote.client_email,
         product_category: quote.product_category,
         payment_type: quote.payment_type,
         price_before_vat: Math.round(finalSubtotal * 100) / 100,

@@ -41,7 +41,7 @@ function verifyPassword(password, stored) {
 
 function publicUser(u) {
   if (!u) return null;
-  return { id: u.id, username: u.username, full_name: u.full_name, email: u.email, role: u.role, mustChangePassword: !!u.must_change_password, canViewCosts: !!u.can_view_costs };
+  return { id: u.id, username: u.username, full_name: u.full_name, email: u.email, role: u.role, mustChangePassword: !!u.must_change_password, canViewCosts: !!u.can_view_costs, canSendCampaigns: !!u.can_send_campaigns };
 }
 
 // ── idempotent seed of the two demo users ────────────────────────────────────
@@ -122,6 +122,20 @@ module.exports = function registerAuth(app, db) {
     const user = userFromRequest(req);
     if (!user) return res.status(401).json({ error: 'unauthorized' });
     if (user.role !== 'admin' && user.role !== 'operations') return res.status(403).json({ error: 'forbidden' });
+    req.user = user;
+    next();
+  }
+
+  // Bulk-WhatsApp-broadcast permission — explicitly NOT satisfied by role
+  // alone (unlike requireOperations, admin does not implicitly pass here at
+  // request time; it's only grandfathered once in server.js and can be
+  // revoked). A 200-recipient blast is the single most damaging thing a
+  // misclick can do in this system (WhatsApp ban risk + 200 annoyed
+  // customers) — see CLAUDE.md CRM plan Phase 4.
+  function requireCampaigns(req, res, next) {
+    const user = userFromRequest(req);
+    if (!user) return res.status(401).json({ error: 'unauthorized' });
+    if (!user.can_send_campaigns) return res.status(403).json({ error: 'אין לך הרשאה לשליחת דיוור' });
     req.user = user;
     next();
   }
@@ -290,9 +304,9 @@ module.exports = function registerAuth(app, db) {
   });
 
   // ── Admin user management ─────────────────────────────────────────────────────
-  const allUsers    = db.prepare(`SELECT id, username, full_name, email, role, can_view_costs FROM users ORDER BY id`);
+  const allUsers    = db.prepare(`SELECT id, username, full_name, email, role, can_view_costs, can_send_campaigns FROM users ORDER BY id`);
   const insertUser  = db.prepare(`INSERT INTO users (username, password_hash, full_name, email, role, must_change_password) VALUES (?, ?, ?, ?, ?, 1)`);
-  const updateUser  = db.prepare(`UPDATE users SET full_name = ?, email = ?, role = ?, can_view_costs = ? WHERE id = ?`);
+  const updateUser  = db.prepare(`UPDATE users SET full_name = ?, email = ?, role = ?, can_view_costs = ?, can_send_campaigns = ? WHERE id = ?`);
   const updatePassword = db.prepare(`UPDATE users SET password_hash = ?, must_change_password = 1 WHERE id = ?`);
   const deleteUserStmt = db.prepare(`DELETE FROM users WHERE id = ?`);
   const ROLES = new Set(['admin', 'agent', 'operations']);
@@ -347,7 +361,8 @@ module.exports = function registerAuth(app, db) {
       if (other && other.id !== id) return res.status(409).json({ error: 'email already exists' });
     }
     const canViewCosts = req.body.can_view_costs !== undefined ? (req.body.can_view_costs ? 1 : 0) : existing.can_view_costs;
-    updateUser.run(full_name, email, role, canViewCosts, id);
+    const canSendCampaigns = req.body.can_send_campaigns !== undefined ? (req.body.can_send_campaigns ? 1 : 0) : existing.can_send_campaigns;
+    updateUser.run(full_name, email, role, canViewCosts, canSendCampaigns, id);
     const updated = userById.get(id);
     console.log(`[PUT /api/admin/users/${id}] role="${updated.role}"`);
     res.json({ user: publicUser(updated) });
@@ -378,7 +393,7 @@ module.exports = function registerAuth(app, db) {
     res.json({ deleted: true, id });
   });
 
-  return { requireAuth, requireAdmin, requireOperations, hashPassword, verifyPassword, publicUser };
+  return { requireAuth, requireAdmin, requireOperations, requireCampaigns, hashPassword, verifyPassword, publicUser };
 };
 
 module.exports.hashPassword = hashPassword;

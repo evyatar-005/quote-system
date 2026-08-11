@@ -36,7 +36,8 @@ import ReportsSection from "../components/admin/ReportsSection";
 import AboutSection from "../components/admin/AboutSection";
 import CollapsibleSection from "../components/admin/CollapsibleSection";
 import UsersManagementSection from "../components/admin/UsersManagementSection";
-import { ShieldAlert, Users, Receipt, Info, MessageCircle, LayoutGrid, Scissors, PenTool, PieChart, ClipboardList, LineChart } from "lucide-react";
+import CrmSettingsSection from "../components/admin/CrmSettingsSection";
+import { ShieldAlert, Users, Receipt, Info, MessageCircle, LayoutGrid, Scissors, PenTool, PieChart, ClipboardList, LineChart, MessagesSquare, Target, Send } from "lucide-react";
 
 // Formerly the horizontal TabsList atop the content area — now selected from
 // the "הגדרות" submenu in the sidebar instead, so this is just the list of
@@ -52,6 +53,7 @@ const SETTINGS_TABS = [
   { value: "monday", label: "Monday", icon: LayoutGrid, activeClass: "text-orange-600" },
   { value: "smtp", label: "SMTP", icon: Mail, activeClass: "text-sky-600" },
   { value: "reports", label: "דוחות", icon: PieChart, activeClass: "text-indigo-600" },
+  { value: "crm", label: "CRM ודיוור", icon: MessagesSquare, activeClass: "text-rose-600" },
 ];
 
 const DEFAULT_CONFIG = {
@@ -268,6 +270,12 @@ export default function AdminDashboard() {
             <NavItem to="/quotes" icon={ClipboardList} label="הצעות לבדיקה" />
             <NavItem to="/quotes-archive" icon={LineChart} label="אנליטיקה" />
           </NavGroup>
+          <NavGroup title="CRM">
+            <NavItem to="/crm/customers" icon={Users} label="לקוחות" />
+            <NavItem to="/crm/leads" icon={Target} label="לידים" />
+            <NavItem to="/crm/inbox" icon={MessagesSquare} label="תיבת שיחות" />
+            <NavItem to="/crm/campaigns" icon={Send} label="דיוור" />
+          </NavGroup>
           <NavGroup title="תפעול">
             <NavItem to="/cutting" icon={Scissors} label="ניצולת לוחות" />
             <NavItem to="/cutfile" icon={PenTool} label="קו חיתוך אוטומטי" />
@@ -313,6 +321,10 @@ export default function AdminDashboard() {
 
           <TabsContent value="reports" className="space-y-6 mt-0">
             <ReportsSection />
+          </TabsContent>
+
+          <TabsContent value="crm" className="space-y-6 mt-0">
+            <CrmSettingsSection />
           </TabsContent>
 
           <TabsContent value="about" className="space-y-6 mt-0">

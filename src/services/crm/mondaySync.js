@@ -9,7 +9,7 @@
 // large board every minute). A board with more than 100 open items needs a
 // tighter poll_minutes or a manual "sync now" until cursor paging is added.
 
-const { request: mondayRequest } = require('../monday/client');
+const { request: mondayRequest, uploadFileToColumn } = require('../monday/client');
 const { toE164 } = require('./phone');
 
 function logSync(db, { direction, board_id, monday_item_id, lead_id, success, request_json, response_json, error_message }) {
@@ -172,4 +172,34 @@ async function pushBoard(db, boardMap) {
   return { pushed };
 }
 
-module.exports = { fetchBoardColumns, pullBoard, pushBoard, logSync };
+// Uploads an issued quote's PDF to its monday item's mapped "quote file"
+// column — triggered once, right after Morning creates the document (see
+// services/morning/sync.js createOrConvertDocument). The lead's status push
+// (e.g. -> "נשלחה הצעה") already happens on its own via the pushBoard tick
+// once crm.js's /leads/:id/convert sets crm_leads.status='quoted'; this
+// function only handles the file, which that generic status-pusher can't.
+// Silent no-op (not an error) when the lead has no monday origin or the
+// admin never mapped a quote-file column for its board — most quotes aren't
+// tied to a monday lead at all.
+async function pushQuoteDocument(db, { leadId, documentUrl, fileName }) {
+  if (!leadId || !documentUrl) return { pushed: false, reason: 'missing leadId or documentUrl' };
+  const itemMap = db.prepare(`SELECT * FROM monday_item_map WHERE lead_id = ?`).get(leadId);
+  if (!itemMap) return { pushed: false, reason: 'lead has no monday origin' };
+  const boardMap = db.prepare(`SELECT * FROM monday_board_map WHERE board_id = ?`).get(itemMap.board_id);
+  if (!boardMap) return { pushed: false, reason: 'board not mapped' };
+  const columnMap = JSON.parse(boardMap.column_map || '{}');
+  if (!columnMap.quote_file) return { pushed: false, reason: 'no quote-file column mapped for this board' };
+
+  try {
+    await uploadFileToColumn(db, {
+      itemId: itemMap.monday_item_id, columnId: columnMap.quote_file, fileUrl: documentUrl, fileName,
+    });
+    logSync(db, { direction: 'push', board_id: itemMap.board_id, monday_item_id: itemMap.monday_item_id, lead_id: leadId, success: true, response_json: { fileName } });
+    return { pushed: true };
+  } catch (err) {
+    logSync(db, { direction: 'push', board_id: itemMap.board_id, monday_item_id: itemMap.monday_item_id, lead_id: leadId, success: false, error_message: err.message });
+    return { pushed: false, reason: err.message };
+  }
+}
+
+module.exports = { fetchBoardColumns, pullBoard, pushBoard, pushQuoteDocument, logSync };

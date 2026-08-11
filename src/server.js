@@ -21,6 +21,7 @@ const registerCrm      = require('./routes/crm');
 const registerMondaySync = require('./routes/mondaySync');
 const registerInbox    = require('./routes/inbox');
 const registerWhatsapp  = require('./routes/whatsapp');
+const registerCampaigns = require('./routes/campaigns');
 const { startCrmJobs } = require('./services/crm/jobs');
 const { startReportScheduler } = require('./services/reports/scheduledReports');
 const deliveryNotesReport = require('./services/reports/deliveryNotesReport');
@@ -215,6 +216,46 @@ try { db.exec(`INSERT OR IGNORE INTO crm_settings (id) VALUES (1)`); } catch (_)
 // unguarded CREATE TABLE IF NOT EXISTS, so a plain ALTER is needed here too).
 try { db.exec(`ALTER TABLE crm_settings ADD COLUMN wa_webhook_secret TEXT`); } catch (_) {}
 
+// ─── CRM (Phase 4) — bulk broadcasts / דיוור ──────────────────────────────
+// Second slice of the granular permission model (after can_view_costs): who
+// may START a WhatsApp broadcast. Deliberately NOT implied by the admin role
+// at runtime — admins are grandfathered once, here, and can revoke it from
+// themselves. A 200-recipient blast is the single most damaging thing a
+// misclick can do in this system (WhatsApp ban + 200 annoyed customers).
+try {
+  db.exec('ALTER TABLE users ADD COLUMN can_send_campaigns INTEGER NOT NULL DEFAULT 0');
+  db.prepare(`UPDATE users SET can_send_campaigns = 1 WHERE role = 'admin'`).run();
+} catch (_) {}
+
+// crm_settings already existed (Phase 1 CREATE TABLE IF NOT EXISTS), so these
+// are ALTERs, not schema.sql edits. Send window/days are enforced in LOCAL
+// time by jobs.js — SQLite's CURRENT_TIMESTAMP is UTC and would be 2-3h off.
+for (const col of [
+  "ALTER TABLE crm_settings ADD COLUMN send_window_start TEXT NOT NULL DEFAULT '09:00'",
+  "ALTER TABLE crm_settings ADD COLUMN send_window_end   TEXT NOT NULL DEFAULT '20:00'",
+  "ALTER TABLE crm_settings ADD COLUMN send_days         TEXT NOT NULL DEFAULT '0,1,2,3,4'", // JS getDay(): Sun..Thu
+  "ALTER TABLE crm_settings ADD COLUMN optout_footer     TEXT NOT NULL DEFAULT 'להסרה מרשימת הדיוור השב/י: הסר'",
+  "ALTER TABLE crm_settings ADD COLUMN optout_reply_text TEXT NOT NULL DEFAULT 'הוסרת מרשימת הדיוור שלנו. לא נשלח לך יותר הודעות שיווקיות.'",
+  // consent_source is what makes the consent backfill below idempotent.
+  'ALTER TABLE customers ADD COLUMN consent_source TEXT',        // quote_history | manual | inbound | optout
+  'ALTER TABLE customers ADD COLUMN consent_updated_at TEXT',
+  // A conversation CREATED BY a דיוור is hidden from the shared-inbox list
+  // until the customer replies — otherwise one 200-recipient blast buries
+  // every real conversation. Set only when the outbox CREATES the
+  // conversation; an existing (already-real) one is never flagged, and
+  // inbound.js clears the flag on the first inbound message.
+  'ALTER TABLE crm_conversations ADD COLUMN is_broadcast_only INTEGER NOT NULL DEFAULT 0',
+  'ALTER TABLE crm_conversations ADD COLUMN source_campaign_id INTEGER',
+]) { try { db.exec(col); } catch (_) {} }
+
+try {
+  const { backfillMarketingConsent } = require('./services/crm/consentBackfill');
+  const consentResult = backfillMarketingConsent(db);
+  console.log(`[crm] marketing consent: ${consentResult.granted} customer(s) granted via quote history`);
+} catch (err) {
+  console.error('[crm] consent backfill failed (continuing anyway):', err.message);
+}
+
 // ─── SignCalc Pro config — read by the Base44-compatible PricingConfig entity ─
 // (registerEntities below needs loadConfig/upsertConfig; the tables themselves
 // are seeded by seedSignshop() above and otherwise read/written entirely through
@@ -231,7 +272,7 @@ function loadConfig() {
 // ═══════════════════════════════════════════════════════════════════════════
 // Base44-compatible API — auth + generic entities (frontend SDK shim target)
 // ═══════════════════════════════════════════════════════════════════════════
-const { requireAuth, requireAdmin, requireOperations } = registerAuth(app, db);
+const { requireAuth, requireAdmin, requireOperations, requireCampaigns } = registerAuth(app, db);
 registerEntities(app, db, {
   loadConfig,
   upsertConfig,
@@ -253,6 +294,7 @@ registerCrm(app, db, { requireAuth, requireAdmin });
 registerMondaySync(app, db, { requireAdmin });
 registerInbox(app, db, { requireAuth, requireAdmin });
 registerWhatsapp(app, db, { requireAuth, requireAdmin });
+registerCampaigns(app, db, { requireAuth, requireAdmin, requireCampaigns });
 
 startReportScheduler(db, {
   [deliveryNotesReport.REPORT_TYPE]: deliveryNotesReport.sendReport,
@@ -356,6 +398,10 @@ app.listen(PORT, () => {
   console.log('  GET    /api/inbox/stream                (SSE, shared inbox live updates)');
   console.log('  GET/PUT /api/whatsapp/config             POST /api/whatsapp/test');
   console.log('  GET/POST /api/whatsapp/webhooks/:provider (public, inbound WhatsApp)');
+  console.log('  GET/POST/PUT/DELETE /api/campaigns/templates[/:id]  POST .../preview  (message_templates)');
+  console.log('  POST   /api/campaigns/audience/preview  (דיוור targeting — join-heavy preview query)');
+  console.log('  GET/POST/PUT /api/campaigns[/:id]       POST .../build|start|pause|resume|cancel|test-send');
+  console.log('  GET/POST/DELETE /api/campaigns/optouts[/:id]  (opt-out register)');
 });
 
 // ─── Removed (2026-07-07 pre-launch cleanup) ─────────────────────────────────
