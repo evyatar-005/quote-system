@@ -1,6 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { LogOut, Settings2, FileStack, Scissors, PenTool, Users, Target } from "lucide-react";
+import { LogOut, Settings2, FileStack, Scissors, PenTool, Users, Target, MessagesSquare } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 
 // The agent-facing counterpart to ManagerSidebar — same fixed-width, full
@@ -46,6 +46,7 @@ export default function AgentSidebar() {
       <NavGroup title="CRM">
         <NavItem to="/crm/customers" icon={Users} label="לקוחות" active={pathname.startsWith("/crm/customers")} />
         <NavItem to="/crm/leads" icon={Target} label="לידים" active={pathname === "/crm/leads"} />
+        <NavItem to="/crm/inbox" icon={MessagesSquare} label="תיבת שיחות" active={pathname === "/crm/inbox"} />
       </NavGroup>
       <NavGroup title="תפעול">
         <NavItem to="/cutting" icon={Scissors} label="ניצולת לוחות" active={pathname === "/cutting"} />

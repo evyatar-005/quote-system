@@ -95,11 +95,32 @@ export default function QuotesArchive() {
   const [morningDocs, setMorningDocs] = useState({});
   const [selectedQuote, setSelectedQuote] = useState(null);
   const [tab, setTab] = useState("list");
-  // Raw Morning document URL currently previewed — the iframe itself points
-  // at our own /api/morning/document-proxy (re-served with Content-Disposition:
-  // inline), since Morning's own URL forces a download and can't be embedded.
+  // Raw Morning document URL currently previewed — resolved to a blob URL
+  // below (previewBlobUrl) before the iframe ever gets it.
   const [previewDoc, setPreviewDoc] = useState(null);
+  const [previewBlobUrl, setPreviewBlobUrl] = useState(null);
   const openMorningDoc = (url) => setPreviewDoc(url);
+
+  // The document-proxy route needs the Bearer token, which a plain
+  // <iframe src="/api/morning/document-proxy?..."> can't attach (that's why
+  // it showed {"error":"unauthorized"} instead of the PDF) — fetch it with
+  // the token instead and hand the iframe a blob: URL.
+  useEffect(() => {
+    if (!previewDoc) { setPreviewBlobUrl(null); return; }
+    let cancelled = false;
+    let objectUrl = null;
+    base44.quotes.fetchMorningDocumentBlob(previewDoc)
+      .then((blob) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setPreviewBlobUrl(objectUrl);
+      })
+      .catch(() => { if (!cancelled) toast.error("שגיאה בטעינת המסמך"); });
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [previewDoc]);
 
   // Filters
   const [search, setSearch] = useState("");
@@ -551,11 +572,13 @@ export default function QuotesArchive() {
                 <X className="w-4 h-4 text-slate-600" />
               </button>
             </div>
-            <iframe
-              src={`/api/morning/document-proxy?url=${encodeURIComponent(previewDoc)}`}
-              title="מסמך מורנינג"
-              className="w-full h-full rounded-2xl"
-            />
+            {previewBlobUrl ? (
+              <iframe src={previewBlobUrl} title="מסמך מורנינג" className="w-full h-full rounded-2xl" />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+              </div>
+            )}
           </div>
         </div>
       )}

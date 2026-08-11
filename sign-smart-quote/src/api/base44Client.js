@@ -256,6 +256,17 @@ const quotes = {
   deleteAttachment(quoteId, attachmentId) {
     return request(`/api/quotes/${quoteId}/attachments/${attachmentId}`, { method: 'DELETE' });
   },
+  // Same reasoning as fetchAttachmentBlob below — the document-proxy route
+  // needs the Bearer token too, which a plain <iframe src> can't attach
+  // (that's why it was showing {"error":"unauthorized"} instead of the PDF).
+  async fetchMorningDocumentBlob(morningUrl) {
+    const token = getToken();
+    const res = await fetch(`/api/morning/document-proxy?url=${encodeURIComponent(morningUrl)}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new Error(`Request failed with status ${res.status}`);
+    return res.blob();
+  },
   // Fetched (not a plain <a href>/<img src>) because the file route needs the
   // Bearer token, which only an authenticated fetch() call can attach.
   async fetchAttachmentBlob(quoteId, attachmentId) {

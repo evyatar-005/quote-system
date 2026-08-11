@@ -19,6 +19,8 @@ const registerProduction = require('./routes/production');
 const registerReports  = require('./routes/reports');
 const registerCrm      = require('./routes/crm');
 const registerMondaySync = require('./routes/mondaySync');
+const registerInbox    = require('./routes/inbox');
+const registerWhatsapp  = require('./routes/whatsapp');
 const { startCrmJobs } = require('./services/crm/jobs');
 const { startReportScheduler } = require('./services/reports/scheduledReports');
 const deliveryNotesReport = require('./services/reports/deliveryNotesReport');
@@ -249,6 +251,8 @@ registerCutFile(app, db, { requireAuth });
 registerProduction(app, db, { requireOperations });
 registerCrm(app, db, { requireAuth, requireAdmin });
 registerMondaySync(app, db, { requireAdmin });
+registerInbox(app, db, { requireAuth, requireAdmin });
+registerWhatsapp(app, db, { requireAuth, requireAdmin });
 
 startReportScheduler(db, {
   [deliveryNotesReport.REPORT_TYPE]: deliveryNotesReport.sendReport,
@@ -347,6 +351,11 @@ app.listen(PORT, () => {
   console.log('  GET/PUT /api/crm/settings              (WhatsApp/telephony provider, monday poll toggle)');
   console.log('  GET/POST/PUT/DELETE /api/monday-sync/boards[/:id]  GET .../:boardId/columns  POST .../:id/pull|push');
   console.log('  POST   /api/monday-sync/webhooks/items  (public, monday.com item-change webhook)');
+  console.log('  GET    /api/inbox/conversations         GET .../:id/messages  PUT .../:id');
+  console.log('  POST   /api/inbox/conversations/:id/claim|heartbeat|release|force-claim|messages');
+  console.log('  GET    /api/inbox/stream                (SSE, shared inbox live updates)');
+  console.log('  GET/PUT /api/whatsapp/config             POST /api/whatsapp/test');
+  console.log('  GET/POST /api/whatsapp/webhooks/:provider (public, inbound WhatsApp)');
 });
 
 // ─── Removed (2026-07-07 pre-launch cleanup) ─────────────────────────────────

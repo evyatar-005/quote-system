@@ -19,6 +19,7 @@ import ProductionBoard from './pages/ProductionBoard.jsx';
 import CrmCustomers from './pages/CrmCustomers.jsx';
 import CrmCustomerDetail from './pages/CrmCustomerDetail.jsx';
 import CrmLeads from './pages/CrmLeads.jsx';
+import CrmInbox from './pages/CrmInbox.jsx';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import Login from './pages/Login.jsx';
 import ChangePassword from './pages/ChangePassword.jsx';
@@ -98,6 +99,7 @@ const AuthenticatedApp = () => {
         <Route path="/crm/customers" element={<CrmAccess><CrmCustomers /></CrmAccess>} />
         <Route path="/crm/customers/:id" element={<CrmAccess><CrmCustomerDetail /></CrmAccess>} />
         <Route path="/crm/leads" element={<CrmAccess><CrmLeads /></CrmAccess>} />
+        <Route path="/crm/inbox" element={<CrmAccess><CrmInbox /></CrmAccess>} />
         <Route path="*" element={<PageNotFound />} />
       </Routes>
       <Footer />
