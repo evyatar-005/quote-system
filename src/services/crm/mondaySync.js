@@ -34,15 +34,29 @@ function columnText(columnValues, columnId) {
 }
 
 // ── Column discovery (used by the admin mapping UI — never guess column ids) ─
+// For status-type columns, monday's settings_str carries the board's actual
+// configured labels (e.g. {"0":"ליד חדש","1":"עסקה נסגרה",...}) — surfaced
+// here as `labels` so the admin UI can offer a real dropdown of the values
+// that exist on THIS board, instead of a free-text guess.
 async function fetchBoardColumns(db, boardId) {
   const data = await mondayRequest(
     db,
-    `query ($boardId: [ID!]) { boards (ids: $boardId) { name columns { id title type } } }`,
+    `query ($boardId: [ID!]) { boards (ids: $boardId) { name columns { id title type settings_str } } }`,
     { boardId: [boardId] }
   );
   const board = data.boards && data.boards[0];
   if (!board) throw new Error('בורד לא נמצא');
-  return { boardName: board.name, columns: board.columns };
+  const columns = board.columns.map(c => {
+    let labels = null;
+    if (c.type === 'status' || c.type === 'color') {
+      try {
+        const parsed = JSON.parse(c.settings_str || '{}').labels || {};
+        labels = Object.values(parsed).filter(Boolean);
+      } catch (_) { labels = []; }
+    }
+    return { id: c.id, title: c.title, type: c.type, labels };
+  });
+  return { boardName: board.name, columns };
 }
 
 function findOrCreateCustomer(db, { name, phone, email }, ownerUsername) {

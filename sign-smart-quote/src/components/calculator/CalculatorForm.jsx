@@ -664,7 +664,7 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
                         </div>
                         <div className="min-w-0">
                           <div className="text-sm font-mono text-slate-400 truncate">{entry.code} · {entry.sub}</div>
-                          <div className="text-lg font-semibold text-slate-700 truncate">{entry.title}</div>
+                          <div className="text-lg font-semibold text-slate-700">{entry.title}</div>
                         </div>
                       </div>
                       {entry.price != null && <span className="text-lg font-bold text-amber-600 shrink-0">₪{entry.price}</span>}
@@ -709,7 +709,7 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
                                 <img src={CATEGORY_IMAGES[cat.parent]} alt={t.description} className="w-10 h-10 rounded-lg object-cover shrink-0" />
                               )}
                               <span className="text-base font-mono text-slate-400 w-14 shrink-0">{cat.parent}</span>
-                              <span className="text-lg font-semibold text-slate-700 truncate">{t.description}</span>
+                              <span className="text-lg font-semibold text-slate-700">{t.description}</span>
                             </div>
                             <span className="text-lg font-bold text-amber-600 shrink-0">₪{paymentAdjustedPrice(t.price)}</span>
                           </button>
@@ -727,7 +727,7 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
                                 <img src={CATEGORY_IMAGES[cat.parent]} alt={t.description} className="w-10 h-10 rounded-lg object-cover shrink-0" />
                               )}
                               <span className="text-base font-mono text-slate-400 w-14 shrink-0">{cat.parent}</span>
-                              <span className="text-lg font-semibold text-slate-700 truncate">{t.description}</span>
+                              <span className="text-lg font-semibold text-slate-700">{t.description}</span>
                             </div>
                             <span className="text-lg font-bold text-amber-600 shrink-0">₪{paymentAdjustedPrice(t.price_unit_1)}</span>
                           </button>
@@ -745,7 +745,7 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
                                 <img src={CATEGORY_IMAGES[cat.parent]} alt={t.description} className="w-10 h-10 rounded-lg object-cover shrink-0" />
                               )}
                               <span className="text-base font-mono text-slate-400 w-14 shrink-0">{cat.parent}</span>
-                              <span className="text-lg font-semibold text-slate-700 truncate">{t.description}</span>
+                              <span className="text-lg font-semibold text-slate-700">{t.description}</span>
                             </div>
                             <span className="text-lg font-bold text-amber-600 shrink-0">₪{paymentAdjustedPrice(t.selling_price)}</span>
                           </button>
@@ -760,7 +760,7 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
                           >
                             <div className="flex items-center gap-3 min-w-0">
                               <span className="text-base font-mono text-slate-400 w-14 shrink-0">{PRODUCT_CODES[t.product_type] || cat.parent}</span>
-                              <span className="text-lg font-semibold text-slate-700 truncate">{PRODUCT_NAMES[t.product_type]} — {t.height_cm} ס"מ / {t.thickness_mm} מ"מ</span>
+                              <span className="text-lg font-semibold text-slate-700">{PRODUCT_NAMES[t.product_type]} — {t.height_cm} ס"מ / {t.thickness_mm} מ"מ</span>
                             </div>
                             <span className="text-lg font-bold text-amber-600 shrink-0">₪{paymentAdjustedPrice(t.price_per_unit)}</span>
                           </button>
@@ -775,7 +775,7 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
                           >
                             <div className="flex items-center gap-3 min-w-0">
                               <span className="text-base font-mono text-slate-400 w-14 shrink-0">{cat.parent}</span>
-                              <span className="text-lg font-semibold text-slate-700 truncate">{t.description}</span>
+                              <span className="text-lg font-semibold text-slate-700">{t.description}</span>
                             </div>
                             <span className="text-lg font-bold text-amber-600 shrink-0">₪{paymentAdjustedPrice(t.price)}</span>
                           </button>
@@ -974,9 +974,7 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
         <Field label='מק"ט' width="w-64">
           <button
             type="button"
-            onClick={() => {
-              if (window.confirm('שינוי מק"ט ימחק את כל פרטי השורה שהוזנו (מידות, כמות, תוספות...). להמשיך?')) clearProduct();
-            }}
+            onClick={clearProduct}
             title='שנה מק"ט'
             className="h-10 px-1 rounded-none border-0 border-b-2 border-slate-300 bg-transparent hover:border-amber-400 transition-colors flex items-center gap-2 text-right overflow-hidden"
           >

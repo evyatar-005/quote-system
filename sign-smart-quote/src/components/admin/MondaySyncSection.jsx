@@ -30,7 +30,12 @@ export default function MondaySyncSection() {
   const [statusWon, setStatusWon] = useState("");
   const [statusLost, setStatusLost] = useState("");
   const [statusQuoted, setStatusQuoted] = useState("");
+  const [quoteFileCol, setQuoteFileCol] = useState("");
   const [creating, setCreating] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [editColumns, setEditColumns] = useState([]);
+  const [editQuoteFileCol, setEditQuoteFileCol] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -64,7 +69,7 @@ export default function MondaySyncSection() {
 
   const onBoardSelect = async (boardId) => {
     setSelectedBoardId(boardId);
-    setColumns([]); setNameCol(""); setPhoneCol(""); setEmailCol(""); setStatusCol("");
+    setColumns([]); setNameCol(""); setPhoneCol(""); setEmailCol(""); setStatusCol(""); setQuoteFileCol("");
     if (!boardId) return;
     setLoadingColumns(true);
     try {
@@ -85,12 +90,12 @@ export default function MondaySyncSection() {
       await mondaySync.createBoardMap({
         board_id: selectedBoardId,
         board_name: boardName,
-        column_map: { name: nameCol || undefined, phone: phoneCol || undefined, email: emailCol || undefined },
+        column_map: { name: nameCol || undefined, phone: phoneCol || undefined, email: emailCol || undefined, quote_file: quoteFileCol || undefined },
         status_column_id: statusCol || null,
         status_values: { won: statusWon || undefined, lost: statusLost || undefined, quoted: statusQuoted || undefined },
       });
       toast.success("הבורד מופה בהצלחה");
-      setSelectedBoardId(""); setColumns([]);
+      setSelectedBoardId(""); setColumns([]); setQuoteFileCol("");
       load();
     } catch (err) {
       toast.error(err.message || "מיפוי הבורד נכשל");
@@ -128,6 +133,37 @@ export default function MondaySyncSection() {
     }
   };
 
+  // Lets an admin add/change the "quote file" column on a board that was
+  // already mapped before this field existed, without deleting and
+  // recreating the whole mapping.
+  const startEdit = async (board) => {
+    setEditingId(board.id);
+    setEditColumns([]);
+    try {
+      const { columns } = await mondaySync.fetchColumns(board.board_id);
+      setEditColumns(columns);
+      const existing = JSON.parse(board.column_map || "{}");
+      setEditQuoteFileCol(existing.quote_file || "");
+    } catch (err) {
+      toast.error(err.message || "טעינת העמודות מהבורד נכשלה");
+    }
+  };
+
+  const saveEdit = async (board) => {
+    setSavingEdit(true);
+    try {
+      const existing = JSON.parse(board.column_map || "{}");
+      await mondaySync.updateBoardMap(board.id, { column_map: { ...existing, quote_file: editQuoteFileCol || undefined } });
+      toast.success("המיפוי עודכן");
+      setEditingId(null);
+      load();
+    } catch (err) {
+      toast.error(err.message || "העדכון נכשל");
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
@@ -154,22 +190,47 @@ export default function MondaySyncSection() {
       {boardMaps.length > 0 && (
         <div className="space-y-2">
           <div className="text-sm font-semibold text-slate-600">בורדים ממופים</div>
-          {boardMaps.map((b) => (
-            <div key={b.id} className="flex items-center justify-between gap-3 border border-black rounded-xl px-3 py-2 text-sm">
-              <div className="min-w-0">
-                <div className="font-medium truncate">{b.board_name || b.board_id}</div>
-                <div className="text-xs text-slate-400">
-                  {b.last_polled_at ? `נסרק לאחרונה: ${new Date(b.last_polled_at).toLocaleString("he-IL")}` : "טרם נסרק"}
-                  {b.last_error && <span className="text-red-500"> — {b.last_error}</span>}
+          {boardMaps.map((b) => {
+            const mappedQuoteFile = JSON.parse(b.column_map || "{}").quote_file;
+            return (
+              <div key={b.id} className="border border-black rounded-xl px-3 py-2 text-sm space-y-2">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-medium truncate">{b.board_name || b.board_id}</div>
+                    <div className="text-xs text-slate-400">
+                      {b.last_polled_at ? `נסרק לאחרונה: ${new Date(b.last_polled_at).toLocaleString("he-IL")}` : "טרם נסרק"}
+                      {b.last_error && <span className="text-red-500"> — {b.last_error}</span>}
+                      {" · "}
+                      {mappedQuoteFile ? <span className="text-emerald-600">קובץ הצעת מחיר ממופה</span> : <span className="text-amber-600">אין מיפוי לקובץ הצעת מחיר</span>}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Button size="sm" variant="outline" onClick={() => pullNow(b.id)} className="gap-1"><RefreshCw className="w-3.5 h-3.5" />משוך</Button>
+                    <Button size="sm" variant="outline" onClick={() => pushNow(b.id)} className="gap-1">דחוף סטטוס</Button>
+                    <Button size="sm" variant="outline" onClick={() => startEdit(b)}>ערוך מיפוי קובץ</Button>
+                    <Button size="sm" variant="ghost" onClick={() => removeMap(b.id)}><Trash2 className="w-3.5 h-3.5 text-red-500" /></Button>
+                  </div>
                 </div>
+                {editingId === b.id && (
+                  <div className="flex items-end gap-2 border-t border-slate-100 pt-2">
+                    {editColumns.length === 0 ? (
+                      <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
+                    ) : (
+                      <>
+                        <div className="flex-1">
+                          <ColumnPicker label="עמודת קובץ הצעת מחיר" columns={editColumns} value={editQuoteFileCol} onChange={setEditQuoteFileCol} />
+                        </div>
+                        <Button size="sm" onClick={() => saveEdit(b)} disabled={savingEdit}>
+                          {savingEdit ? <Loader2 className="w-4 h-4 animate-spin" /> : "שמור"}
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}>ביטול</Button>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
-              <div className="flex items-center gap-1 shrink-0">
-                <Button size="sm" variant="outline" onClick={() => pullNow(b.id)} className="gap-1"><RefreshCw className="w-3.5 h-3.5" />משוך</Button>
-                <Button size="sm" variant="outline" onClick={() => pushNow(b.id)} className="gap-1">דחוף סטטוס</Button>
-                <Button size="sm" variant="ghost" onClick={() => removeMap(b.id)}><Trash2 className="w-3.5 h-3.5 text-red-500" /></Button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -180,34 +241,59 @@ export default function MondaySyncSection() {
         {loadingColumns && <Loader2 className="w-5 h-5 animate-spin text-slate-400" />}
 
         {!!columns.length && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <>
+            {/* Full column dump — table view, exactly as the board defines them,
+                so nothing needs to be guessed before mapping the fields below. */}
+            <div className="border border-black rounded-xl overflow-hidden">
+              <table className="w-full text-xs">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className="text-right px-2 py-1.5 font-semibold text-slate-600">עמודה</th>
+                    <th className="text-right px-2 py-1.5 font-semibold text-slate-600">סוג</th>
+                    <th className="text-right px-2 py-1.5 font-semibold text-slate-600">ערכים אפשריים</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {columns.map((c) => (
+                    <tr key={c.id}>
+                      <td className="px-2 py-1.5">{c.title}</td>
+                      <td className="px-2 py-1.5 text-slate-400">{c.type}</td>
+                      <td className="px-2 py-1.5 text-slate-500">{c.labels?.length ? c.labels.join(", ") : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <ColumnPicker label="עמודת שם" columns={columns} value={nameCol} onChange={setNameCol} />
             <ColumnPicker label="עמודת טלפון" columns={columns} value={phoneCol} onChange={setPhoneCol} />
             <ColumnPicker label="עמודת אימייל" columns={columns} value={emailCol} onChange={setEmailCol} />
-            <ColumnPicker label="עמודת סטטוס (לדחיפה חזרה)" columns={columns} value={statusCol} onChange={setStatusCol} />
-            {statusCol && (
-              <>
-                <div className="space-y-1.5">
-                  <label className="text-xs text-slate-500">ערך הסטטוס עבור "זכינו"</label>
-                  <Input dir="rtl" value={statusWon} onChange={(e) => setStatusWon(e.target.value)} placeholder="למשל: זכה" />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs text-slate-500">ערך הסטטוס עבור "אבדנו"</label>
-                  <Input dir="rtl" value={statusLost} onChange={(e) => setStatusLost(e.target.value)} placeholder="למשל: אבד" />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-xs text-slate-500">ערך הסטטוס עבור "נשלחה הצעה"</label>
-                  <Input dir="rtl" value={statusQuoted} onChange={(e) => setStatusQuoted(e.target.value)} placeholder="למשל: נשלחה הצעה" />
-                </div>
-              </>
-            )}
+            <ColumnPicker label="עמודת קובץ הצעת מחיר (לדחיפה חזרה)" columns={columns} value={quoteFileCol} onChange={setQuoteFileCol} />
+            <ColumnPicker
+              label="עמודת סטטוס (לדחיפה חזרה)"
+              columns={columns}
+              value={statusCol}
+              onChange={(v) => { setStatusCol(v); setStatusWon(""); setStatusLost(""); setStatusQuoted(""); }}
+            />
+            {statusCol && (() => {
+              const statusLabels = columns.find((c) => c.id === statusCol)?.labels || [];
+              return (
+                <>
+                  <StatusValuePicker label='ערך הסטטוס עבור "זכינו"' labels={statusLabels} value={statusWon} onChange={setStatusWon} />
+                  <StatusValuePicker label='ערך הסטטוס עבור "אבדנו"' labels={statusLabels} value={statusLost} onChange={setStatusLost} />
+                  <StatusValuePicker label='ערך הסטטוס עבור "נשלחה הצעה"' labels={statusLabels} value={statusQuoted} onChange={setStatusQuoted} />
+                </>
+              );
+            })()}
             <div className="sm:col-span-2">
               <Button onClick={createMap} disabled={creating} className="gap-2">
                 {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
                 מפה בורד זה
               </Button>
             </div>
-          </div>
+            </div>
+          </>
         )}
       </div>
     </CostSectionCard>
@@ -263,6 +349,32 @@ function ColumnPicker({ label, columns, value, onChange }) {
           {columns.map((c) => <SelectItem key={c.id} value={c.id}>{c.title}</SelectItem>)}
         </SelectContent>
       </Select>
+    </div>
+  );
+}
+
+// If the chosen status column has a real label bank (fetched from monday's
+// own settings_str — see fetchBoardColumns), show a dropdown of THOSE exact
+// values instead of a free-text guess. Falls back to a plain input when the
+// column type has no label bank (or none was found).
+function StatusValuePicker({ label, labels, value, onChange }) {
+  if (labels && labels.length) {
+    return (
+      <div className="space-y-1.5">
+        <label className="text-xs text-slate-500">{label}</label>
+        <Select value={value} onValueChange={onChange}>
+          <SelectTrigger><SelectValue placeholder="ללא" /></SelectTrigger>
+          <SelectContent>
+            {labels.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-1.5">
+      <label className="text-xs text-slate-500">{label}</label>
+      <Input dir="rtl" value={value} onChange={(e) => onChange(e.target.value)} placeholder="הזן ערך ידנית" />
     </div>
   );
 }

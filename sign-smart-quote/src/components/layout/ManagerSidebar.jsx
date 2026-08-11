@@ -1,7 +1,7 @@
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
-  LogOut, Settings2, Info, BarChart3, Scissors, PenTool, ClipboardList, LineChart, Users, Target, MessagesSquare, Send,
+  LogOut, Settings2, Info, BarChart3, Scissors, PenTool, ClipboardList, LineChart, Users, Target, MessagesSquare, Send, FileStack,
 } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 
@@ -45,6 +45,11 @@ export default function ManagerSidebar() {
   return (
     <aside className="w-64 shrink-0 sticky top-24 h-[calc(100vh-6rem)] overflow-y-auto border-l border-black pl-4 space-y-6">
       <NavGroup title="מכירות">
+        {/* An admin browsing the agent calculator still needs their own
+            personal quote list — ManagerSidebar had no link to it at all,
+            which silently hid "ההצעות שלי" the moment an admin's calculator
+            page switched from AgentSidebar to this one. */}
+        <NavItem to="/my-quotes" icon={FileStack} label="ההצעות שלי" active={pathname === "/my-quotes"} />
         <NavItem to="/quotes" icon={ClipboardList} label="הצעות לבדיקה" active={pathname === "/quotes"} />
         <NavItem to="/quotes-archive" icon={LineChart} label="אנליטיקה" active={pathname === "/quotes-archive"} />
       </NavGroup>
