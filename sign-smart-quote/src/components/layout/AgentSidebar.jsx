@@ -11,10 +11,14 @@ import { useAuth } from "@/lib/AuthContext";
 // permissions as before: the admin-only link stays gated behind
 // user.role === "admin".
 
+// Icon-only rail that expands on hover — same behaviour as ManagerSidebar, so
+// an admin switching between the two menus never sees them behave differently.
 function NavGroup({ title, children }) {
   return (
     <div className="space-y-1.5">
-      <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider px-3">{title}</h3>
+      <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider px-3 truncate opacity-0 group-hover:opacity-100 transition-opacity">
+        {title}
+      </h3>
       <div className="space-y-1">{children}</div>
     </div>
   );
@@ -25,10 +29,11 @@ function NavItem({ to, icon: Icon, label, active }) {
     <Link to={to}>
       <Button
         variant="ghost"
+        title={label}
         className={`w-full justify-start gap-3 h-12 px-3 rounded-xl font-normal ${active ? "bg-primary/10 text-primary font-semibold" : ""}`}
       >
         {Icon && <Icon className="w-6 h-6 shrink-0" />}
-        {label}
+        <span className="whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">{label}</span>
       </Button>
     </Link>
   );
@@ -39,7 +44,8 @@ export default function AgentSidebar() {
   const { pathname } = useLocation();
 
   return (
-    <aside className="w-64 shrink-0 sticky top-24 h-[calc(100vh-6rem)] overflow-y-auto border-l border-black pl-4 space-y-6">
+    <aside className="group relative w-16 shrink-0 sticky top-24 h-[calc(100vh-6rem)] z-10">
+      <div className="absolute inset-y-0 right-0 w-16 group-hover:w-64 transition-[width] duration-200 ease-out overflow-y-auto overflow-x-hidden border-l border-black bg-background group-hover:shadow-2xl px-2 space-y-6">
       <NavGroup title="מכירות">
         <NavItem to="/my-day" icon={Sparkles} label="היום שלי" active={pathname === "/my-day"} />
         <NavItem to="/my-quotes" icon={FileStack} label="ההצעות שלי" active={pathname === "/my-quotes"} />
@@ -58,11 +64,12 @@ export default function AgentSidebar() {
         {user?.role === "admin" && (
           <NavItem to="/" icon={Settings2} label="הגדרות מנהל" active={pathname === "/"} />
         )}
-        <Button variant="ghost" onClick={logout} className="w-full justify-start gap-3 h-12 px-3 rounded-xl font-normal">
+        <Button variant="ghost" onClick={logout} title="התנתקות" className="w-full justify-start gap-3 h-12 px-3 rounded-xl font-normal">
           <LogOut className="w-6 h-6 shrink-0" />
-          התנתקות
+          <span className="whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">התנתקות</span>
         </Button>
       </NavGroup>
+      </div>
     </aside>
   );
 }
