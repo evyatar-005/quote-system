@@ -185,7 +185,19 @@ module.exports = function registerEntities(app, db, deps) {
     // username, not email — email is optional on a user account in this
     // internal system (several accounts have it blank), but username never is,
     // so this is the only field guaranteed to tie a quote back to its author.
-    row.created_by = user.username;                     // override client value
+    //
+    // Exception: a REVISED quote (QuoteDetailsModal's "שמור הצעה מתוקנת",
+    // parent_quote_number set) is created by whichever manager edited it —
+    // but ownership must stay with the original agent who brought the deal,
+    // not flip to the manager. Otherwise the revised row (which is what
+    // analytics/QuotesArchive actually count, per the v1.0.75 dedup) silently
+    // reattributes the sale away from the agent the moment a manager touches it.
+    let createdBy = user.username;
+    if (body.parent_quote_number) {
+      const parent = db.prepare(`SELECT created_by FROM signshop_quotes WHERE quote_number = ?`).get(body.parent_quote_number);
+      if (parent && parent.created_by) createdBy = parent.created_by;
+    }
+    row.created_by = createdBy;                          // override client value
     if (!provided.includes('created_by')) provided.push('created_by');
     const ins = db.prepare(
       `INSERT INTO signshop_quotes (${provided.join(', ')}) VALUES (${provided.map(c => '@' + c).join(', ')})`

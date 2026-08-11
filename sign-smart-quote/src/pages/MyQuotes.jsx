@@ -198,6 +198,29 @@ export default function MyQuotes() {
     }
   };
 
+  // Issues this quote's own Morning "quote" document (הצעת מחיר) — the
+  // customer-facing PDF itself, independent of "הנפק הזמנת עבודה" below
+  // (which converts/creates an order, type 100). Before this button existed
+  // there was no way for an agent to issue a quote-type Morning document from
+  // this screen at all — only from the calculator's own "הנפק" action at
+  // save time (MultiProductCalculator's handleIssue), which a lot of quotes
+  // never went through (e.g. anything sent for manager review first).
+  const handleIssueQuoteDoc = async (q) => {
+    if (issuingIds.has(q.id)) return;
+    await withIssuing(q.id, async () => {
+      try {
+        const doc = await convertMorningDocument(q.id, "quote");
+        const docUrl = doc?.url && (doc.url.he || doc.url.origin);
+        if (docUrl) setIssuedDocument({ url: docUrl, label: `הצעת מחיר ${q.quote_number}` });
+        const docs = await getLatestMorningDocuments([q.id]);
+        setMorningDocs((prev) => ({ ...prev, ...docs }));
+        toast.success(`הצעת מחיר ${q.quote_number} הונפקה במורנינג`);
+      } catch (err) {
+        toast.error(err?.message || "שגיאה בהנפקת הצעת המחיר");
+      }
+    });
+  };
+
   // Email/VAT-ID are never required to issue an order + payment link — an
   // agent who just wants a link to forward manually (WhatsApp etc.) shouldn't
   // have to chase down the client's contact details first. Whatever's already
@@ -505,6 +528,16 @@ export default function MyQuotes() {
                         {issuingIds.has(q.id) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
                         שלח קישור תשלום
                       </button>
+                      {!ownDoc && (
+                        <button
+                          onClick={() => handleIssueQuoteDoc(q)}
+                          disabled={issuingIds.has(q.id)}
+                          className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-black text-slate-600 hover:border-slate-500 hover:bg-slate-50 disabled:opacity-50 transition-colors"
+                        >
+                          {issuingIds.has(q.id) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
+                          הנפק הצעת מחיר
+                        </button>
+                      )}
                       {!alreadyOrder && (
                         <button
                           onClick={() => handleIssueOrder(q)}
