@@ -881,6 +881,14 @@ export default function QuoteDetailsModal({ quote, onClose, onSaved, readOnly = 
         price_with_vat: Math.round(finalTotalWithVat * 100) / 100,
         line_items: JSON.stringify(scaledLineItems),
         calculation_data: JSON.stringify({ ...calcData, itemDiscounts, overallDiscount, pricingMode, targetMarginPct }),
+        // Carried over unchanged from the original — without this, the revised
+        // quote had no builder_state at all, so "שכפל" on it in MyQuotes.jsx
+        // fell into the "לא ניתן לשחזר את פרטי המוצרים" fallback (client fields
+        // only, empty product list, nothing to edit). The manager's discount
+        // itself isn't reflected inside the reopened form — the agent still
+        // sees the original per-product numbers there — but the product
+        // configuration itself (what MyQuotes' "שכפל" actually needs) survives.
+        builder_state: quote.builder_state,
         notes,
         status: "approved",
         parent_quote_number: quote.quote_number,
