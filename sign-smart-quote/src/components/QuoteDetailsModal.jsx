@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { X, Loader2, CheckCircle2, Save, FileText, Receipt, Paperclip, Image as ImageIcon } from "lucide-react";
+import { X, Loader2, CheckCircle2, Save, FileText, Receipt, Paperclip, Image as ImageIcon, ChevronRight, ChevronLeft } from "lucide-react";
 import { PRODUCT_NAMES } from "@/components/calculator/CalculatorForm";
 import { base44 } from "@/api/base44Client";
 import { convertMorningDocument, getMorningHistory } from "@/api/morningClient";
@@ -51,9 +51,9 @@ function safeParse(raw, fallback) {
 }
 
 const Row = ({ label, value, className = "" }) => (
-  <div className={`flex justify-between items-center py-2 text-sm border-b border-white/20 last:border-b-0 ${className}`}>
-    <span className="text-zinc-400">{label}</span>
-    <span className="font-semibold text-white">{value}</span>
+  <div className={`flex justify-between items-center py-2 text-sm border-b border-zinc-200 last:border-b-0 ${className}`}>
+    <span className="text-zinc-600">{label}</span>
+    <span className="font-semibold text-zinc-900">{value}</span>
   </div>
 );
 
@@ -114,18 +114,18 @@ function QuoteAttachments({ quoteId }) {
               key={att.id}
               onClick={() => openAttachment(att)}
               title={att.original_name}
-              className="w-14 h-14 rounded-md overflow-hidden border border-white/15 hover:border-[#C9A84C]/60 bg-[#16161F] shrink-0"
+              className="w-14 h-14 rounded-md overflow-hidden border border-zinc-200 hover:border-[#C9A84C]/60 bg-zinc-50 shrink-0"
             >
               {thumbUrls[att.id]
                 ? <img src={thumbUrls[att.id]} alt={att.original_name} className="w-full h-full object-cover" />
-                : <div className="w-full h-full flex items-center justify-center"><ImageIcon className="w-4 h-4 text-zinc-600" /></div>}
+                : <div className="w-full h-full flex items-center justify-center"><ImageIcon className="w-4 h-4 text-zinc-400" /></div>}
             </button>
           ) : (
             <button
               key={att.id}
               onClick={() => openAttachment(att)}
               title={att.original_name}
-              className="flex items-center gap-1 px-2 py-1.5 rounded-md border border-white/15 hover:border-[#C9A84C]/60 bg-[#16161F] text-[11px] text-zinc-300 max-w-[9rem]"
+              className="flex items-center gap-1 px-2 py-1.5 rounded-md border border-zinc-200 hover:border-[#C9A84C]/60 bg-zinc-50 text-[11px] text-zinc-700 max-w-[9rem]"
             >
               <FileText className="w-3.5 h-3.5 shrink-0 text-zinc-500" />
               <span className="truncate">{att.original_name}</span>
@@ -246,8 +246,8 @@ const PRICING_MODE_LABELS = {
 // (the old עלות/רווח/% tiles above them were removed), so they get the space.
 const MiniRow = ({ label, value }) => (
   <div className="flex justify-between items-baseline gap-2 py-1 text-sm">
-    <span className="text-zinc-400 truncate">{label}</span>
-    <span className="font-semibold text-zinc-100 shrink-0">{value}</span>
+    <span className="text-zinc-600 truncate">{label}</span>
+    <span className="font-semibold text-zinc-900 shrink-0">{value}</span>
   </div>
 );
 
@@ -255,7 +255,7 @@ const MiniRow = ({ label, value }) => (
 // numbers inside the "סיכום" card (סך הכל עלות / רווח / רווח באחוזים) so they
 // read at a glance instead of blending into the rest of the summary's rows.
 const EmphasizedRow = ({ label, value, color = "gold" }) => {
-  const textClass = color === "green" ? "text-emerald-400" : "text-[#C9A84C]";
+  const textClass = color === "green" ? "text-emerald-600" : "text-[#8C6D1F]";
   const labelOpacity = color === "green" ? "" : "/80";
   return (
     <div className="flex justify-between items-baseline gap-2 py-1.5 text-base">
@@ -270,8 +270,8 @@ const EmphasizedRow = ({ label, value, color = "gold" }) => {
 // the one number that summarizes the whole card stands out immediately.
 const CardTotalRow = ({ label, value }) => (
   <div className="flex justify-between items-baseline gap-2 mt-1.5 px-2.5 py-1.5 rounded-md bg-[#C9A84C]/15 border border-[#C9A84C]/30">
-    <span className="text-xs font-semibold text-[#C9A84C]">{label}</span>
-    <span className="text-sm font-bold text-[#C9A84C] shrink-0">{value}</span>
+    <span className="text-xs font-semibold text-[#8C6D1F]">{label}</span>
+    <span className="text-sm font-bold text-[#8C6D1F] shrink-0">{value}</span>
   </div>
 );
 
@@ -282,9 +282,9 @@ function CostCard({ title, children, highlight = false }) {
   const rows = Array.isArray(children) ? children.filter(Boolean) : [children].filter(Boolean);
   if (rows.length === 0) return null;
   return (
-    <div className={highlight ? "bg-gradient-to-br from-[#C9A84C]/15 to-transparent border border-[#C9A84C]/30 rounded-lg p-4" : "bg-[#0C0C12] border border-white/10 rounded-lg p-4"}>
-      <h5 className={`text-xs font-semibold mb-2 uppercase tracking-wider ${highlight ? "text-[#C9A84C]" : "text-zinc-400"}`}>{title}</h5>
-      <div className="divide-y divide-white/5">{rows}</div>
+    <div className={highlight ? "bg-gradient-to-br from-[#C9A84C]/15 to-transparent border border-[#C9A84C]/30 rounded-lg p-4" : "bg-zinc-100 border border-zinc-200 rounded-lg p-4"}>
+      <h5 className={`text-xs font-semibold mb-2 uppercase tracking-wider ${highlight ? "text-[#8C6D1F]" : "text-zinc-600"}`}>{title}</h5>
+      <div className="divide-y divide-zinc-200">{rows}</div>
     </div>
   );
 }
@@ -415,7 +415,7 @@ function CostBreakdown({ result, livePrice, liveCost }) {
         if (!commissionRows.length && !hasArea) return null;
         return (
           <CostCard title="עמלות">
-            <div className="divide-y divide-white/5">
+            <div className="divide-y divide-zinc-200">
               <div className="space-y-0.5 pb-1.5">
                 {commissionRows}
                 {commissionRows.length > 0 && <CardTotalRow label="סך הכל עמלות" value={fmt(commissionTotal)} />}
@@ -490,20 +490,20 @@ function MorningSection({ quoteId, readOnly = false, morningDoc, onOpenMorningDo
 
   return (
     <div>
-      <h3 className="text-sm font-semibold text-zinc-300 mb-2 uppercase tracking-wider">מורנינג</h3>
-      <div className="bg-[#16161F] rounded-xl p-3 space-y-3">
+      <h3 className="text-sm font-semibold text-zinc-700 mb-2 uppercase tracking-wider">מורנינג</h3>
+      <div className="bg-zinc-50 rounded-xl p-3 space-y-3">
         {/* Same document (quote/order/invoice) the list rows in
             QuotesArchive/QuotesHistory already link to — surfaced here too so
             a manager who opened this modal doesn't have to close it and hunt
             for the row's own link just to see the actual Morning document. */}
         {morningDoc?.document_url && (
-          <div className="flex items-center justify-between gap-2 text-xs bg-[#0C0C12] border border-white/10 rounded-lg px-2.5 py-2">
-            <span className="text-zinc-300">
+          <div className="flex items-center justify-between gap-2 text-xs bg-zinc-100 border border-zinc-200 rounded-lg px-2.5 py-2">
+            <span className="text-zinc-700">
               {MORNING_TYPE_LABELS[morningDoc.morning_document_type] || "מסמך"} #{formatDocNumber(morningDoc.morning_document_number || morningDoc.morning_document_id)}
             </span>
             <button
               onClick={() => onOpenMorningDoc?.(morningDoc.document_url)}
-              className="flex items-center gap-1 text-[#C9A84C] hover:underline shrink-0"
+              className="flex items-center gap-1 text-[#8C6D1F] hover:underline shrink-0"
             >
               <FileText className="w-3.5 h-3.5" /> פתח מסמך
             </button>
@@ -519,7 +519,7 @@ function MorningSection({ quoteId, readOnly = false, morningDoc, onOpenMorningDo
                 key={toType}
                 onClick={() => handleConvert(toType, label)}
                 disabled={busyType !== null}
-                className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border border-white/15 text-zinc-200 hover:border-[#C9A84C]/50 hover:text-[#C9A84C] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border border-zinc-200 text-zinc-800 hover:border-[#C9A84C]/50 hover:text-[#8C6D1F] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {busyType === toType ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
                 {label}
@@ -528,7 +528,7 @@ function MorningSection({ quoteId, readOnly = false, morningDoc, onOpenMorningDo
           </div>
         )}
 
-        <div className="border-t border-white/10 pt-2 space-y-1.5 max-h-40 overflow-y-auto">
+        <div className="border-t border-zinc-200 pt-2 space-y-1.5 max-h-40 overflow-y-auto">
           {historyError ? (
             <p className="text-xs text-zinc-500">אין היסטוריית מורנינג להצעה זו.</p>
           ) : !history ? (
@@ -537,10 +537,10 @@ function MorningSection({ quoteId, readOnly = false, morningDoc, onOpenMorningDo
             <p className="text-xs text-zinc-500">אין פעולות מורנינג שבוצעו עדיין.</p>
           ) : (
             history.log.map((entry) => (
-              <div key={entry.id} className="flex items-center justify-between gap-2 text-xs py-1 border-b border-white/5 last:border-b-0">
+              <div key={entry.id} className="flex items-center justify-between gap-2 text-xs py-1 border-b border-zinc-100 last:border-b-0">
                 <div className="flex items-center gap-1.5 min-w-0">
                   <Receipt className="w-3 h-3 text-zinc-500 shrink-0" />
-                  <span className="text-zinc-300 truncate">{entry.action}</span>
+                  <span className="text-zinc-700 truncate">{entry.action}</span>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <span className="text-zinc-500">{new Date(entry.created_at).toLocaleString("he-IL")}</span>
@@ -562,7 +562,7 @@ const DiscountInput = ({ discount, onChange }) => (
     <select
       value={discount.type}
       onChange={(e) => onChange({ ...discount, type: e.target.value })}
-      className="h-9 rounded-md border border-white/25 bg-[#16161F] px-2 text-sm text-zinc-100 focus:outline-none"
+      className="h-9 rounded-md border border-zinc-300 bg-zinc-50 px-2 text-sm text-zinc-900 focus:outline-none"
     >
       <option value="amount">סכום (₪)</option>
       <option value="percent">אחוז (%)</option>
@@ -576,7 +576,7 @@ const DiscountInput = ({ discount, onChange }) => (
       value={discount.value}
       onChange={(e) => onChange({ ...discount, value: e.target.value })}
       placeholder="0"
-      className="h-9 flex-1 rounded-md border border-white/25 bg-[#16161F] px-3 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none"
+      className="h-9 flex-1 rounded-md border border-zinc-300 bg-zinc-50 px-3 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none"
     />
   </div>
 );
@@ -594,7 +594,7 @@ const CompactField = ({ label, value, onChange, suffix, max }) => (
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder="0"
-        className="h-8 w-full rounded-md border border-white/25 bg-[#16161F] pr-2 pl-6 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none"
+        className="h-8 w-full rounded-md border border-zinc-300 bg-zinc-50 pr-2 pl-6 text-sm text-zinc-900 placeholder:text-zinc-400 focus:outline-none"
       />
       <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-zinc-500 pointer-events-none">{suffix}</span>
     </div>
@@ -709,7 +709,16 @@ export default function QuoteDetailsModal({ quote, onClose, onSaved, readOnly = 
     [calcData]
   );
 
-  const [selectedIndex, setSelectedIndex] = useState(items[0]?.index ?? 0);
+  // One screen per product, plus a final summary screen — the whole modal used
+  // to be a 3-column wall of numbers, which managers found unreadable. `step`
+  // indexes items[] first (0..items.length-1), and the last step is the summary
+  // (prices / pricing mode / Morning / save).
+  const [step, setStep] = useState(0);
+  // Each screen starts at its top — otherwise the scroll position of the
+  // previous (usually longer) screen carries over and the next one opens
+  // halfway down.
+  const contentRef = useRef(null);
+  useEffect(() => { contentRef.current?.scrollTo({ top: 0 }); }, [step]);
   const [itemDiscounts, setItemDiscounts] = useState(() => calcData?.itemDiscounts || {});
   const [overallDiscount, setOverallDiscount] = useState(() => calcData?.overallDiscount || { type: "amount", value: "" });
   const [saving, setSaving] = useState(false);
@@ -727,7 +736,33 @@ export default function QuoteDetailsModal({ quote, onClose, onSaved, readOnly = 
   // the slider never lands on a division that explodes the price.
   const maxTargetMarginPct = commissionPct != null ? Math.max(1, Math.floor((1 - commissionPct) * 100) - 2) : 90;
 
-  const selectedItem = items.find((it) => (it.index ?? 0) === selectedIndex) || items[0];
+  // line_items is a FLAT list (main row of item 0, its extra rows, main row of
+  // item 1, …) — the same order buildLineItems produces in the calculator and
+  // that handleSave below relies on. Slicing it back per item is what lets each
+  // product screen show the very rows the agent typed (description, free text,
+  // quantity, unit price) instead of a bare cost breakdown.
+  const rowsByItem = useMemo(() => {
+    const out = [];
+    let li = 0;
+    items.forEach((item) => {
+      const results = [item.result, ...(item.extraRows || []).map((r) => r.result)].filter(Boolean);
+      const sources = [item, ...(item.extraRows || []).filter((r) => r.result)];
+      out.push(
+        results.map((result, k) => ({
+          result,
+          source: sources[k],
+          line: lineItems[li++] || null,
+          isExtra: k > 0,
+        }))
+      );
+    });
+    return out;
+  }, [items, lineItems]);
+
+  const stepCount = items.length + 1;
+  const isSummary = step >= items.length;
+  const selectedItem = items[Math.min(step, items.length - 1)] || null;
+  const selectedIndex = selectedItem?.index ?? 0;
   const selectedAgg = selectedItem ? aggregateItem(selectedItem) : null;
 
   // Live discount for the item currently open in column 3 — only meaningful in
@@ -854,115 +889,189 @@ export default function QuoteDetailsModal({ quote, onClose, onSaved, readOnly = 
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-2" onClick={onClose}>
       <div
-        className="relative bg-[#111118] border border-white/25 rounded-2xl w-full max-w-[98vw] h-[92vh] flex flex-col"
+        className="relative bg-white border border-zinc-300 rounded-2xl w-full max-w-[98vw] h-[95vh] shadow-2xl flex flex-col"
         dir="rtl"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Close button only — the client/quote-number/payment header moved
-            into the top of the item-list column below, so the rest of the
-            modal's height goes to the actual content (pricing/discount/save
-            no longer need scrolling to reach). */}
+        {/* Close button — sits over the sticky header below. */}
         <button
           onClick={onClose}
-          className="absolute left-3 top-3 z-10 p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+          className="absolute left-3 top-3 z-10 p-1.5 rounded-lg hover:bg-zinc-100 transition-colors"
         >
-          <X className="w-4 h-4 text-zinc-400" />
+          <X className="w-4 h-4 text-zinc-600" />
         </button>
 
-        {/* Main body — item list (right, narrow) + item detail (left, wide).
-            Freed from sharing width with the whole-quote overview, which now
-            lives in the full-width bar below instead of a third column. */}
-        <div className="flex-1 min-h-0 flex flex-col lg:flex-row divide-y lg:divide-y-0 lg:divide-x lg:divide-x-reverse divide-white/10 overflow-hidden">
-          {/* Item picker */}
-          <div className="lg:w-60 lg:shrink-0 overflow-y-auto p-2 space-y-1.5">
-            <div className="px-1 pb-2 mb-1 border-b border-white/10">
-              <h2 className="text-sm font-bold text-white truncate">{quote.client_name}</h2>
-              <p className="text-[11px] text-zinc-500 mt-0.5 truncate">
+        {/* Sticky header — who the quote is for + which screen you're on.
+            Everything else is one screen at a time (see `step`). */}
+        <div className="shrink-0 border-b border-zinc-200 px-4 pt-3 pb-2 pl-12">
+            <div className="flex items-center flex-wrap gap-x-3 gap-y-1">
+              <h2 className="text-base font-bold text-zinc-900">
                 {quote.quote_number}
-                {quote.payment_type && ` · ${paymentTypeLabel(quote.payment_type)}`}
-              </p>
-              {quote.agent_note && (
-                <p className="text-[11px] text-amber-300 bg-amber-500/10 border border-amber-500/25 rounded-md px-2 py-1 mt-1.5 whitespace-pre-wrap">
-                  <span className="font-semibold">הערת סוכן: </span>{quote.agent_note}
-                </p>
+                <span className="text-zinc-400 font-normal"> · </span>
+                {quote.client_name}
+              </h2>
+              {quote.payment_type && (
+                <span className="text-[11px] text-zinc-500">{paymentTypeLabel(quote.payment_type)}</span>
               )}
               <QuoteAttachments quoteId={quote.id} />
-              {/* Free-text the agent wrote per line (תיאור / הערות גרפיקה) —
-                  saved only on line_items, never on calculation_data, so the
-                  per-item cost view below can't show it and it was invisible
-                  to the reviewing manager until now. */}
-              {(() => {
-                const notes = lineItems
-                  .map((li) => [li.description, li.freeText].filter((s) => s && String(s).trim()).join(" — "))
-                  .filter(Boolean);
-                if (!notes.length) return null;
-                return (
-                  <div className="text-[11px] text-zinc-300 bg-white/5 border border-white/10 rounded-md px-2 py-1.5 mt-1.5 space-y-1">
-                    <span className="font-semibold text-zinc-400">תיאורי השורות והערות גרפיקה:</span>
-                    {notes.map((t, i) => (
-                      <p key={i} className="whitespace-pre-wrap leading-snug">• {t}</p>
-                    ))}
-                  </div>
-                );
-              })()}
             </div>
-            <h3 className="text-[11px] font-semibold text-zinc-400 mb-1 uppercase tracking-wider px-1">פריטים</h3>
-            {items.map((it, i) => {
-              const idx = it.index ?? 0;
-              const isSelected = idx === selectedIndex;
-              const label = it.productType ? (PRODUCT_NAMES[it.productType] || it.productType) : `מוצר ${idx + 1}`;
-              const disc = itemDiscounts[idx];
-              const pricing = itemPricings[i];
-              const priceChanged = pricing && Math.abs(pricing.price - pricing.original) > 0.01;
-              return (
-                <button
-                  key={idx}
-                  onClick={() => setSelectedIndex(idx)}
-                  className={`w-full text-right rounded-lg p-2 border transition-all ${
-                    isSelected ? "border-[#C9A84C]/50 bg-[#C9A84C]/10" : "border-white/15 bg-[#16161F] hover:border-white/25"
-                  }`}
-                >
-                  <div className={`text-xs font-semibold truncate ${isSelected ? "text-[#C9A84C]" : "text-zinc-200"}`}>
-                    {label}{dimsLabel(it) ? ` · ${dimsLabel(it)}` : ""}
-                  </div>
-                  <div className="text-[11px] text-zinc-500 truncate mt-0.5">
-                    {items.length > 1 ? `מוצר ${idx + 1}` : "מוצר"}
-                    {it.quantity ? ` · כמות ${it.quantity}` : ""}
-                  </div>
-                  {pricingMode === "discount" && disc?.value ? (
-                    <div className="text-[11px] text-emerald-400 mt-1">הנחה: {disc.type === "percent" ? `${disc.value}%` : fmt(disc.value)}</div>
-                  ) : pricingMode !== "discount" && priceChanged ? (
-                    <div className="text-[11px] text-emerald-400 mt-1">{fmt(pricing.price)}</div>
-                  ) : null}
-                </button>
-              );
-            })}
-          </div>
+            {quote.agent_note && (
+              <p className="text-[11px] text-amber-700 bg-amber-500/10 border border-amber-500/25 rounded-md px-2 py-1 mt-1.5 whitespace-pre-wrap">
+                <span className="font-semibold">הערת סוכן: </span>{quote.agent_note}
+              </p>
+            )}
+            {/* Step chips — the old right-hand item list, flattened into one
+                thin row. Tapping a chip jumps straight to that screen; the
+                arrows at the bottom walk through them in order. */}
+            <div className="flex gap-1.5 mt-2 overflow-x-auto pb-0.5">
+              {items.map((it, i) => {
+                const idx = it.index ?? 0;
+                const isCurrent = !isSummary && i === step;
+                const label = it.productType ? (PRODUCT_NAMES[it.productType] || it.productType) : `מוצר ${idx + 1}`;
+                const disc = itemDiscounts[idx];
+                const pricing = itemPricings[i];
+                const priceChanged = pricing && Math.abs(pricing.price - pricing.original) > 0.01;
+                const changed = pricingMode === "discount" ? !!disc?.value : priceChanged;
+                return (
+                  <button
+                    key={idx}
+                    onClick={() => setStep(i)}
+                    title={label}
+                    // An edited product stays green wherever you are in the
+                    // flow, so it's obvious at a glance which ones you already
+                    // touched — the current-screen ring is drawn on top of it.
+                    className={`shrink-0 rounded-full px-3 py-1 text-[11px] border transition-all ${
+                      changed
+                        ? "border-emerald-500 bg-emerald-50 text-emerald-700 font-semibold"
+                        : isCurrent
+                        ? "border-[#C9A84C] bg-[#C9A84C]/15 text-[#8C6D1F] font-semibold"
+                        : "border-zinc-200 text-zinc-600 hover:border-zinc-400"
+                    } ${isCurrent ? "ring-2 ring-offset-1 ring-[#C9A84C]" : ""}`}
+                  >
+                    מוצר {idx + 1}
+                    {changed && <span className="font-semibold"> · נערך</span>}
+                  </button>
+                );
+              })}
+              <button
+                onClick={() => setStep(items.length)}
+                className={`shrink-0 rounded-full px-3 py-1 text-[11px] border transition-all ${
+                  isSummary
+                    ? "border-[#C9A84C] bg-[#C9A84C]/15 text-[#8C6D1F] font-semibold"
+                    : "border-zinc-200 text-zinc-600 hover:border-zinc-400"
+                }`}
+              >
+                סיכום ומחירים
+              </button>
+            </div>
+        </div>
 
-          {/* Selected item detail + discount — now the widest column */}
-          <div className="flex-1 overflow-y-auto p-6 pt-10 space-y-4">
-            {selectedItem ? (
+        {/* One screen at a time: a product, or the closing summary. */}
+        <div ref={contentRef} className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3">
+            {!isSummary && (selectedItem ? (
               <>
-                <div className="text-sm font-bold text-white">
-                  {items.length > 1 ? `מוצר ${selectedIndex + 1}` : "מוצר"}
-                  {selectedItem.productType ? ` — ${PRODUCT_NAMES[selectedItem.productType] || selectedItem.productType}` : ""}
-                  {selectedItem.thicknessMm && <span className="text-zinc-400 font-normal"> · עובי {selectedItem.thicknessMm} מ״מ</span>}
-                  {dimsLabel(selectedItem) && <span className="text-zinc-400 font-normal"> · מידות {dimsLabel(selectedItem)}</span>}
-                  {selectedItem.result?.totalArea != null && (
-                    <span className="text-zinc-400 font-normal"> · סה״כ {selectedItem.result.totalArea.toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} מ״ר</span>
-                  )}
-                </div>
-                {/* Price/quantity — used to live in the separate "פירוט ההצעה"
-                    card (removed, duplicated the פריטים sidebar); this is the
-                    one place left that shows it, using the LIVE price so it
-                    reacts to a discount immediately like everything else in
-                    this panel. Its own line (not squeezed into the title row
-                    above) so "X יחידות × מחיר ליחידה" reads unambiguously. */}
-                <div className="text-xs text-zinc-400">
-                  {selectedItem.quantity || 1} יחידות × {fmt(selectedPricing.price / (selectedItem.quantity || 1))} ליחידה
-                </div>
+                {(() => {
+                  const rows = rowsByItem[Math.min(step, items.length - 1)] || [];
+                  const totalArea = rows.reduce((s, r) => s + (r.result?.totalArea || 0), 0);
+                  const notes = rows
+                    .map((r) => [r.line?.description, r.line?.freeText].filter((t) => t && String(t).trim()).join(" — "))
+                    .filter(Boolean);
+                  // The LIVE per-row price: the saved unitPrice scaled by the
+                  // same ratio the whole item's price moved under the active
+                  // pricing mode / discount, so the table never contradicts the
+                  // סיכום card next to it.
+                  const ratio = selectedPricing.original > 0 ? selectedPricing.price / selectedPricing.original : 1;
+                  return (
+                    <>
+                      <div className="flex items-baseline flex-wrap gap-x-3 gap-y-1">
+                        <span className="text-base font-bold text-zinc-900">
+                          {items.length > 1 ? `מוצר ${selectedIndex + 1}` : "מוצר"}
+                          {selectedItem.productType ? ` — ${PRODUCT_NAMES[selectedItem.productType] || selectedItem.productType}` : ""}
+                        </span>
+                        {selectedItem.thicknessMm && <span className="text-xs text-zinc-600">עובי {selectedItem.thicknessMm} מ״מ</span>}
+                        <span className="mr-auto text-sm font-semibold text-[#8C6D1F] bg-[#C9A84C]/15 border border-[#C9A84C]/40 rounded-lg px-2.5 py-0.5">
+                          סה״כ {totalArea.toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} מ״ר
+                        </span>
+                      </div>
+
+                      {/* The item's rows exactly as the agent built them in the
+                          calculator — main row first, then any extra sizes. */}
+                      <div className="overflow-x-auto rounded-xl border border-zinc-200">
+                        <table className="w-full text-sm">
+                          <thead className="bg-zinc-100 text-[11px] uppercase tracking-wider text-zinc-500">
+                            <tr>
+                              <th className="text-right font-semibold px-3 py-2">מוצר</th>
+                              <th className="text-right font-semibold px-3 py-2 whitespace-nowrap">מידות</th>
+                              <th className="text-right font-semibold px-3 py-2 whitespace-nowrap">מ״ר</th>
+                              <th className="text-right font-semibold px-3 py-2 whitespace-nowrap">כמות</th>
+                              <th className="text-right font-semibold px-3 py-2 whitespace-nowrap">מחיר למ״ר (ללא מע״מ)</th>
+                              <th className="text-right font-semibold px-3 py-2 whitespace-nowrap">מחיר ליח׳ (ללא מע״מ)</th>
+                              <th className="text-right font-semibold px-3 py-2 whitespace-nowrap">סה״כ (ללא מע״מ)</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-zinc-200">
+                            {rows.map((r, ri) => {
+                              const qty = Number(r.line?.quantity ?? r.source?.quantity ?? 1) || 1;
+                              const lineTotal = (r.result?.sellingPriceAll || 0) * ratio;
+                              return (
+                                <tr key={ri} className="text-zinc-800">
+                                  <td className="px-3 py-2">
+                                    {r.line?.description
+                                      || (r.isExtra
+                                        ? r.source?.lineLabel || `שורה נוספת ${ri + 1}`
+                                        : PRODUCT_NAMES[selectedItem.productType] || selectedItem.productType)}
+                                    {r.isExtra && r.line?.freeText && (
+                                      <span className="text-zinc-500"> · {r.line.freeText}</span>
+                                    )}
+                                  </td>
+                                  <td className="px-3 py-2 whitespace-nowrap text-zinc-600">{dimsLabel(r.source) || "—"}</td>
+                                  <td className="px-3 py-2 whitespace-nowrap text-zinc-600">
+                                    {r.result?.totalArea != null
+                                      ? r.result.totalArea.toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                                      : "—"}
+                                  </td>
+                                  <td className="px-3 py-2 whitespace-nowrap">{qty}</td>
+                                  {/* מחיר למ״ר ללקוח — נגזר מהמחיר החי חלקי השטח
+                                      הכולל של השורה, ולכן זז יחד עם ההנחה. שורות
+                                      ללא שטח (מוצרי יחידה) מציגות "—". */}
+                                  <td className="px-3 py-2 whitespace-nowrap text-zinc-600">
+                                    {r.result?.totalArea > 0 ? fmt(lineTotal / r.result.totalArea) : "—"}
+                                  </td>
+                                  <td className="px-3 py-2 whitespace-nowrap">{fmt(lineTotal / qty)}</td>
+                                  <td className="px-3 py-2 whitespace-nowrap font-semibold">{fmt(lineTotal)}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                          <tfoot className="bg-zinc-50 border-t border-zinc-200">
+                            <tr className="text-zinc-900 font-bold">
+                              <td className="px-3 py-2" colSpan={4}>סה״כ למוצר (ללא מע״מ)</td>
+                              <td className="px-3 py-2 whitespace-nowrap font-normal text-zinc-600">
+                                {totalArea > 0 ? `${fmt(selectedPricing.price / totalArea)} למ״ר` : ""}
+                              </td>
+                              <td className="px-3 py-2" />
+                              <td className="px-3 py-2 whitespace-nowrap">{fmt(selectedPricing.price)}</td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+
+                      {/* תיאור והערות גרפיקה — free text the agent typed per
+                          line. Lives on line_items only, so this is the one
+                          place a reviewing manager can see it. */}
+                      {notes.length > 0 && (
+                        <div className="rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-700 space-y-1">
+                          <div className="font-semibold text-zinc-500">תיאור והערות גרפיקה</div>
+                          {notes.map((t, ni) => (
+                            <p key={ni} className="whitespace-pre-wrap leading-snug">• {t}</p>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
 
                 {/* The old עלות סך הכל / רווח תפעולי / רווח (%) tiles that used
                     to live here were removed — those same three numbers are
@@ -1016,7 +1125,7 @@ export default function QuoteDetailsModal({ quote, onClose, onSaved, readOnly = 
                 {/* Per-item discount entry + the save button are write controls —
                     hidden in readOnly (the archive screen). */}
                 {!readOnly && (
-                <div className="bg-[#16161F] rounded-xl p-3">
+                <div className="bg-zinc-50 rounded-xl p-3">
                   {pricingMode !== "discount" ? (
                     <p className="text-xs text-zinc-500">
                       התמחור לפריט זה נקבע כרגע לפי מצב "{PRICING_MODE_LABELS[pricingMode]}" שנבחר למטה — הנחה פרטנית מושבתת כל עוד המצב הזה פעיל.
@@ -1036,7 +1145,7 @@ export default function QuoteDetailsModal({ quote, onClose, onSaved, readOnly = 
                       />
                       {selectedDiscount.value ? (
                         <div className="pt-2 flex justify-between text-xs">
-                          <span className="text-zinc-500">רווח: {fmt(selectedAgg.profitTotal)} ← <span className={selectedProfitAfterDiscount < 0 ? "text-red-400" : "text-zinc-300"}>{fmt(selectedProfitAfterDiscount)}</span></span>
+                          <span className="text-zinc-500">רווח: {fmt(selectedAgg.profitTotal)} ← <span className={selectedProfitAfterDiscount < 0 ? "text-red-600" : "text-zinc-700"}>{fmt(selectedProfitAfterDiscount)}</span></span>
                         </div>
                       ) : null}
                     </>
@@ -1044,38 +1153,25 @@ export default function QuoteDetailsModal({ quote, onClose, onSaved, readOnly = 
                 </div>
                 )}
 
-                {!readOnly && (
-                <button
-                  onClick={handleSave}
-                  disabled={saving}
-                  title="שומר הצעה מתוקנת חדשה (מס׳ חדש), הכוללת את כל ההנחות שהוזנו — הפריט הזה וכל השאר"
-                  className={`w-full flex items-center justify-center gap-2 py-2 rounded-xl text-sm font-semibold transition-all ${
-                    saved ? "bg-emerald-500/20 border border-emerald-500/30 text-emerald-400" : "bg-[#C9A84C] text-black hover:bg-[#C9A84C]/90 disabled:opacity-40"
-                  }`}
-                >
-                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : saved ? <><CheckCircle2 className="w-4 h-4" /> נשמר!</> : <><Save className="w-4 h-4" /> שמור הצעה מתוקנת</>}
-                </button>
-                )}
               </>
             ) : (
               <p className="text-zinc-500 text-sm">אין פריטים עם פירוט עלויות שמור להצעה זו.</p>
-            )}
-          </div>
-        </div>
+            ))}
 
-        {/* Bottom bar — whole-quote overview, full width. Moved out of the
-            3-column layout so the item list + item detail above get the full
-            width to themselves; this bar just summarizes the numbers. */}
-        <div className="shrink-0 border-t border-white/20 bg-[#0C0C12] p-4 sm:p-6 max-h-[42vh] overflow-y-auto">
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr_1fr_1.2fr] gap-4">
+            {/* Closing screen — whole-quote numbers, pricing mode, Morning and
+                the save button. The per-product screens never show these, so a
+                manager reads one product at a time and decides here. */}
+            {isSummary && (
+            <div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* "פירוט ההצעה" (the line-items list) was removed — it duplicated
                 the פריטים sidebar (same product names) and the price/quantity
                 now shown in the item header above. הערות stays — it's the
                 only thing here with nowhere else to live. */}
             {quote.notes && (
               <div>
-                <h3 className="text-sm font-semibold text-zinc-300 mb-2 uppercase tracking-wider">הערות</h3>
-                <div className="bg-[#16161F] rounded-xl p-3 text-sm text-zinc-300">{quote.notes}</div>
+                <h3 className="text-sm font-semibold text-zinc-700 mb-2 uppercase tracking-wider">הערות</h3>
+                <div className="bg-zinc-50 rounded-xl p-3 text-sm text-zinc-700">{quote.notes}</div>
               </div>
             )}
 
@@ -1083,31 +1179,31 @@ export default function QuoteDetailsModal({ quote, onClose, onSaved, readOnly = 
             <div className="space-y-3">
               {quote.payment_type && (
                 <div>
-                  <h3 className="text-sm font-semibold text-zinc-300 mb-2 uppercase tracking-wider">פרטי תשלום</h3>
-                  <div className="bg-[#16161F] rounded-xl p-3 text-sm">
+                  <h3 className="text-sm font-semibold text-zinc-700 mb-2 uppercase tracking-wider">פרטי תשלום</h3>
+                  <div className="bg-zinc-50 rounded-xl p-3 text-sm">
                     <Row label="דרך תשלום" value={paymentTypeLabel(quote.payment_type)} />
                   </div>
                 </div>
               )}
               {items.length > 0 && (
                 <div>
-                  <h3 className="text-sm font-semibold text-zinc-300 mb-2 uppercase tracking-wider">עלות ורווח — ההצעה כולה</h3>
-                  <div className="bg-[#16161F] rounded-xl p-3 grid grid-cols-2 gap-3 text-sm">
+                  <h3 className="text-sm font-semibold text-zinc-700 mb-2 uppercase tracking-wider">עלות ורווח — ההצעה כולה</h3>
+                  <div className="bg-zinc-50 rounded-xl p-3 grid grid-cols-2 gap-3 text-sm">
                     <div>
-                      <div className="text-zinc-400">עלות גולמית</div>
-                      <div className="font-semibold text-white mt-0.5">{fmt(quoteAgg.materialTotal)}</div>
+                      <div className="text-zinc-600">עלות גולמית</div>
+                      <div className="font-semibold text-zinc-900 mt-0.5">{fmt(quoteAgg.materialTotal)}</div>
                     </div>
                     <div>
-                      <div className="text-zinc-400">עלות תפעולית</div>
-                      <div className="font-semibold text-white mt-0.5">{fmt(quoteOperationalTotal)}</div>
+                      <div className="text-zinc-600">עלות תפעולית</div>
+                      <div className="font-semibold text-zinc-900 mt-0.5">{fmt(quoteOperationalTotal)}</div>
                     </div>
                     <div>
-                      <div className="text-zinc-400">רווח (₪){hasAnyDiscount && <span className="text-zinc-600"> · לפני {fmt(quoteAgg.profitTotal)}</span>}</div>
-                      <div className={`font-semibold mt-0.5 ${quoteProfitLive < 0 ? "text-red-400" : "text-emerald-400"}`}>{fmt(quoteProfitLive)}</div>
+                      <div className="text-zinc-600">רווח (₪){hasAnyDiscount && <span className="text-zinc-400"> · לפני {fmt(quoteAgg.profitTotal)}</span>}</div>
+                      <div className={`font-semibold mt-0.5 ${quoteProfitLive < 0 ? "text-red-600" : "text-emerald-600"}`}>{fmt(quoteProfitLive)}</div>
                     </div>
                     <div>
-                      <div className="text-zinc-400">רווח תפעולי (%){hasAnyDiscount && <span className="text-zinc-600"> · לפני {quoteAgg.marginPct.toFixed(1)}%</span>}</div>
-                      <div className={`font-semibold mt-0.5 ${quoteMarginLive < 0 ? "text-red-400" : "text-emerald-400"}`}>{quoteMarginLive.toFixed(1)}%</div>
+                      <div className="text-zinc-600">רווח תפעולי (%){hasAnyDiscount && <span className="text-zinc-400"> · לפני {quoteAgg.marginPct.toFixed(1)}%</span>}</div>
+                      <div className={`font-semibold mt-0.5 ${quoteMarginLive < 0 ? "text-red-600" : "text-emerald-600"}`}>{quoteMarginLive.toFixed(1)}%</div>
                     </div>
                   </div>
                 </div>
@@ -1121,8 +1217,8 @@ export default function QuoteDetailsModal({ quote, onClose, onSaved, readOnly = 
                 pricingMode/discounts are initialised from calculation_data. */}
             {!readOnly && (
             <div>
-              <h3 className="text-sm font-semibold text-zinc-300 mb-2 uppercase tracking-wider">מצב תמחור</h3>
-              <div className="bg-[#16161F] rounded-xl p-3 space-y-3">
+              <h3 className="text-sm font-semibold text-zinc-700 mb-2 uppercase tracking-wider">מצב תמחור</h3>
+              <div className="bg-zinc-50 rounded-xl p-3 space-y-3">
                 <div className="grid grid-cols-2 gap-1.5">
                   {Object.entries(PRICING_MODE_LABELS).map(([key, label]) => (
                     <button
@@ -1138,7 +1234,7 @@ export default function QuoteDetailsModal({ quote, onClose, onSaved, readOnly = 
                       }}
                       disabled={key !== "discount" && commissionPct == null}
                       className={`text-xs px-2 py-1.5 rounded-lg border transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
-                        pricingMode === key ? "border-[#C9A84C] bg-[#C9A84C]/15 text-[#C9A84C] font-semibold" : "border-white/15 text-zinc-400 hover:border-white/25"
+                        pricingMode === key ? "border-[#C9A84C] bg-[#C9A84C]/15 text-[#8C6D1F] font-semibold" : "border-zinc-200 text-zinc-600 hover:border-zinc-400"
                       }`}
                     >
                       {label}
@@ -1147,7 +1243,7 @@ export default function QuoteDetailsModal({ quote, onClose, onSaved, readOnly = 
                 </div>
 
                 {commissionPct == null && pricingMode !== "discount" && (
-                  <p className="text-xs text-amber-400">הצעה ישנה ללא נתוני עמלות שמורים — מצבי תמחור מתקדמים אינם זמינים עליה.</p>
+                  <p className="text-xs text-amber-600">הצעה ישנה ללא נתוני עמלות שמורים — מצבי תמחור מתקדמים אינם זמינים עליה.</p>
                 )}
 
                 {pricingMode === "discount" && (
@@ -1158,7 +1254,7 @@ export default function QuoteDetailsModal({ quote, onClose, onSaved, readOnly = 
                 )}
 
                 {(pricingMode === "max_sqm" || pricingMode === "min_sqm") && (
-                  <p className="text-xs text-zinc-400">
+                  <p className="text-xs text-zinc-600">
                     מחשב מחדש כל פריט שיש לו מחיר/מ״ר גמיש (לוקובונד/פיויסי/פרספקס) לפי {pricingMode === "max_sqm" ? "מחיר המ״ר המקסימלי (מחיר רשימה)" : "מחיר המ״ר המינימלי לסוכן"}, ומנטרל את מחיר המינימום של המוצר. פריטים ללא גמישות מחיר נשארים במחיר שנשמר.
                   </p>
                 )}
@@ -1168,8 +1264,8 @@ export default function QuoteDetailsModal({ quote, onClose, onSaved, readOnly = 
                   return (
                     <div className="space-y-2">
                       <div className="flex items-center justify-between text-sm">
-                        <span className="text-zinc-400">אחוז רווח תפעולי יעד</span>
-                        <span className="font-bold text-[#C9A84C]">{sliderValue}%</span>
+                        <span className="text-zinc-600">אחוז רווח תפעולי יעד</span>
+                        <span className="font-bold text-[#8C6D1F]">{sliderValue}%</span>
                       </div>
                       <input
                         type="range"
@@ -1191,7 +1287,7 @@ export default function QuoteDetailsModal({ quote, onClose, onSaved, readOnly = 
 
             {/* מחירים — final price, highlighted */}
             <div>
-              <h3 className="text-sm font-semibold text-zinc-300 mb-2 uppercase tracking-wider">מחירים</h3>
+              <h3 className="text-sm font-semibold text-zinc-700 mb-2 uppercase tracking-wider">מחירים</h3>
               <div className="bg-gradient-to-br from-[#C9A84C]/15 via-[#C9A84C]/8 to-transparent border border-[#C9A84C]/30 rounded-xl p-3 space-y-2">
                 {hasAnyDiscount && (
                   <Row label="לפני שינוי (ללא מע״מ)" value={fmt(quote.price_before_vat)} className="opacity-60" />
@@ -1199,8 +1295,8 @@ export default function QuoteDetailsModal({ quote, onClose, onSaved, readOnly = 
                 <Row label="לפני מע״מ" value={fmt(finalSubtotal)} />
                 <Row label={`מע״מ${vatPercent != null ? ` (${vatPercent}%)` : ""}`} value={fmt(finalTotalWithVat - finalSubtotal)} />
                 <div className="flex justify-between items-center py-1.5 text-sm pt-2 border-t border-[#C9A84C]/20">
-                  <span className="font-semibold text-[#C9A84C]">סה״כ עם מע״מ</span>
-                  <span className="font-bold text-lg text-[#C9A84C]">{fmt(finalTotalWithVat)}</span>
+                  <span className="font-semibold text-[#8C6D1F]">סה״כ עם מע״מ</span>
+                  <span className="font-bold text-lg text-[#8C6D1F]">{fmt(finalTotalWithVat)}</span>
                 </div>
               </div>
             </div>
@@ -1209,6 +1305,42 @@ export default function QuoteDetailsModal({ quote, onClose, onSaved, readOnly = 
           <div className="mt-4">
             <MorningSection quoteId={quote.id} readOnly={readOnly} morningDoc={morningDoc} onOpenMorningDoc={onOpenMorningDoc} />
           </div>
+
+          {!readOnly && (
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              title="שומר הצעה מתוקנת חדשה (מס׳ חדש), הכוללת את כל ההנחות שהוזנו בכל המסכים"
+              className={`mt-4 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+                saved ? "bg-emerald-500/20 border border-emerald-500/30 text-emerald-600" : "bg-[#C9A84C] text-black hover:bg-[#C9A84C]/90 disabled:opacity-40"
+              }`}
+            >
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : saved ? <><CheckCircle2 className="w-4 h-4" /> נשמר!</> : <><Save className="w-4 h-4" /> שמור הצעה מתוקנת</>}
+            </button>
+          )}
+            </div>
+            )}
+        </div>
+
+        {/* Footer navigation — one step back/forward through the screens. */}
+        <div className="shrink-0 border-t border-zinc-200 bg-zinc-100 px-4 py-3 flex items-center justify-between gap-3">
+          <button
+            onClick={() => setStep((s) => Math.max(0, s - 1))}
+            disabled={step === 0}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-zinc-200 text-sm text-zinc-700 hover:border-zinc-400 disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            <ChevronRight className="w-4 h-4" /> הקודם
+          </button>
+          <span className="text-xs text-zinc-500">
+            {isSummary ? "סיכום ומחירים" : `מוצר ${selectedIndex + 1}`} · {step + 1}/{stepCount}
+          </span>
+          <button
+            onClick={() => setStep((s) => Math.min(stepCount - 1, s + 1))}
+            disabled={step >= stepCount - 1}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-zinc-200 text-sm text-zinc-700 hover:border-zinc-400 disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            {step === stepCount - 2 ? "סיכום ומחירים" : "הבא"} <ChevronLeft className="w-4 h-4" />
+          </button>
         </div>
       </div>
     </div>
