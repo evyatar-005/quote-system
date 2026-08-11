@@ -21,6 +21,7 @@ import { convertMorningDocument, createPaymentLink, getLatestMorningDocuments } 
 import QuoteDocument from "@/components/calculator/QuoteDocument";
 import DocumentIssuedModal from "@/components/DocumentIssuedModal";
 import { MORNING_ORDER_TYPE, toLocalDateStr, DATE_PRESETS, computeDateRange, formatDocNumber } from "@/lib/quoteLabels";
+import { latestRevisionsOnly } from "@/lib/quoteEconomics";
 
 const fmt = (val) =>
   val != null ? `₪ ${Number(val).toLocaleString("he-IL", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : "—";
@@ -289,7 +290,15 @@ export default function MyQuotes() {
 
   const dateRange = computeDateRange(datePreset, customFrom, customTo);
 
-  const visibleQuotes = quotes
+  // A manager's "שמור הצעה מתוקנת" saves the correction as a NEW row
+  // (parent_quote_number pointing at the original) rather than editing the
+  // original in place — so without this, the agent saw BOTH the stale
+  // pre-edit original and the corrected revision as separate rows, and
+  // nothing marked the original as superseded. Issuing a Morning document
+  // from the wrong (original) row silently sent the client the old pricing.
+  // Same helper QuotesArchive/CostsDashboard already use to avoid double-
+  // counting revisions in analytics.
+  const visibleQuotes = latestRevisionsOnly(quotes)
     .filter((q) => tab !== "orders" || morningDocs[q.id]?.morning_document_type === MORNING_ORDER_TYPE)
     .filter((q) => {
       if (!dateRange.from && !dateRange.to) return true;
