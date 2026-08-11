@@ -120,6 +120,7 @@ const ENTITY_NAMES = [
   'LightboxSizeTier',
   'LightboxSellingPrice',
   'KapaPriceTier',
+  'KapaDeal',
   'RollupPriceTier',
   'LokobondAreaTier',
   'GlassPriceTier',
@@ -132,6 +133,8 @@ const ENTITY_NAMES = [
   'Recipe',
   'RecipeStep',
   'Worksheet',
+  // CRM (Phase 1)
+  'Campaign',
 ];
 
 const entities = {};

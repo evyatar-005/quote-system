@@ -41,7 +41,7 @@ function verifyPassword(password, stored) {
 
 function publicUser(u) {
   if (!u) return null;
-  return { id: u.id, username: u.username, full_name: u.full_name, email: u.email, role: u.role, mustChangePassword: !!u.must_change_password };
+  return { id: u.id, username: u.username, full_name: u.full_name, email: u.email, role: u.role, mustChangePassword: !!u.must_change_password, canViewCosts: !!u.can_view_costs };
 }
 
 // ── idempotent seed of the two demo users ────────────────────────────────────
@@ -290,9 +290,9 @@ module.exports = function registerAuth(app, db) {
   });
 
   // ── Admin user management ─────────────────────────────────────────────────────
-  const allUsers    = db.prepare(`SELECT id, username, full_name, email, role FROM users ORDER BY id`);
+  const allUsers    = db.prepare(`SELECT id, username, full_name, email, role, can_view_costs FROM users ORDER BY id`);
   const insertUser  = db.prepare(`INSERT INTO users (username, password_hash, full_name, email, role, must_change_password) VALUES (?, ?, ?, ?, ?, 1)`);
-  const updateUser  = db.prepare(`UPDATE users SET full_name = ?, email = ?, role = ? WHERE id = ?`);
+  const updateUser  = db.prepare(`UPDATE users SET full_name = ?, email = ?, role = ?, can_view_costs = ? WHERE id = ?`);
   const updatePassword = db.prepare(`UPDATE users SET password_hash = ?, must_change_password = 1 WHERE id = ?`);
   const deleteUserStmt = db.prepare(`DELETE FROM users WHERE id = ?`);
   const ROLES = new Set(['admin', 'agent', 'operations']);
@@ -346,7 +346,8 @@ module.exports = function registerAuth(app, db) {
       const other = userByEmail.get(email);
       if (other && other.id !== id) return res.status(409).json({ error: 'email already exists' });
     }
-    updateUser.run(full_name, email, role, id);
+    const canViewCosts = req.body.can_view_costs !== undefined ? (req.body.can_view_costs ? 1 : 0) : existing.can_view_costs;
+    updateUser.run(full_name, email, role, canViewCosts, id);
     const updated = userById.get(id);
     console.log(`[PUT /api/admin/users/${id}] role="${updated.role}"`);
     res.json({ user: publicUser(updated) });

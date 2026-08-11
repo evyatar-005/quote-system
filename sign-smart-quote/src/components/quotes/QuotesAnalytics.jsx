@@ -3,7 +3,7 @@ import {
   ResponsiveContainer, BarChart, Bar, LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, LabelList,
 } from "recharts";
-import { Award, AlertTriangle, Target, ChevronDown } from "lucide-react";
+import { AlertTriangle, Target, ChevronDown } from "lucide-react";
 import { fmt, MORNING_ORDER_TYPE, DATE_PRESETS, computeDateRange, toLocalDateStr } from "@/lib/quoteLabels";
 import { economicsOf, linesOf, shippingOf, productLabel, productSku, compareSku } from "@/lib/quoteEconomics";
 
@@ -227,14 +227,53 @@ export default function QuotesAnalytics({ quotes, sellers, morningDocs = {} }) {
     );
   }
 
-  const leader = agents[0];
-  const totalMarginPct = totals.closedRevenue > 0 ? (totals.closedProfit / totals.closedRevenue) * 100 : 0;
-  const totalCloseRatePct = totals.count > 0 ? (totals.orders / totals.count) * 100 : 0;
   const totalAvgClosedDeal = totals.orders > 0 ? totals.closedDealAmount / totals.orders : 0;
 
   return (
     <div className="space-y-4">
       {dateFilterBar}
+
+      {/* Summary table — first thing on the screen, replaces the old KPI card
+          grid. Exactly the columns requested: agent, quotes offered, orders
+          closed, deal amount (ex-VAT, ex-shipping — closedDealAmount), average
+          per deal, and total profit. */}
+      <div className="overflow-x-auto rounded-2xl border border-black">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-slate-50 border-b border-black text-right">
+              <th className="px-3 py-2 font-semibold text-slate-600 whitespace-nowrap">שם סוכן</th>
+              <th className="px-3 py-2 font-semibold text-slate-600 whitespace-nowrap">מס' הצעות מחיר</th>
+              <th className="px-3 py-2 font-semibold text-slate-600 whitespace-nowrap">מס' הזמנות</th>
+              <th className="px-3 py-2 font-semibold text-slate-600 whitespace-nowrap">סכום (ללא מע״מ, ללא משלוח)</th>
+              <th className="px-3 py-2 font-semibold text-slate-600 whitespace-nowrap">ממוצע לעסקה</th>
+              <th className="px-3 py-2 font-semibold text-slate-600 whitespace-nowrap">רווח סך הכל</th>
+            </tr>
+          </thead>
+          <tbody>
+            {agents.map((a, i) => (
+              <tr key={a.key} className="border-b border-slate-100 last:border-0">
+                <td className="px-3 py-2 font-medium text-foreground whitespace-nowrap">
+                  <span className="inline-block w-2 h-2 rounded-full ml-1.5" style={{ background: SERIES_COLORS[i % SERIES_COLORS.length] }} />
+                  {a.name}
+                </td>
+                <td className="px-3 py-2 tabular-nums text-slate-600">{a.count}</td>
+                <td className="px-3 py-2 tabular-nums text-slate-600">{a.orders}</td>
+                <td className="px-3 py-2 tabular-nums text-slate-600">{fmt(a.closedDealAmount)}</td>
+                <td className="px-3 py-2 tabular-nums text-slate-600">{fmt(a.avgClosedDeal)}</td>
+                <td className="px-3 py-2 tabular-nums font-semibold text-primary">{fmt(a.closedProfit)}</td>
+              </tr>
+            ))}
+            <tr className="bg-slate-50 font-semibold">
+              <td className="px-3 py-2 text-foreground">סה״כ</td>
+              <td className="px-3 py-2 tabular-nums text-slate-700">{totals.count}</td>
+              <td className="px-3 py-2 tabular-nums text-slate-700">{totals.orders}</td>
+              <td className="px-3 py-2 tabular-nums text-slate-700">{fmt(totals.closedDealAmount)}</td>
+              <td className="px-3 py-2 tabular-nums text-slate-700">{fmt(totalAvgClosedDeal)}</td>
+              <td className="px-3 py-2 tabular-nums text-primary">{fmt(totals.closedProfit)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
 
       {/* An 'approved' quote is NOT a closed deal — only a Morning order (type
           100) is, and every ₪ figure on this page is scoped to closed orders
@@ -244,54 +283,10 @@ export default function QuotesAnalytics({ quotes, sellers, morningDocs = {} }) {
       <div className="flex items-start gap-2 text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-600">
         <Target className="w-4 h-4 shrink-0 mt-0.5 text-slate-400" />
         <span>
-          <strong>מחזור, רווח, מרווח וממוצע להזמנה מחושבים רק על הצעות שנסגרו בפועל</strong> — כלומר הפכו להזמנה במורנינג.
-          "הצעות" ו"אחוז סגירה" כוללים כל הצעה שהוצאה (טיוטה/נשלחה/אושרה), כדי להשוות כמה הוצא מול כמה באמת נסגר —
+          <strong>סכום, רווח ומרווח מחושבים רק על הצעות שנסגרו בפועל</strong> — כלומר הפכו להזמנה במורנינג.
+          "הצעות" כולל כל הצעה שהוצאה (טיוטה/נשלחה/אושרה), כדי להשוות כמה הוצא מול כמה באמת נסגר —
           הצעה שסומנה "אושרה" אך לא הפכה להזמנה נחשבת לא-סגורה.
         </span>
-      </div>
-
-      {/* Headline answers — the questions this screen exists to answer. */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-        {leader && (
-          <div className="bg-white border border-primary/40 rounded-2xl p-4">
-            <div className="flex items-center gap-1.5 text-xs text-slate-500">
-              <Award className="w-3.5 h-3.5 text-primary" /> הסוכן המוביל ברווח
-            </div>
-            <div className="text-lg font-bold text-foreground mt-1">{leader.name}</div>
-            <div className="text-sm text-primary font-semibold tabular-nums">{fmt(leader.closedProfit)}</div>
-            <div className="text-xs text-slate-400 mt-0.5">מרווח {leader.marginPct.toFixed(1)}% · {leader.orders} הזמנות</div>
-          </div>
-        )}
-        <div className="bg-white border border-black rounded-2xl p-4">
-          <div className="text-xs text-slate-500">מחזור סגירה</div>
-          <div className="text-2xl font-bold text-foreground tabular-nums mt-1">{fmt(totals.closedRevenue)}</div>
-          <div className="text-xs text-slate-400 mt-0.5">מ-{totals.orders} הצעות שנסגרו (לפני מע״מ)</div>
-        </div>
-        <div className="bg-white border border-black rounded-2xl p-4">
-          <div className="text-xs text-slate-500">רווח</div>
-          <div className="text-2xl font-bold text-primary tabular-nums mt-1">{fmt(totals.closedProfit)}</div>
-          <div className="text-xs text-slate-400 mt-0.5">מתוך מחזור הסגירה</div>
-        </div>
-        <div className="bg-white border border-black rounded-2xl p-4">
-          <div className="text-xs text-slate-500">רווח נקי (%)</div>
-          <div className="text-2xl font-bold text-foreground tabular-nums mt-1">{totalMarginPct.toFixed(1)}%</div>
-          <div className="text-xs text-slate-400 mt-0.5">רווח חלקי מחזור סגירה</div>
-        </div>
-        <div className="bg-white border border-black rounded-2xl p-4">
-          <div className="text-xs text-slate-500">ממוצע להזמנה שנסגרה</div>
-          <div className="text-2xl font-bold text-foreground tabular-nums mt-1">{fmt(totalAvgClosedDeal)}</div>
-          <div className="text-xs text-slate-400 mt-0.5">מחזור סגירה חלקי מס׳ הזמנות</div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div className="bg-white border border-black rounded-2xl p-4">
-          <div className="flex items-center gap-1.5 text-xs text-slate-500">
-            <Target className="w-3.5 h-3.5 text-slate-400" /> אחוז סגירה כללי
-          </div>
-          <div className="text-2xl font-bold text-foreground tabular-nums mt-1">{totalCloseRatePct.toFixed(1)}%</div>
-          <div className="text-xs text-slate-400 mt-0.5">{totals.orders} הפכו להזמנה מתוך {totals.count} הצעות שהוצאו</div>
-        </div>
       </div>
 
       {missingCost > 0 && (

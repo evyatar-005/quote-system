@@ -3,7 +3,7 @@ import { X, Loader2, CheckCircle2, Save, FileText, Receipt, Paperclip, Image as 
 import { PRODUCT_NAMES } from "@/components/calculator/CalculatorForm";
 import { base44 } from "@/api/base44Client";
 import { convertMorningDocument, getMorningHistory } from "@/api/morningClient";
-import { MORNING_TYPE_LABELS } from "@/lib/quoteLabels";
+import { MORNING_TYPE_LABELS, formatDocNumber } from "@/lib/quoteLabels";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
@@ -466,7 +466,7 @@ function MorningSection({ quoteId, readOnly = false, morningDoc, onOpenMorningDo
         {morningDoc?.document_url && (
           <div className="flex items-center justify-between gap-2 text-xs bg-[#0C0C12] border border-white/10 rounded-lg px-2.5 py-2">
             <span className="text-zinc-300">
-              {MORNING_TYPE_LABELS[morningDoc.morning_document_type] || "מסמך"} #{morningDoc.morning_document_number || morningDoc.morning_document_id}
+              {MORNING_TYPE_LABELS[morningDoc.morning_document_type] || "מסמך"} #{formatDocNumber(morningDoc.morning_document_number || morningDoc.morning_document_id)}
             </span>
             <button
               onClick={() => onOpenMorningDoc?.(morningDoc.document_url)}

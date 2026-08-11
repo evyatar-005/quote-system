@@ -16,6 +16,9 @@ import QuotesArchive from './pages/QuotesArchive.jsx';
 import MyQuotes from './pages/MyQuotes.jsx';
 import RecipesAdmin from './pages/RecipesAdmin.jsx';
 import ProductionBoard from './pages/ProductionBoard.jsx';
+import CrmCustomers from './pages/CrmCustomers.jsx';
+import CrmCustomerDetail from './pages/CrmCustomerDetail.jsx';
+import CrmLeads from './pages/CrmLeads.jsx';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import Login from './pages/Login.jsx';
 import ChangePassword from './pages/ChangePassword.jsx';
@@ -38,6 +41,13 @@ const AdminOnly = ({ children }) => {
 const OperationsOnly = ({ children }) => {
   const { user } = useAuth();
   if (user && user.role !== 'admin' && user.role !== 'operations') return <Navigate to="/costs" replace />;
+  return children;
+};
+
+// CRM screens (Phase 1) — sales-facing (admin + agent), not production staff.
+const CrmAccess = ({ children }) => {
+  const { user } = useAuth();
+  if (user && !['admin', 'agent'].includes(user.role)) return <Navigate to="/costs" replace />;
   return children;
 };
 
@@ -85,6 +95,9 @@ const AuthenticatedApp = () => {
         <Route path="/my-quotes" element={<MyQuotes />} />
         <Route path="/recipes" element={<OperationsOnly><RecipesAdmin /></OperationsOnly>} />
         <Route path="/production" element={<OperationsOnly><ProductionBoard /></OperationsOnly>} />
+        <Route path="/crm/customers" element={<CrmAccess><CrmCustomers /></CrmAccess>} />
+        <Route path="/crm/customers/:id" element={<CrmAccess><CrmCustomerDetail /></CrmAccess>} />
+        <Route path="/crm/leads" element={<CrmAccess><CrmLeads /></CrmAccess>} />
         <Route path="*" element={<PageNotFound />} />
       </Routes>
       <Footer />

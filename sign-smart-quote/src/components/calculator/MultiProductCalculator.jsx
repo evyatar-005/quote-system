@@ -389,6 +389,10 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
     const shelves = [];
     if (standardShelves > 0) shelves.push(standardShelves === 1 ? "מדף סטנדרטי אחד" : `${standardShelves} מדפים סטנדרטיים`);
     if (customShelves > 0) shelves.push(customShelves === 1 ? "מדף אחד בעיצוב אישי" : `${customShelves} מדפים בעיצוב אישי`);
+    const legsQty = parseInt(formData?.legsQty) || 0;
+    const coloredShelfQty = parseInt(formData?.coloredShelfQty) || 0;
+    if (legsQty > 0) shelves.push(legsQty === 1 ? "רגל אחת עשויה קאפה" : `${legsQty} רגליים עשויות קאפה`);
+    if (coloredShelfQty > 0) shelves.push(coloredShelfQty === 1 ? "מדף צבעוני אחד ללא חיתוך צורני" : `${coloredShelfQty} מדפים צבעוניים ללא חיתוך צורני`);
     if (shelves.length) lines.push(shelves.join(", "));
 
     // The agent's own notes go last, on one "הערה:" line — the item name first,
@@ -576,12 +580,18 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
     status,
   });
 
-  // clientPhone is no longer a separately-typed field — it (and the client's
-  // Morning registration) only ever exists once morningClientId is set, via
-  // "שמור לקוח" or picking an existing client, so that's the actual gate here.
+  // clientPhone is no longer a separately-typed field — it's meant to only
+  // ever exist once morningClientId is set, via "שמור לקוח" or picking an
+  // existing client — but neither of those actually guarantees a phone was
+  // entered (a saved-client Morning record, or "שמור לקוח" itself, can both
+  // have no phone on file), and the server hard-requires client_phone to save
+  // a quote at all (routes/entities.js quoteCreate). Without checking it here
+  // too, a client saved/selected without a phone shows as "valid" and only
+  // fails with a raw, unexplained error once the agent tries to send/issue —
+  // exactly the bug this line now prevents.
   // Address is only required for actual delivery — pickup orders have nowhere
   // to ship to, so nothing to require here.
-  const isQuoteValid = clientName.trim() && morningClientId && (delivery !== "shipping" || clientAddress.trim()) && documentTitle.trim() && grandTotal > 0;
+  const isQuoteValid = clientName.trim() && morningClientId && clientPhone.trim() && (delivery !== "shipping" || clientAddress.trim()) && documentTitle.trim() && grandTotal > 0;
 
   // Warn on refresh/tab-close/back-button while there's real unsaved work —
   // nothing here is persisted anywhere until one of the three buttons below is
@@ -752,11 +762,23 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
                 quote (see isQuoteValid), so it gets the same red/emerald
                 treatment as the two fields above — never a quiet muted line
                 the agent could miss. */}
-            {morningClientId ? (
+            {morningClientId && clientPhone.trim() ? (
               <div className="flex items-center gap-2 text-sm font-medium text-emerald-700 bg-emerald-50 border-2 border-emerald-300 rounded-xl px-3 py-2.5 w-fit">
                 <CheckCircle2 className="w-4 h-4" />
-                לקוח שמור במורנינג{clientPhone ? ` · ${clientPhone}` : ""}
+                לקוח שמור במורנינג · {clientPhone}
               </div>
+            ) : morningClientId ? (
+              // A saved/selected client with no phone on file — shows as amber,
+              // not the green "valid" state, since the server will reject the
+              // quote without one. Reopening "שמור לקוח" lets the phone be added.
+              <button
+                type="button"
+                onClick={() => setShowSaveClientModal(true)}
+                className="flex items-center gap-2 text-sm font-bold text-amber-700 bg-amber-100 border-2 border-amber-400 rounded-xl px-4 py-2.5 hover:bg-amber-200 hover:border-amber-500 transition-colors w-fit shadow-sm"
+              >
+                <Save className="w-4 h-4" />
+                חסר מספר טלפון ללקוח — יש להשלים לפני שליחה/הנפקה
+              </button>
             ) : clientName.trim() ? (
               <button
                 type="button"
@@ -807,9 +829,19 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
                 const unitArea = w > 0 && h > 0 ? w * h : null;
                 const totalArea = unitArea != null ? unitArea * q : null;
                 const extraCount = (formData?.extraRows || []).length;
+                const kapaAddonPrice = (qty, priceKey, productKey) => {
+                  const n = parseInt(qty) || 0;
+                  const unitPrice = parseFloat(config?.[priceKey]) || 0;
+                  const override = formData?.dealOverrides?.[productKey];
+                  if (!override) return n * unitPrice;
+                  const dealPrice = parseFloat(override.price) || 0;
+                  return override.mode === "override" ? dealPrice : n * unitPrice + dealPrice;
+                };
                 const shelvesPrice = categoryOf(pt) === "kapa"
-                  ? (parseInt(formData?.standardShelves) || 0) * (parseFloat(config?.kapa_shelf_standard_price) || 0) +
-                    (parseInt(formData?.customShelves) || 0) * (parseFloat(config?.kapa_shelf_custom_price) || 0)
+                  ? kapaAddonPrice(formData?.standardShelves, "kapa_shelf_standard_price", "standardShelf") +
+                    kapaAddonPrice(formData?.customShelves, "kapa_shelf_custom_price", "customShelf") +
+                    kapaAddonPrice(formData?.legsQty, "kapa_legs_price", "legs") +
+                    kapaAddonPrice(formData?.coloredShelfQty, "kapa_colored_shelf_price", "coloredShelf")
                   : 0;
                 return (
                   // Whole row opens the product for editing — not just the small

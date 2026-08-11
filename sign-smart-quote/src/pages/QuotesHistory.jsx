@@ -1,13 +1,13 @@
 import { useState, useEffect } from "react";
 import { base44 } from "@/api/base44Client";
-import { Search, Loader2, User, Calendar, TrendingUp, CheckCircle2, XCircle, ChevronDown, X, PackagePlus, Eye } from "lucide-react";
+import { Search, Loader2, User, Calendar, TrendingUp, CheckCircle2, XCircle, ChevronDown, X, PackagePlus, Eye, Download } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import QuoteDetailsModal from "@/components/QuoteDetailsModal";
 import { convertMorningDocument, getLatestMorningDocuments } from "@/api/morningClient";
 import { toast } from "sonner";
 import printellaLogo from "@/assets/printella-logo.png";
 import ManagerSidebar from "@/components/layout/ManagerSidebar";
-import { fmt, STATUS_LABELS, STATUS_COLORS, CATEGORY_LABELS, CATEGORY_COLORS, MORNING_TYPE_LABELS, toLocalDateStr } from "@/lib/quoteLabels";
+import { fmt, STATUS_LABELS, STATUS_COLORS, CATEGORY_LABELS, CATEGORY_COLORS, MORNING_TYPE_LABELS, toLocalDateStr, formatDocNumber } from "@/lib/quoteLabels";
 
 const DATE_PRESETS = [
   { key: "today", label: "היום" },
@@ -35,7 +35,11 @@ export default function QuotesHistory() {
   // Latest Morning document per quote id — {quoteId: {morning_document_number, document_url, ...}}
   const [morningDocs, setMorningDocs] = useState({});
   const [convertingIds, setConvertingIds] = useState(() => new Set());
-  const [previewUrl, setPreviewUrl] = useState(null);
+  // Raw Morning document URL currently previewed — the iframe itself points
+  // at our own /api/morning/document-proxy (re-served with Content-Disposition:
+  // inline), since Morning's own URL forces a download and can't be embedded.
+  const [previewDoc, setPreviewDoc] = useState(null);
+  const openMorningDoc = (url) => setPreviewDoc(url);
 
   const loadQuotes = async () => {
     const data = await base44.entities.Quote.list("-created_date", 200);
@@ -442,11 +446,11 @@ export default function QuotesHistory() {
                     {morningDocs[q.id] && (
                       <div className="flex items-center gap-2 mt-1 text-xs text-slate-400" onClick={(e) => e.stopPropagation()}>
                         <span>
-                          מסמך מורנינג: {MORNING_TYPE_LABELS[morningDocs[q.id].morning_document_type] || "מסמך"} #{morningDocs[q.id].morning_document_number || morningDocs[q.id].morning_document_id}
+                          מסמך מורנינג: {MORNING_TYPE_LABELS[morningDocs[q.id].morning_document_type] || "מסמך"} #{formatDocNumber(morningDocs[q.id].morning_document_number || morningDocs[q.id].morning_document_id)}
                         </span>
                         {morningDocs[q.id].document_url && (
                           <button
-                            onClick={() => setPreviewUrl(morningDocs[q.id].document_url)}
+                            onClick={() => openMorningDoc(morningDocs[q.id].document_url)}
                             className="flex items-center gap-1 text-primary hover:underline"
                           >
                             <Eye className="w-3 h-3" /> הצג מסמך
@@ -519,28 +523,33 @@ export default function QuotesHistory() {
         <QuoteDetailsModal
           quote={selectedQuote}
           morningDoc={morningDocs[selectedQuote.id]}
-          onOpenMorningDoc={setPreviewUrl}
+          onOpenMorningDoc={openMorningDoc}
           onClose={() => setSelectedQuote(null)}
           onSaved={() => { setSelectedQuote(null); loadQuotes(); }}
         />
       )}
 
-      {previewUrl && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
-          onClick={() => setPreviewUrl(null)}
-        >
-          <div
-            className="relative bg-white rounded-2xl shadow-xl w-full max-w-3xl h-[85vh]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              onClick={() => setPreviewUrl(null)}
-              className="absolute left-3 top-3 z-10 p-1.5 rounded-lg bg-white/90 hover:bg-slate-100 border border-slate-200 transition-colors"
-            >
-              <X className="w-4 h-4 text-slate-600" />
-            </button>
-            <iframe src={previewUrl} title="מסמך מורנינג" className="w-full h-full rounded-2xl" />
+      {previewDoc && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={() => setPreviewDoc(null)}>
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-3xl h-[85vh]" onClick={(e) => e.stopPropagation()}>
+            <div className="absolute left-3 top-3 z-10 flex items-center gap-2">
+              <a
+                href={previewDoc}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-white/90 hover:bg-slate-100 border border-slate-200 transition-colors text-xs text-slate-600"
+              >
+                <Download className="w-4 h-4" /> הורד
+              </a>
+              <button onClick={() => setPreviewDoc(null)} className="p-1.5 rounded-lg bg-white/90 hover:bg-slate-100 border border-slate-200 transition-colors">
+                <X className="w-4 h-4 text-slate-600" />
+              </button>
+            </div>
+            <iframe
+              src={`/api/morning/document-proxy?url=${encodeURIComponent(previewDoc)}`}
+              title="מסמך מורנינג"
+              className="w-full h-full rounded-2xl"
+            />
           </div>
         </div>
       )}

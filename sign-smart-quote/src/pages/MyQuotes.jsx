@@ -20,7 +20,7 @@ import { Input } from "@/components/ui/input";
 import { convertMorningDocument, createPaymentLink, getLatestMorningDocuments } from "@/api/morningClient";
 import QuoteDocument from "@/components/calculator/QuoteDocument";
 import DocumentIssuedModal from "@/components/DocumentIssuedModal";
-import { MORNING_ORDER_TYPE, toLocalDateStr, DATE_PRESETS, computeDateRange } from "@/lib/quoteLabels";
+import { MORNING_ORDER_TYPE, toLocalDateStr, DATE_PRESETS, computeDateRange, formatDocNumber } from "@/lib/quoteLabels";
 
 const fmt = (val) =>
   val != null ? `₪ ${Number(val).toLocaleString("he-IL", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : "—";
@@ -406,7 +406,7 @@ export default function MyQuotes() {
                         {morningDoc && (
                           <span className="text-slate-400">
                             מורנינג: {MORNING_TYPE_LABELS[morningDoc.morning_document_type] || "מסמך"} #
-                            {morningDoc.morning_document_number || morningDoc.morning_document_id}
+                            {formatDocNumber(morningDoc.morning_document_number || morningDoc.morning_document_id)}
                           </span>
                         )}
                         {morningDoc?.document_url && (

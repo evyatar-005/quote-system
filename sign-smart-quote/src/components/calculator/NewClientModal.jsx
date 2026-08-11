@@ -33,6 +33,13 @@ export default function NewClientModal({ initialName = "", onCreated, onClose })
       toast.error("שם לקוח הוא שדה חובה");
       return;
     }
+    // Saving a quote requires client_phone server-side (routes/entities.js
+    // quoteCreate) — a client created here without one used to save fine but
+    // then fail, unexplained, only once the agent tried to send/issue.
+    if (!phone.trim()) {
+      toast.error("טלפון הוא שדה חובה — נדרש כדי לשלוח/להנפיק את ההצעה");
+      return;
+    }
     setSaving(true);
     try {
       const client = await createMorningClient({ name: name.trim(), phone, address, vatId, email, paymentTerms });
@@ -68,7 +75,7 @@ export default function NewClientModal({ initialName = "", onCreated, onClose })
           />
         </div>
         <div className="space-y-1.5">
-          <label className="text-sm font-semibold text-slate-600">טלפון</label>
+          <label className="text-sm font-semibold text-slate-600">טלפון <span className="text-red-500">*</span></label>
           <input
             value={phone}
             onChange={(e) => setPhone(e.target.value)}

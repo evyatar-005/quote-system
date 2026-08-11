@@ -30,6 +30,7 @@ import MinimumPricesSection from "../components/admin/MinimumPricesSection";
 import MorningSettingsSection from "../components/admin/MorningSettingsSection";
 import GreenApiSettingsSection from "../components/admin/GreenApiSettingsSection";
 import MondaySettingsSection from "../components/admin/MondaySettingsSection";
+import MondaySyncSection from "../components/admin/MondaySyncSection";
 import SmtpSettingsSection from "../components/admin/SmtpSettingsSection";
 import ReportsSection from "../components/admin/ReportsSection";
 import AboutSection from "../components/admin/AboutSection";
@@ -131,6 +132,10 @@ const DEFAULT_CONFIG = {
   kapa_shelf_custom_price: null,
   kapa_shelf_standard_cost: null,
   kapa_shelf_custom_cost: null,
+  kapa_legs_price: null,
+  kapa_legs_cost: null,
+  kapa_colored_shelf_price: null,
+  kapa_colored_shelf_cost: null,
   kapa_pre_cut_time_minutes: null,
   rollup_pre_print_time_minutes: null,
   rollup_print_time_minutes: null,
@@ -299,6 +304,7 @@ export default function AdminDashboard() {
 
           <TabsContent value="monday" className="space-y-6 mt-0">
             <MondaySettingsSection />
+            <MondaySyncSection />
           </TabsContent>
 
           <TabsContent value="smtp" className="space-y-6 mt-0">

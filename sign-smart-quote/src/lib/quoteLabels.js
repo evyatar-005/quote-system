@@ -39,6 +39,15 @@ export const MORNING_TYPE_LABELS = { 10: "הצעת מחיר", 100: "הזמנה",
 // still be converted to an order from /my-quotes.
 export const MORNING_ORDER_TYPE = 100;
 
+// Morning returns document numbers as numeric-looking strings with a
+// pointless ".0" suffix (e.g. "2937.0") — strip it for a whole number, but
+// leave anything else (a real decimal, or a non-numeric id) untouched.
+export const formatDocNumber = (n) => {
+  if (n == null) return n;
+  const s = String(n);
+  return /^\d+\.0$/.test(s) ? s.slice(0, -2) : s;
+};
+
 // Local YYYY-MM-DD (not toISOString, which shifts to UTC and can land on the
 // wrong calendar day) — used both for <input type="date"> and for comparing
 // against created_date.

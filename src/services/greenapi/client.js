@@ -22,6 +22,19 @@ function toChatId(phone) {
   return `972${national}@c.us`;
 }
 
+async function sendText(db, { chatId, message }) {
+  const creds = getCredentials(db);
+  const base = creds.api_url.replace(/\/$/, '');
+  const res = await fetch(`${base}/waInstance${creds.instance_id}/sendMessage/${creds.api_token}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chatId, message }),
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`GreenAPI sendMessage failed (${res.status}): ${text}`);
+  return text ? JSON.parse(text) : null;
+}
+
 async function sendFileByUrl(db, { chatId, urlFile, fileName, caption }) {
   const creds = getCredentials(db);
   const base = (creds.media_url || creds.api_url).replace(/\/$/, '');
@@ -35,4 +48,4 @@ async function sendFileByUrl(db, { chatId, urlFile, fileName, caption }) {
   return text ? JSON.parse(text) : null;
 }
 
-module.exports = { toChatId, sendFileByUrl };
+module.exports = { toChatId, sendText, sendFileByUrl };

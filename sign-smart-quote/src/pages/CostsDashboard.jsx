@@ -5,6 +5,7 @@ import { Loader2, BarChart3, Tag, Lightbulb, Sparkles, Layers, Rows3 } from "luc
 import MultiProductCalculator from "../components/calculator/MultiProductCalculator.jsx";
 import NotificationBell from "@/components/NotificationBell";
 import AgentSidebar from "@/components/layout/AgentSidebar";
+import ManagerSidebar from "@/components/layout/ManagerSidebar";
 import printellaLogo from "@/assets/printella-logo.png";
 import { useAuth } from "@/lib/AuthContext";
 
@@ -211,7 +212,11 @@ export default function CostsDashboard() {
       </div>
 
       <div className="max-w-[1600px] mx-auto px-4 sm:px-8 py-6 flex flex-col lg:flex-row gap-8 items-start">
-        <AgentSidebar />
+        {/* A manager browsing the agent calculator still gets their full
+            manager menu (review queue, analytics, settings, …) — not the
+            cut-down agent one, which would otherwise hide things they have
+            every right to see just because of which screen they're on. */}
+        {user?.role === "admin" ? <ManagerSidebar /> : <AgentSidebar />}
         <div className="flex-1 min-w-0 w-full">
           {!config && (
             <div className="text-center py-20 text-slate-500 text-base">

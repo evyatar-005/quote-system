@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
-import { Search, Loader2, BarChart3, ChevronDown, X, Eye, List as ListIcon, PackageSearch, Trash2 } from "lucide-react";
+import { Search, Loader2, BarChart3, ChevronDown, X, Eye, List as ListIcon, PackageSearch, Trash2, DollarSign, Lock, Download } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import QuoteDetailsModal from "@/components/QuoteDetailsModal";
@@ -10,7 +10,7 @@ import { getLatestMorningDocuments } from "@/api/morningClient";
 import printellaLogo from "@/assets/printella-logo.png";
 import ManagerSidebar from "@/components/layout/ManagerSidebar";
 import {
-  fmt, STATUS_LABELS, CATEGORY_LABELS, CATEGORY_COLORS, MORNING_ORDER_TYPE, toLocalDateStr,
+  fmt, STATUS_LABELS, CATEGORY_LABELS, CATEGORY_COLORS, MORNING_ORDER_TYPE, toLocalDateStr, formatDocNumber,
 } from "@/lib/quoteLabels";
 // calculation_data stores the fine-grained productType (pvc_white, rollup_magnetic…),
 // not the coarse product_category — so names come from the calculator's canonical
@@ -94,8 +94,12 @@ export default function QuotesArchive() {
   const [sellers, setSellers] = useState({});
   const [morningDocs, setMorningDocs] = useState({});
   const [selectedQuote, setSelectedQuote] = useState(null);
-  const [previewUrl, setPreviewUrl] = useState(null);
   const [tab, setTab] = useState("list");
+  // Raw Morning document URL currently previewed — the iframe itself points
+  // at our own /api/morning/document-proxy (re-served with Content-Disposition:
+  // inline), since Morning's own URL forces a download and can't be embedded.
+  const [previewDoc, setPreviewDoc] = useState(null);
+  const openMorningDoc = (url) => setPreviewDoc(url);
 
   // Filters
   const [search, setSearch] = useState("");
@@ -444,7 +448,7 @@ export default function QuotesArchive() {
                   // Only a real Morning document number — never the internal
                   // "מכירות-N" placeholder (quote_number), which is just a local
                   // DB reference assigned before anything is ever issued.
-                  const docNumber = doc ? (doc.morning_document_number || doc.morning_document_id) : "—";
+                  const docNumber = doc ? formatDocNumber(doc.morning_document_number || doc.morning_document_id) : "—";
                   // Deliberately does NOT write viewed_at (unlike openQuote in
                   // QuotesHistory). viewed_at is the sole input to the review
                   // queue's "לא נפתחו בלבד" badge — browsing the archive would
@@ -452,8 +456,7 @@ export default function QuotesArchive() {
                   return (
                     <tr
                       key={q.id}
-                      onClick={() => setSelectedQuote(q)}
-                      className="border-b border-slate-100 last:border-b-0 hover:bg-slate-50 cursor-pointer transition-colors"
+                      className="border-b border-slate-100 last:border-b-0 hover:bg-slate-50 transition-colors"
                     >
                       <td className="px-3 py-2 text-slate-500 whitespace-nowrap">{sellers[q.created_by] || q.created_by}</td>
                       <td className="px-3 py-2 font-semibold text-foreground whitespace-nowrap">{q.client_name}</td>
@@ -478,8 +481,24 @@ export default function QuotesArchive() {
                       <td className="px-3 py-2 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center gap-2">
                           {doc?.document_url && (
-                            <button onClick={() => setPreviewUrl(doc.document_url)} className="flex items-center gap-1 text-primary hover:underline text-xs">
+                            <button onClick={() => openMorningDoc(doc.document_url)} className="flex items-center gap-1 text-primary hover:underline text-xs">
                               <Eye className="w-3.5 h-3.5" /> הצג מסמך
+                            </button>
+                          )}
+                          {/* Cost/price/profit breakdown is gated behind the
+                              per-user can_view_costs permission (independent of
+                              role) — a user without it sees a static "בקש
+                              הרשאה" hint instead of the real button. */}
+                          {user?.canViewCosts ? (
+                            <button onClick={() => setSelectedQuote(q)} className="flex items-center gap-1 text-primary hover:underline text-xs">
+                              <DollarSign className="w-3.5 h-3.5" /> הצג מרכיבי עלות
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => toast.message("אין לך הרשאה לצפות במרכיבי העלות", { description: "בקש הרשאה מהמנהל." })}
+                              className="flex items-center gap-1 text-slate-400 hover:text-slate-600 text-xs"
+                            >
+                              <Lock className="w-3.5 h-3.5" /> בקש הרשאה מהמנהל
                             </button>
                           )}
                           {canDelete && (
@@ -511,18 +530,32 @@ export default function QuotesArchive() {
           quote={selectedQuote}
           readOnly
           morningDoc={morningDocs[selectedQuote.id]}
-          onOpenMorningDoc={setPreviewUrl}
+          onOpenMorningDoc={openMorningDoc}
           onClose={() => setSelectedQuote(null)}
         />
       )}
 
-      {previewUrl && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={() => setPreviewUrl(null)}>
+      {previewDoc && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={() => setPreviewDoc(null)}>
           <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-3xl h-[85vh]" onClick={(e) => e.stopPropagation()}>
-            <button onClick={() => setPreviewUrl(null)} className="absolute left-3 top-3 z-10 p-1.5 rounded-lg bg-white/90 hover:bg-slate-100 border border-slate-200 transition-colors">
-              <X className="w-4 h-4 text-slate-600" />
-            </button>
-            <iframe src={previewUrl} title="מסמך מורנינג" className="w-full h-full rounded-2xl" />
+            <div className="absolute left-3 top-3 z-10 flex items-center gap-2">
+              <a
+                href={previewDoc}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-white/90 hover:bg-slate-100 border border-slate-200 transition-colors text-xs text-slate-600"
+              >
+                <Download className="w-4 h-4" /> הורד
+              </a>
+              <button onClick={() => setPreviewDoc(null)} className="p-1.5 rounded-lg bg-white/90 hover:bg-slate-100 border border-slate-200 transition-colors">
+                <X className="w-4 h-4 text-slate-600" />
+              </button>
+            </div>
+            <iframe
+              src={`/api/morning/document-proxy?url=${encodeURIComponent(previewDoc)}`}
+              title="מסמך מורנינג"
+              className="w-full h-full rounded-2xl"
+            />
           </div>
         </div>
       )}

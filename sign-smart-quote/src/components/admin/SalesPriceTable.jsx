@@ -6,6 +6,7 @@ import StickerPriceTable from "./StickerPriceTable";
 import PaintSurchargeTable from "./PaintSurchargeTable";
 import LightboxSellPriceTable from "./LightboxSellPriceTable";
 import KapaPriceTable from "./KapaPriceTable";
+import KapaDealsSection from "./KapaDealsSection";
 import RollupPriceTable from "./RollupPriceTable";
 import LokobondAreaPriceTable from "./LokobondAreaPriceTable";
 import GlassPriceTable from "./GlassPriceTable";
@@ -409,7 +410,40 @@ export default function SalesPriceTable({ config, onConfigChange }) {
                   <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">₪</span>
                 </div>
               </div>
+              <div className="bg-blue-50/50 border border-blue-200 rounded-xl p-4 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">רגליים עשויות קאפה</p>
+                  <p className="text-sm text-muted-foreground mt-0.5">מחיר ליחידה, נשמר עם הכפתור "שמור הגדרות" למעלה</p>
+                </div>
+                <div className="relative w-32 shrink-0">
+                  <Input
+                    type="text" inputMode="decimal"
+                    value={config?.kapa_legs_price ?? ""}
+                    onChange={(e) => onConfigChange?.("kapa_legs_price", e.target.value === "" ? null : parseFloat(sanitizeDecimal(e.target.value)) || 0)}
+                    className="h-11 text-center text-base w-32 bg-background pl-7"
+                    dir="ltr"
+                  />
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">₪</span>
+                </div>
+              </div>
+              <div className="bg-blue-50/50 border border-blue-200 rounded-xl p-4 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">מדף צבעוני ללא חיתוך צורני</p>
+                  <p className="text-sm text-muted-foreground mt-0.5">מחיר ליחידה, נשמר עם הכפתור "שמור הגדרות" למעלה</p>
+                </div>
+                <div className="relative w-32 shrink-0">
+                  <Input
+                    type="text" inputMode="decimal"
+                    value={config?.kapa_colored_shelf_price ?? ""}
+                    onChange={(e) => onConfigChange?.("kapa_colored_shelf_price", e.target.value === "" ? null : parseFloat(sanitizeDecimal(e.target.value)) || 0)}
+                    className="h-11 text-center text-base w-32 bg-background pl-7"
+                    dir="ltr"
+                  />
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">₪</span>
+                </div>
+              </div>
             </div>
+            <KapaDealsSection />
           </CollapsibleSection>
 
           <CollapsibleSection title="תוספת דבק דו-צדדי">

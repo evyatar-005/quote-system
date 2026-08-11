@@ -94,6 +94,8 @@ const GROUPS = [
       { key: "kapa_sheet_cost_150x300", label: 'עלות קאפה 1.5/3 (₪/יריעה)', suffix: "₪" },
       { key: "kapa_shelf_standard_cost", label: "עלות מדף סטנדרטי (₪/יחידה)", suffix: "₪" },
       { key: "kapa_shelf_custom_cost", label: "עלות מדף בעיצוב אישי (₪/יחידה)", suffix: "₪" },
+      { key: "kapa_legs_cost", label: "עלות רגליים עשויות קאפה (₪/יחידה)", suffix: "₪" },
+      { key: "kapa_colored_shelf_cost", label: "עלות מדף צבעוני ללא חיתוך צורני (₪/יחידה)", suffix: "₪" },
     ],
   },
   {

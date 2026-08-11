@@ -202,6 +202,35 @@ module.exports = function registerMorning(app, db, deps) {
     res.json(sync.getLatestDocuments(db, ids));
   });
 
+  // ── GET /api/morning/document-proxy?url= ──────────────────────────────────
+  // Morning's document download links come back with a forced-download
+  // header (Content-Disposition: attachment), so the browser can never show
+  // them inline in an <iframe> — it just downloads the file underneath a
+  // blank modal. This fetches the PDF server-side and re-serves it with
+  // Content-Disposition: inline so the frontend can actually preview it,
+  // while still linking directly to the original Morning URL for "הורד" (that
+  // one already downloads correctly on its own, no proxy needed for that).
+  // Hostname allowlist guards against this becoming an open SSRF proxy.
+  const ALLOWED_DOC_HOSTS = new Set(['www.greeninvoice.co.il', 'greeninvoice.co.il']);
+  app.get('/api/morning/document-proxy', requireAuth, async (req, res) => {
+    const url = req.query.url;
+    let parsed;
+    try { parsed = new URL(url); } catch { return res.status(400).json({ error: 'invalid url' }); }
+    if (parsed.protocol !== 'https:' || !ALLOWED_DOC_HOSTS.has(parsed.hostname)) {
+      return res.status(400).json({ error: 'url not allowed' });
+    }
+    try {
+      const upstream = await fetch(parsed.toString());
+      if (!upstream.ok) return res.status(upstream.status).json({ error: 'upstream fetch failed' });
+      const buf = Buffer.from(await upstream.arrayBuffer());
+      res.set('Content-Type', upstream.headers.get('content-type') || 'application/pdf');
+      res.set('Content-Disposition', 'inline; filename="document.pdf"');
+      res.send(buf);
+    } catch (err) {
+      res.status(502).json({ error: err.message });
+    }
+  });
+
   // ── GET /api/morning/clients/search?q= ────────────────────────────────────
   // Powers the client-search autocomplete on the quote form.
   app.get('/api/morning/clients/search', requireAuth, async (req, res) => {

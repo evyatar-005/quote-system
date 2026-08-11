@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useState, useRef, useEffect } from "react";
 import { ChevronDown, ChevronRight, Check, X } from "lucide-react";
+import { base44 } from "@/api/base44Client";
 import logo001 from "@/assets/products/logo-001.png";
 import sticker002 from "@/assets/products/sticker-002.png";
 import kapa004 from "@/assets/products/kapa-004.png";
@@ -222,7 +223,7 @@ const CATEGORY_ACCENT = {
 const CATEGORY_DEFAULTS = {
   logo:     { widthM: "", heightM: "", thicknessMm: "5", region: "מרכז", quantity: "1", elements: "", extras: [] },
   sticker:  { widthM: "", heightM: "", thicknessMm: "", region: "מרכז", quantity: "1", includeInstallation: "yes", extras: [] },
-  kapa:     { quantity: "1", cutType: "straight", standardShelves: "", customShelves: "", extras: [] },
+  kapa:     { quantity: "1", cutType: "straight", standardShelves: "", customShelves: "", legsQty: "", coloredShelfQty: "", dealOverrides: null, extras: [] },
   // Roll-up is a fixed-price catalog row (like kapa) — no thickness/dimensions.
   rollup:   { quantity: "1", extras: [] },
   // Lokobond has one fixed 3mm thickness — no dropdown, but the field is still
@@ -279,6 +280,34 @@ export function Field({ label, width = "w-24", required = false, children }) {
   );
 }
 
+// Deal chips ("מבצעים") shown under a kapa add-on's quantity field — clicking
+// a chip toggles it as the active override for that product (only one active
+// per product at a time; clicking the active chip again clears it).
+function KapaDealChips({ productKey, deals, active, onToggle }) {
+  const relevant = (deals || []).filter((d) => d.product_key === productKey);
+  if (!relevant.length) return null;
+  return (
+    <div className="flex flex-wrap gap-1 mt-1">
+      {relevant.map((d) => {
+        const isActive = active?.[productKey]?.id === d.id;
+        return (
+          <button
+            key={d.id}
+            type="button"
+            onClick={() => onToggle(d)}
+            title={d.mode === "override" ? "מחליף את המחיר הרגיל" : "מתווסף למחיר הרגיל"}
+            className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${
+              isActive ? "bg-amber-500 border-amber-500 text-white" : "bg-white border-slate-300 text-slate-600 hover:border-amber-400"
+            }`}
+          >
+            {d.qty} ב-{Number(d.price || 0).toLocaleString("he-IL")}₪{d.mode === "override" ? "" : " +"}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // Thickness options an admin never priced (no signshop_price_tiers row, or one
 // with price_per_sqm = 0) must never reach the agent — a hidden "5 מ״מ" that
 // silently prices off a raw-cost fallback would show a false, unenforced price.
@@ -317,6 +346,9 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
   // Live value of the לוקובונד/פיויסי price-per-sqm slider while mid-drag —
   // null when not dragging (falls back to the committed values.customPricePerSqm).
   const [sliderDragValue, setSliderDragValue] = useState(null);
+  // Kapa add-on deals ("מבצעים") — loaded once per form mount, filtered per
+  // product key when rendering the shelves/legs/colored-shelf chips below.
+  const [kapaDeals, setKapaDeals] = useState([]);
   const pickerRef = useRef(null);
   const pickerDropdownRef = useRef(null);
   const formRowsRef = useRef(null);
@@ -479,6 +511,19 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
   const isGraphics = GRAPHICS_TYPES.includes(values.productType);
   const isFixedPrice = isKapa || isRollup || isGlass || isNumbers || isGraphics;
   const category = categoryOf(values.productType);
+
+  useEffect(() => {
+    if (!isKapa) return;
+    base44.entities.KapaDeal.list().then(setKapaDeals).catch(() => setKapaDeals([]));
+  }, [isKapa]);
+
+  // Applies (or clears, on a second click) a deal as the active override for
+  // its product key — only one deal can be active per product at a time.
+  const toggleKapaDeal = (deal) => {
+    const current = values.dealOverrides || {};
+    const isActive = current[deal.product_key]?.id === deal.id;
+    set("dealOverrides", { ...current, [deal.product_key]: isActive ? null : { id: deal.id, price: deal.price, mode: deal.mode } });
+  };
   const isLogo = category === "logo";
   const categoryExtras = EXTRAS_BY_CATEGORY[category] || [];
   const isSticker = STICKER_TYPES.includes(values.productType);
@@ -1117,6 +1162,7 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
                   className={UNDERLINE_CENTER}
                   dir="ltr" placeholder="0"
                 />
+                <KapaDealChips productKey="standardShelf" deals={kapaDeals} active={values.dealOverrides} onToggle={toggleKapaDeal} />
               </Field>
               <Field label="מדפים בעיצוב אישי" width="w-28">
                 <Input
@@ -1126,17 +1172,48 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
                   className={UNDERLINE_CENTER}
                   dir="ltr" placeholder="0"
                 />
+                <KapaDealChips productKey="customShelf" deals={kapaDeals} active={values.dealOverrides} onToggle={toggleKapaDeal} />
+              </Field>
+              <Field label="רגליים עשויות קאפה" width="w-36">
+                <Input
+                  type="number" min="0"
+                  value={values.legsQty || ""}
+                  onChange={(e) => set("legsQty", e.target.value)}
+                  className={UNDERLINE_CENTER}
+                  dir="ltr" placeholder="0"
+                />
+                <KapaDealChips productKey="legs" deals={kapaDeals} active={values.dealOverrides} onToggle={toggleKapaDeal} />
+              </Field>
+              <Field label="מדף צבעוני ללא חיתוך צורני" width="w-44">
+                <Input
+                  type="number" min="0"
+                  value={values.coloredShelfQty || ""}
+                  onChange={(e) => set("coloredShelfQty", e.target.value)}
+                  className={UNDERLINE_CENTER}
+                  dir="ltr" placeholder="0"
+                />
+                <KapaDealChips productKey="coloredShelf" deals={kapaDeals} active={values.dealOverrides} onToggle={toggleKapaDeal} />
               </Field>
               {(() => {
-                // Same formula as useCalculator.jsx's shelvesSellingPrice — shown
-                // inline here too so the agent sees the shelf price impact right
-                // where they set the quantities, not only in the final breakdown.
+                // Same formula as useCalculator.jsx's shelvesSellingPrice/legsSellingPrice/
+                // coloredShelfSellingPrice — shown inline here too so the agent sees the
+                // price impact right where they set quantities, not only in the final breakdown.
+                const itemPrice = (qty, priceKey, productKey) => {
+                  const q = parseInt(qty) || 0;
+                  const unitPrice = parseFloat(config?.[priceKey]) || 0;
+                  const override = values.dealOverrides?.[productKey];
+                  if (!override) return q * unitPrice;
+                  const dealPrice = parseFloat(override.price) || 0;
+                  return override.mode === "override" ? dealPrice : q * unitPrice + dealPrice;
+                };
                 const shelvesPrice =
-                  (parseInt(values.standardShelves) || 0) * (parseFloat(config?.kapa_shelf_standard_price) || 0) +
-                  (parseInt(values.customShelves) || 0) * (parseFloat(config?.kapa_shelf_custom_price) || 0);
+                  itemPrice(values.standardShelves, "kapa_shelf_standard_price", "standardShelf") +
+                  itemPrice(values.customShelves, "kapa_shelf_custom_price", "customShelf") +
+                  itemPrice(values.legsQty, "kapa_legs_price", "legs") +
+                  itemPrice(values.coloredShelfQty, "kapa_colored_shelf_price", "coloredShelf");
                 if (shelvesPrice <= 0) return null;
                 return (
-                  <Field label="עלות מדפים" width="w-28">
+                  <Field label="עלות מדפים ותוספות" width="w-36">
                     <div className="h-9 flex items-center text-base font-semibold text-amber-600">
                       ₪ {shelvesPrice.toLocaleString("he-IL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </div>

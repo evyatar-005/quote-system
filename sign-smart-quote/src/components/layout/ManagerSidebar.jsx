@@ -1,7 +1,7 @@
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
-  LogOut, Settings2, Info, BarChart3, Scissors, PenTool, ClipboardList, LineChart,
+  LogOut, Settings2, Info, BarChart3, Scissors, PenTool, ClipboardList, LineChart, Users, Target,
 } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 
@@ -47,6 +47,10 @@ export default function ManagerSidebar() {
       <NavGroup title="מכירות">
         <NavItem to="/quotes" icon={ClipboardList} label="הצעות לבדיקה" active={pathname === "/quotes"} />
         <NavItem to="/quotes-archive" icon={LineChart} label="אנליטיקה" active={pathname === "/quotes-archive"} />
+      </NavGroup>
+      <NavGroup title="CRM">
+        <NavItem to="/crm/customers" icon={Users} label="לקוחות" active={pathname.startsWith("/crm/customers")} />
+        <NavItem to="/crm/leads" icon={Target} label="לידים" active={pathname === "/crm/leads"} />
       </NavGroup>
       <NavGroup title="תפעול">
         <NavItem to="/cutting" icon={Scissors} label="ניצולת לוחות" active={pathname === "/cutting"} />

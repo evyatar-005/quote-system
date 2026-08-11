@@ -127,6 +127,18 @@ CREATE TABLE IF NOT EXISTS signshop_kapa_tiers (
   price         REAL NOT NULL DEFAULT 0
 );
 
+-- Kapa add-on deals ("מבצעים") — a fixed-quantity package price for one of
+-- the 4 kapa add-ons (standard/custom shelf, legs, colored shelf). mode
+-- 'override' replaces the regular qty × unit-price entirely; 'additive'
+-- adds the deal price on top of the regular qty × unit-price.
+CREATE TABLE IF NOT EXISTS signshop_kapa_deals (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  product_key  TEXT NOT NULL,   -- standardShelf | customShelf | legs | coloredShelf
+  qty          REAL NOT NULL DEFAULT 1,
+  price        REAL NOT NULL DEFAULT 0,
+  mode         TEXT NOT NULL DEFAULT 'additive'  -- additive | override
+);
+
 -- Laser-cut number/digit tiers: priced per single digit by height + perspex
 -- thickness (not per m² like the logo family) — admin adds new height/thickness
 -- rows freely from the UI, there's no fixed hardcoded list like other families.
@@ -484,6 +496,275 @@ CREATE TABLE IF NOT EXISTS production_worksheet_steps (
   auto_reason    TEXT,    -- why resolveRecipe() proposed this, e.g. "חלק גדול ⇒ הדפסה לפני חיתוך"
   notes          TEXT
 );
+
+-- ════════════════════════════════════════════════════════════════════════════
+-- CRM — Phase 1: unified customer record + lead pipeline + campaigns.
+-- Additive only: signshop_quotes keeps every client_* column it has; the new
+-- customer_id/lead_id columns on it (added via ALTER in server.js) are
+-- nullable and backfilled, so every existing quote code path keeps working
+-- untouched. Later CRM phases (Monday sync, omni-channel inbox, WhatsApp
+-- campaigns, telephony, agent metrics) add their own tables the same way.
+-- ════════════════════════════════════════════════════════════════════════════
+
+-- The one customer record everything else will hang off. phone_e164 is the
+-- join key across channels (WhatsApp chatId, caller-ID, quote client_phone) —
+-- always normalized via services/crm/phone.js, never raw input.
+CREATE TABLE IF NOT EXISTS customers (
+  id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+  display_name       TEXT NOT NULL,
+  phone_e164         TEXT,
+  phone_raw          TEXT,
+  email              TEXT,
+  vat_id             TEXT,
+  address            TEXT,
+  company            TEXT,
+  source             TEXT,               -- quote_backfill | monday | whatsapp_inbound | call_inbound | manual
+  owner_username     TEXT,
+  status             TEXT NOT NULL DEFAULT 'active',   -- active | archived | blocked
+  morning_client_id  TEXT,
+  tags               TEXT,
+  notes              TEXT,
+  marketing_consent  INTEGER NOT NULL DEFAULT 0,        -- 0 = no bulk marketing sends (see CRM plan §10.4)
+  merged_into_id     INTEGER REFERENCES customers(id),  -- non-NULL = this row is a dedupe tombstone
+  created_by         TEXT,
+  created_at         TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at         TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone_e164);
+CREATE INDEX IF NOT EXISTS idx_customers_email ON customers(email);
+CREATE INDEX IF NOT EXISTS idx_customers_owner ON customers(owner_username);
+CREATE INDEX IF NOT EXISTS idx_customers_name  ON customers(display_name);
+-- The partial UNIQUE index on phone_e164 is created in server.js, not here —
+-- same reasoning as idx_users_email_unique: a live DB's backfill can produce
+-- duplicates, and this file is exec'd unguarded at every boot.
+
+CREATE TABLE IF NOT EXISTS crm_campaigns (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  name       TEXT NOT NULL,
+  channel    TEXT,                       -- facebook | google | landing | offline
+  status     TEXT NOT NULL DEFAULT 'active',   -- active | paused | ended
+  started_at TEXT,
+  ended_at   TEXT,
+  notes      TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- One row per inbound opportunity, always attached to a customer.
+CREATE TABLE IF NOT EXISTS crm_leads (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  customer_id    INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+  campaign_id    INTEGER REFERENCES crm_campaigns(id),
+  source         TEXT NOT NULL DEFAULT 'manual',   -- monday | whatsapp | call | manual | quote
+  external_ref   TEXT,       -- monday item id, ad click id, ...
+  status         TEXT NOT NULL DEFAULT 'new',      -- new | contacted | quoted | won | lost | disqualified
+  lost_reason    TEXT,
+  assigned_to    TEXT,       -- users.username
+  title          TEXT,
+  notes          TEXT,
+  quote_id       INTEGER REFERENCES signshop_quotes(id),
+  value_estimate REAL,
+  -- Metrics anchors: first_touch_at is written exactly once, by a single
+  -- touchLead() helper, so "time to first response" can never drift.
+  first_touch_at TEXT,
+  first_touch_by TEXT,
+  closed_at      TEXT,
+  created_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_crm_leads_customer ON crm_leads(customer_id);
+CREATE INDEX IF NOT EXISTS idx_crm_leads_status   ON crm_leads(status);
+CREATE INDEX IF NOT EXISTS idx_crm_leads_assigned ON crm_leads(assigned_to);
+CREATE INDEX IF NOT EXISTS idx_crm_leads_campaign ON crm_leads(campaign_id);
+-- Makes a future Monday-sync poller idempotent: one lead per (source, external_ref).
+CREATE UNIQUE INDEX IF NOT EXISTS idx_crm_leads_ext ON crm_leads(source, external_ref)
+  WHERE external_ref IS NOT NULL;
+
+-- Cross-cutting note/audit trail for a customer or lead (manual notes today;
+-- status-change/assignment/merge entries land here in later CRM phases too).
+CREATE TABLE IF NOT EXISTS crm_activity_log (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  customer_id  INTEGER,
+  lead_id      INTEGER,
+  type         TEXT NOT NULL,   -- note | status_change | assignment | merge | quote_linked
+  summary      TEXT,
+  payload_json TEXT,
+  actor        TEXT,
+  created_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_crm_activity_customer ON crm_activity_log(customer_id, created_at);
+
+-- One-row CRM settings, admin-edited — same pattern as morning_credentials/
+-- greenapi_credentials. Fields for later phases (WhatsApp/telephony provider,
+-- queue pacing, lock TTLs) are included now so later phases are pure ALTER-free
+-- additions of new tables, not schema churn on this one.
+CREATE TABLE IF NOT EXISTS crm_settings (
+  id                       INTEGER PRIMARY KEY CHECK (id = 1),
+  whatsapp_provider        TEXT NOT NULL DEFAULT 'greenapi',  -- greenapi | meta_cloud | none
+  bulk_provider             TEXT,                              -- NULL = same as whatsapp_provider
+  telephony_provider        TEXT NOT NULL DEFAULT 'none',
+  monday_poll_enabled       INTEGER NOT NULL DEFAULT 0,
+  global_daily_send_cap     INTEGER NOT NULL DEFAULT 300,
+  queue_min_delay_sec       INTEGER NOT NULL DEFAULT 25,
+  queue_max_delay_sec       INTEGER NOT NULL DEFAULT 90,
+  idle_timeout_sec          INTEGER NOT NULL DEFAULT 300,
+  lock_ttl_sec              INTEGER NOT NULL DEFAULT 120,
+  auto_optout_keywords      TEXT NOT NULL DEFAULT 'הסר,הסירו,STOP,UNSUBSCRIBE',
+  updated_at                TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ════════════════════════════════════════════════════════════════════════════
+-- CRM — Phase 2: two-way monday.com sync. A board maps to one crm_campaigns
+-- row; column_map/status_values are resolved from the REAL board via
+-- GET /api/monday-sync/boards/:boardId/columns, never guessed (a wrong
+-- column id would silently write into the wrong field on the board).
+-- ════════════════════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS monday_board_map (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  board_id          TEXT NOT NULL UNIQUE,
+  board_name        TEXT,
+  campaign_id       INTEGER REFERENCES crm_campaigns(id),
+  column_map        TEXT NOT NULL DEFAULT '{}',   -- {"phone":"phone_1","email":"email_2","name":"name"}
+  status_column_id  TEXT,                          -- the status column we PUSH won/lost/quoted into
+  status_values     TEXT NOT NULL DEFAULT '{}',    -- {"won":"זכה","lost":"אבד","quoted":"נשלחה הצעה"}
+  pull_enabled      INTEGER NOT NULL DEFAULT 1,
+  push_enabled      INTEGER NOT NULL DEFAULT 1,
+  poll_minutes      INTEGER NOT NULL DEFAULT 10,
+  last_polled_at    TEXT,
+  last_error        TEXT,
+  created_at        TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- One row per monday item ever pulled — makes the poller idempotent
+-- (UNIQUE(board_id, monday_item_id)) and lets the pusher know what it last
+-- wrote so it never re-pushes an identical status.
+CREATE TABLE IF NOT EXISTS monday_item_map (
+  id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+  board_id            TEXT NOT NULL,
+  monday_item_id      TEXT NOT NULL,
+  lead_id             INTEGER REFERENCES crm_leads(id) ON DELETE SET NULL,
+  customer_id         INTEGER REFERENCES customers(id) ON DELETE SET NULL,
+  last_pulled_at      TEXT,
+  last_pushed_at      TEXT,
+  last_pushed_status  TEXT,
+  raw_json            TEXT,
+  UNIQUE (board_id, monday_item_id)
+);
+CREATE INDEX IF NOT EXISTS idx_monday_item_map_lead ON monday_item_map(lead_id);
+
+CREATE TABLE IF NOT EXISTS monday_sync_log (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  direction       TEXT NOT NULL,      -- pull | push | webhook
+  board_id        TEXT,
+  monday_item_id  TEXT,
+  lead_id         INTEGER,
+  success         INTEGER NOT NULL,
+  request_json    TEXT,
+  response_json   TEXT,
+  error_message   TEXT,
+  created_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_monday_sync_log_item ON monday_sync_log(monday_item_id);
+
+-- ════════════════════════════════════════════════════════════════════════════
+-- CRM — Phase 3: channel-agnostic conversations + shared WhatsApp inbox.
+-- One conversation per (customer, channel, channel_thread_id); locking is
+-- DB-authoritative (conversation_id as PRIMARY KEY on the lock table) so two
+-- agents can never hold the same thread regardless of what the realtime
+-- layer (SSE) does or doesn't deliver. See CLAUDE.md CRM plan §2, §6.
+-- ════════════════════════════════════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS crm_conversations (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  customer_id       INTEGER REFERENCES customers(id) ON DELETE SET NULL,
+  lead_id           INTEGER REFERENCES crm_leads(id) ON DELETE SET NULL,
+  channel           TEXT NOT NULL DEFAULT 'whatsapp',   -- whatsapp | email | sms | internal
+  provider          TEXT,                                -- greenapi | meta_cloud
+  channel_thread_id TEXT NOT NULL,                        -- provider's own thread handle (GreenAPI chatId)
+  subject           TEXT,
+  status            TEXT NOT NULL DEFAULT 'open',         -- open | pending | closed
+  assigned_to       TEXT,                                 -- sticky owner (users.username) — distinct from the transient lock
+  unread_count      INTEGER NOT NULL DEFAULT 0,
+  last_message_at   TEXT,
+  last_inbound_at   TEXT,
+  last_outbound_at  TEXT,
+  first_response_ms INTEGER,
+  closed_at         TEXT,
+  closed_by         TEXT,
+  created_at        TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_crm_conv_thread ON crm_conversations(channel, channel_thread_id);
+CREATE INDEX IF NOT EXISTS idx_crm_conv_customer ON crm_conversations(customer_id);
+CREATE INDEX IF NOT EXISTS idx_crm_conv_status ON crm_conversations(status, last_message_at);
+
+CREATE TABLE IF NOT EXISTS crm_messages (
+  id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+  conversation_id       INTEGER NOT NULL REFERENCES crm_conversations(id) ON DELETE CASCADE,
+  direction             TEXT NOT NULL,     -- in | out
+  body                  TEXT,
+  media_url             TEXT,
+  media_mime            TEXT,
+  media_filename        TEXT,
+  message_type          TEXT NOT NULL DEFAULT 'text',    -- text | image | document | audio | video | template | system
+  provider              TEXT,
+  provider_message_id   TEXT,
+  status                TEXT NOT NULL DEFAULT 'received', -- queued | sent | delivered | read | failed | received
+  error_message         TEXT,
+  sent_by               TEXT,             -- users.username on outbound, NULL on inbound
+  campaign_id           INTEGER,          -- non-NULL = bulk-campaign message (wa_campaigns, added in a later phase)
+  raw_json              TEXT,
+  created_at            TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_crm_messages_conv ON crm_messages(conversation_id, id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_crm_messages_provider_id
+  ON crm_messages(provider, provider_message_id) WHERE provider_message_id IS NOT NULL;
+
+-- Shared-inbox claiming: conversation_id is the PRIMARY KEY (not a history
+-- table) — the DB itself, not app logic, guarantees at most one live holder.
+CREATE TABLE IF NOT EXISTS crm_conversation_locks (
+  conversation_id INTEGER PRIMARY KEY REFERENCES crm_conversations(id) ON DELETE CASCADE,
+  username        TEXT NOT NULL,
+  acquired_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  heartbeat_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  expires_at      TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_conv_locks_user ON crm_conversation_locks(username);
+
+-- Closed lock spans — raw input for a future "avg handling time" metric
+-- (Phase 6). Written whenever a lock is released/closed/expired/stolen.
+CREATE TABLE IF NOT EXISTS crm_conversation_handling (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  conversation_id INTEGER NOT NULL,
+  username        TEXT NOT NULL,
+  started_at      TEXT NOT NULL,
+  ended_at        TEXT,
+  end_reason      TEXT,    -- released | closed | expired | stolen
+  duration_sec    INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_conv_handling_user ON crm_conversation_handling(username, started_at);
+
+-- Single outbound queue — every WhatsApp send (1:1 reply today; bulk
+-- campaigns in a later phase) goes through here so pacing/rate-limits are
+-- enforced in exactly one place. priority: 1:1 replies = 10 (near-immediate).
+CREATE TABLE IF NOT EXISTS wa_send_queue (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  provider        TEXT,             -- NULL = whatever is active at drain time
+  channel         TEXT NOT NULL DEFAULT 'whatsapp',
+  to_e164         TEXT NOT NULL,
+  conversation_id INTEGER REFERENCES crm_conversations(id) ON DELETE CASCADE,
+  message_id      INTEGER REFERENCES crm_messages(id) ON DELETE CASCADE,
+  campaign_id     INTEGER,
+  recipient_id    INTEGER,
+  payload_json    TEXT NOT NULL,    -- {kind:'text'|'media'|'template', ...} as passed to the adapter
+  priority        INTEGER NOT NULL DEFAULT 100,
+  status          TEXT NOT NULL DEFAULT 'pending',  -- pending | sending | sent | failed | cancelled
+  attempts        INTEGER NOT NULL DEFAULT 0,
+  next_attempt_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_error      TEXT,
+  created_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  sent_at         TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_wa_queue_ready ON wa_send_queue(status, next_attempt_at, priority);
 
 -- SQLite doesn't auto-index FK-like columns — these are all looked up by value.
 CREATE INDEX IF NOT EXISTS idx_notifications_recipient  ON notifications(recipient_username);

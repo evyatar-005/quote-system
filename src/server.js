@@ -17,6 +17,9 @@ const registerSmtp     = require('./routes/smtp');
 const registerCutFile  = require('./routes/cutfile');
 const registerProduction = require('./routes/production');
 const registerReports  = require('./routes/reports');
+const registerCrm      = require('./routes/crm');
+const registerMondaySync = require('./routes/mondaySync');
+const { startCrmJobs } = require('./services/crm/jobs');
 const { startReportScheduler } = require('./services/reports/scheduledReports');
 const deliveryNotesReport = require('./services/reports/deliveryNotesReport');
 const salesReport = require('./services/reports/salesReport');
@@ -135,6 +138,17 @@ try { db.exec('ALTER TABLE signshop_lokobond_area_tiers ADD COLUMN agent_min_pri
 // leaked/guessed default password can't be used past the first real login.
 try { db.exec('ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0'); } catch (_) {}
 
+// Start of a granular, per-user permission model (independent of the coarse
+// agent/admin/operations role) — first slice: who may see cost/price/profit
+// breakdowns (QuoteDetailsModal, "הצג מרכיבי עלות"). Existing admins are
+// grandfathered in once, on the ALTER itself, so nobody who already had
+// access loses it; new users default to 0 and an admin grants it explicitly
+// from "ניהול משתמשים".
+try {
+  db.exec('ALTER TABLE users ADD COLUMN can_view_costs INTEGER NOT NULL DEFAULT 0');
+  db.prepare(`UPDATE users SET can_view_costs = 1 WHERE role = 'admin'`).run();
+} catch (_) {}
+
 // Login moved from username to email, which means email must be unique.
 // Normalize first (trim + lowercase, matching auth.js on every write from now
 // on) so a case-only difference like Evyatar@x.com / evyatar@x.com doesn't
@@ -156,6 +170,48 @@ try {
 } catch (err) {
   console.error('[startup] email-uniqueness migration failed (continuing anyway):', err.message);
 }
+
+// ─── CRM (Phase 1) ────────────────────────────────────────────────────────
+// customer_id/lead_id link signshop_quotes to the new CRM tables. Nullable
+// and unreferenced by any existing code path: quoteCreate/quoteUpdate derive
+// their column list from PRAGMA table_info, so these two columns are simply
+// never present in a plain quote save's body — only CRM code writes them.
+for (const col of [
+  'ALTER TABLE signshop_quotes ADD COLUMN customer_id INTEGER',
+  'ALTER TABLE signshop_quotes ADD COLUMN lead_id INTEGER',
+]) {
+  try { db.exec(col); } catch (_) {}
+}
+
+// Backfill customers from the quote history, then only create the partial
+// UNIQUE index on phone_e164 if that backfill left no collisions — same
+// defensive pattern as idx_users_email_unique above.
+try {
+  const { backfillCustomers } = require('./services/crm/backfill');
+  const result = backfillCustomers(db);
+  console.log(`[crm] customers: ${result.total} row(s) (${result.created} created this run, ${result.linked} quotes linked)`);
+} catch (err) {
+  console.error('[crm] customer backfill failed (continuing anyway):', err.message);
+}
+try {
+  const dupes = db.prepare(
+    `SELECT phone_e164, COUNT(*) AS n FROM customers WHERE phone_e164 IS NOT NULL AND phone_e164 != '' AND merged_into_id IS NULL GROUP BY phone_e164 HAVING n > 1`
+  ).all();
+  if (dupes.length) {
+    console.error('[crm] customers.phone_e164 has duplicates — resolve via POST /api/crm/customers/:id/merge:');
+    for (const d of dupes) console.error(`  "${d.phone_e164}" used by ${d.n} customers`);
+  } else {
+    db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_customers_phone_unique ON customers(phone_e164) WHERE phone_e164 IS NOT NULL AND phone_e164 != '' AND merged_into_id IS NULL`);
+  }
+} catch (err) {
+  console.error('[crm] phone-uniqueness index migration failed (continuing anyway):', err.message);
+}
+// crm_settings — ensure the single settings row exists (admin UI reads/writes it).
+try { db.exec(`INSERT OR IGNORE INTO crm_settings (id) VALUES (1)`); } catch (_) {}
+
+// Phase 3 addition to crm_settings (table already existed from Phase 1's
+// unguarded CREATE TABLE IF NOT EXISTS, so a plain ALTER is needed here too).
+try { db.exec(`ALTER TABLE crm_settings ADD COLUMN wa_webhook_secret TEXT`); } catch (_) {}
 
 // ─── SignCalc Pro config — read by the Base44-compatible PricingConfig entity ─
 // (registerEntities below needs loadConfig/upsertConfig; the tables themselves
@@ -191,11 +247,14 @@ registerSmtp(app, db, { requireAuth, requireAdmin });
 registerReports(app, db, { requireAuth, requireAdmin });
 registerCutFile(app, db, { requireAuth });
 registerProduction(app, db, { requireOperations });
+registerCrm(app, db, { requireAuth, requireAdmin });
+registerMondaySync(app, db, { requireAdmin });
 
 startReportScheduler(db, {
   [deliveryNotesReport.REPORT_TYPE]: deliveryNotesReport.sendReport,
   [salesReport.REPORT_TYPE]: salesReport.sendReport,
 });
+startCrmJobs(db);
 
 // ─── Version info — read by deploy/UPDATE.ps1's post-deploy smoke check and
 // by anyone wanting to confirm which release is live without RDP access ─────
@@ -283,6 +342,11 @@ app.listen(PORT, () => {
   console.log('  POST   /api/auth/forgot-password      POST /api/auth/reset-password');
   console.log('  GET/PUT /api/smtp/config               POST /api/smtp/test');
   console.log('  POST   /api/cutfile/upload             POST /api/cutfile/:jobId/trace  GET /api/cutfile/:jobId/source|export  (cut-file generator)');
+  console.log('  GET/POST/PUT /api/crm/customers[/:id]  POST /api/crm/customers/:id/merge|notes  GET .../timeline  (CRM Phase 1)');
+  console.log('  GET/POST/PUT /api/crm/leads[/:id]      POST /api/crm/leads/:id/convert');
+  console.log('  GET/PUT /api/crm/settings              (WhatsApp/telephony provider, monday poll toggle)');
+  console.log('  GET/POST/PUT/DELETE /api/monday-sync/boards[/:id]  GET .../:boardId/columns  POST .../:id/pull|push');
+  console.log('  POST   /api/monday-sync/webhooks/items  (public, monday.com item-change webhook)');
 });
 
 // ─── Removed (2026-07-07 pre-launch cleanup) ─────────────────────────────────

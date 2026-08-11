@@ -115,7 +115,21 @@ function perspexBoardMaterialCostPerSqm(config, productType, thicknessMm) {
   return (parseFloat(config?.[key]) || 0) * T;
 }
 
-export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknessMm, quantity = 1, productType, region = 'מרכז', includeInstallation = 'yes', delivery = 'pickup', priceTiers = [], stickerPriceTiers = [], paintSurchargeTiers = [], kapaPriceTiers = [], kapaTierId = null, rollupPriceTiers = [], rollupTierId = null, lokobondAreaTiers = [], glassPriceTiers = [], glassTierId = null, numberPriceTiers = [], numberTierId = null, graphicsPriceTiers = [], graphicsTierId = null, cutType = 'straight', standardShelves = 0, customShelves = 0, elements, extras = [], enforceMinimumPrice = true, customPricePerSqm = null, orderAreaOverride = null }) {
+// A kapa add-on deal ("מבצע") is chosen per product (standardShelf/customShelf/
+// legs/coloredShelf) — 'override' replaces the regular qty × unit-price for
+// that item entirely; 'additive' adds the deal price on top of it. Cost is
+// always the real qty × unit-cost, regardless of the deal — deals only ever
+// change the customer-facing selling price.
+function applyKapaDeal(qty, unitPrice, unitCost, override) {
+  const cost = (parseInt(qty) || 0) * (parseFloat(unitCost) || 0);
+  const baseSelling = (parseInt(qty) || 0) * (parseFloat(unitPrice) || 0);
+  if (!override) return { cost, selling: baseSelling };
+  const dealPrice = parseFloat(override.price) || 0;
+  if (override.mode === 'override') return { cost, selling: dealPrice };
+  return { cost, selling: baseSelling + dealPrice };
+}
+
+export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknessMm, quantity = 1, productType, region = 'מרכז', includeInstallation = 'yes', delivery = 'pickup', priceTiers = [], stickerPriceTiers = [], paintSurchargeTiers = [], kapaPriceTiers = [], kapaTierId = null, rollupPriceTiers = [], rollupTierId = null, lokobondAreaTiers = [], glassPriceTiers = [], glassTierId = null, numberPriceTiers = [], numberTierId = null, graphicsPriceTiers = [], graphicsTierId = null, cutType = 'straight', standardShelves = 0, customShelves = 0, legsQty = 0, coloredShelfQty = 0, dealOverrides = null, elements, extras = [], enforceMinimumPrice = true, customPricePerSqm = null, orderAreaOverride = null }) {
   const W = widthM != null && widthM !== '' ? parseFloat(widthM) : (parseFloat(widthCm) || 0) / 100;
   const H = heightM != null && heightM !== '' ? parseFloat(heightM) : (parseFloat(heightCm) || 0) / 100;
   // A dimension must be a real positive number — "0", a blank field, or a
@@ -185,10 +199,16 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
     // Cost (חומרי גלם) and selling price (קביעת מחירי מכירה) are separate config
     // fields — shelves used to reuse the selling price as its own cost too (zero
     // margin, and mislabeled as "cost" in the material breakdown).
-    const shelvesCostReal = (parseInt(standardShelves) || 0) * (parseFloat(config.kapa_shelf_standard_cost) || 0)
-      + (parseInt(customShelves) || 0) * (parseFloat(config.kapa_shelf_custom_cost) || 0);
-    const shelvesSellingPrice = (parseInt(standardShelves) || 0) * (parseFloat(config.kapa_shelf_standard_price) || 0)
-      + (parseInt(customShelves) || 0) * (parseFloat(config.kapa_shelf_custom_price) || 0);
+    const standardShelfDeal = applyKapaDeal(standardShelves, config.kapa_shelf_standard_price, config.kapa_shelf_standard_cost, dealOverrides?.standardShelf);
+    const customShelfDeal = applyKapaDeal(customShelves, config.kapa_shelf_custom_price, config.kapa_shelf_custom_cost, dealOverrides?.customShelf);
+    const legsDeal = applyKapaDeal(legsQty, config.kapa_legs_price, config.kapa_legs_cost, dealOverrides?.legs);
+    const coloredShelfDeal = applyKapaDeal(coloredShelfQty, config.kapa_colored_shelf_price, config.kapa_colored_shelf_cost, dealOverrides?.coloredShelf);
+    const shelvesCostReal = standardShelfDeal.cost + customShelfDeal.cost;
+    const shelvesSellingPrice = standardShelfDeal.selling + customShelfDeal.selling;
+    const legsCostReal = legsDeal.cost;
+    const legsSellingPrice = legsDeal.selling;
+    const coloredShelfCostReal = coloredShelfDeal.cost;
+    const coloredShelfSellingPrice = coloredShelfDeal.selling;
     const tape = applyTapeExtra(config, 'kapa', extras);
 
     const printHourCost = parseFloat(config.print_hour_cost) || 0;
@@ -211,11 +231,11 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
     const overheadCost = (rawMaterialCost + laborCost) * overheadPct;
     const sellingPricePerUnit = Number(tier.price) || 0;
     // קאפה — ללא דמי משלוח בכלל
-    const sellingPriceAll = sellingPricePerUnit * Q + shelvesSellingPrice + tape.sellingSurcharge;
+    const sellingPriceAll = sellingPricePerUnit * Q + shelvesSellingPrice + legsSellingPrice + coloredShelfSellingPrice + tape.sellingSurcharge;
 
     const salesAgentCommissionCost = sellingPriceAll * (parseFloat(config.sales_agent_commission_percent) || 0) / 100;
     const marketingCommissionCost = sellingPriceAll * (parseFloat(config.marketing_commission_percent) || 0) / 100;
-    const totalCostAll = rawMaterialCost + laborCost + overheadCost + salesAgentCommissionCost + marketingCommissionCost + shelvesCostReal + tape.cost;
+    const totalCostAll = rawMaterialCost + laborCost + overheadCost + salesAgentCommissionCost + marketingCommissionCost + shelvesCostReal + legsCostReal + coloredShelfCostReal + tape.cost;
 
     const profitPerUnit = sellingPriceAll - totalCostAll;
     const profitMarginPct = sellingPriceAll > 0 ? (profitPerUnit / sellingPriceAll) * 100 : 0;
@@ -223,6 +243,8 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
 
     const extrasBreakdown = [];
     if (shelvesCostReal > 0 || shelvesSellingPrice > 0) extrasBreakdown.push({ key: 'shelves', label: 'מדפים', cost: round(shelvesCostReal), sellingCost: round(shelvesSellingPrice), calc: `${standardShelves || 0} סטנדרטים + ${customShelves || 0} בעיצוב אישי`, type: 'material' });
+    if (legsCostReal > 0 || legsSellingPrice > 0) extrasBreakdown.push({ key: 'legs', label: 'רגליים עשויות קאפה', cost: round(legsCostReal), sellingCost: round(legsSellingPrice), calc: `${legsQty || 0} יחידות`, type: 'material' });
+    if (coloredShelfCostReal > 0 || coloredShelfSellingPrice > 0) extrasBreakdown.push({ key: 'colored_shelf', label: 'מדף צבעוני ללא חיתוך צורני', cost: round(coloredShelfCostReal), sellingCost: round(coloredShelfSellingPrice), calc: `${coloredShelfQty || 0} יחידות`, type: 'material' });
     if (tape.row) extrasBreakdown.push(tape.row);
 
     return {

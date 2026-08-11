@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Plus, Trash2, KeyRound, Mail, Users as UsersIcon } from "lucide-react";
+import { Loader2, Plus, Trash2, KeyRound, Mail, Users as UsersIcon, DollarSign } from "lucide-react";
 import { toast } from "sonner";
 
 const ROLE_LABEL = { admin: "מנהל מכירות", agent: "סוכן מכירות", operations: "תפעול (תפ\"י)" };
@@ -60,6 +60,18 @@ export default function UsersManagementSection() {
     try {
       await base44.adminUsers.update(id, { role });
       toast.success("ההרשאה עודכנה");
+      loadUsers();
+    } catch (err) {
+      toast.error("שגיאה בעדכון ההרשאה");
+    }
+  };
+
+  // First slice of a granular, per-user permission model (independent of
+  // role) — who may see cost/price/profit breakdowns ("הצג מרכיבי עלות").
+  // Existing admins were grandfathered in on the server-side migration.
+  const handleToggleCosts = async (u) => {
+    try {
+      await base44.adminUsers.update(u.id, { can_view_costs: u.can_view_costs ? 0 : 1 });
       loadUsers();
     } catch (err) {
       toast.error("שגיאה בעדכון ההרשאה");
@@ -220,6 +232,15 @@ export default function UsersManagementSection() {
                       <SelectItem value="admin">מנהל מכירות</SelectItem>
                     </SelectContent>
                   </Select>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className={`gap-1.5 h-9 ${u.can_view_costs ? "border-emerald-400 text-emerald-700 bg-emerald-50 hover:bg-emerald-100" : ""}`}
+                    title="הרשאה לצפייה במרכיבי עלות/מחיר/רווח (QuoteDetailsModal)"
+                    onClick={() => handleToggleCosts(u)}
+                  >
+                    <DollarSign className="w-4 h-4" /> {u.can_view_costs ? "רואה עלויות" : "לא רואה עלויות"}
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"

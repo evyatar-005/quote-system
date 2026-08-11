@@ -1,4 +1,4 @@
-// "מכירות" report — approved quotes in the reporting period: totals by agent
+// "מכירות" report — closed (actually ordered) quotes in the reporting period: totals by agent
 // AND by product, each with an inline HTML/CSS bar chart (no image
 // generation/canvas dependency — plain colored divs render reliably across
 // email clients, unlike embedded SVG/canvas charts). Entirely local (no
@@ -57,23 +57,41 @@ function linesOf(quote) {
   return out;
 }
 
+// A quote only counts as "closed" once Morning actually issued an ORDER
+// document (type 100) for it — see MORNING_ORDER_TYPE in the frontend's
+// quoteLabels.js. q.status='approved' is a DIFFERENT thing (an agent's own
+// "הנפק הצעת מחיר ללקוח" action, or a manager's review decision) that can be
+// true whether or not the client ever actually ordered — using it here used
+// to inflate this report's revenue with quotes nobody ever closed, out of
+// sync with the in-app "אנליטיקה" screen which was always order-based.
+const MORNING_ORDER_TYPE = 100;
+function fetchClosedQuoteIds(db) {
+  return new Set(
+    db.prepare(`SELECT DISTINCT quote_id FROM morning_documents_map WHERE morning_document_type = ?`)
+      .all(MORNING_ORDER_TYPE)
+      .map((r) => r.quote_id)
+  );
+}
+
 // One row per agent with at least one quote (any status) in the period,
 // ordered highest-selling first. quotesOffered = every quote created,
-// regardless of outcome; quotesClosed = the subset that reached 'approved'
-// (this app's "won" state) — revenue/totalBeforeVat only ever come from the
-// closed ones, same as before, so a pile of rejected quotes never inflates
-// the money figures, only the offered/closing-rate context around them.
+// regardless of outcome; quotesClosed = the subset that actually became a
+// Morning order — revenue/totalBeforeVat only ever come from the closed
+// ones, so a pile of never-ordered quotes never inflates the money figures,
+// only the offered/closing-rate context around them.
 function fetchSalesByAgent(db, fromDate, toDate) {
   return db.prepare(`
     SELECT
       q.created_by AS username,
       COALESCE(u.full_name, q.created_by) AS agentName,
       COUNT(*) AS quotesOffered,
-      SUM(CASE WHEN q.status = 'approved' THEN 1 ELSE 0 END) AS quotesClosed,
-      SUM(CASE WHEN q.status = 'approved' THEN q.price_before_vat ELSE 0 END) AS totalBeforeVat,
-      SUM(CASE WHEN q.status = 'approved' THEN q.price_with_vat ELSE 0 END) AS totalWithVat
+      SUM(CASE WHEN closed.quote_id IS NOT NULL THEN 1 ELSE 0 END) AS quotesClosed,
+      SUM(CASE WHEN closed.quote_id IS NOT NULL THEN q.price_before_vat ELSE 0 END) AS totalBeforeVat,
+      SUM(CASE WHEN closed.quote_id IS NOT NULL THEN q.price_with_vat ELSE 0 END) AS totalWithVat
     FROM signshop_quotes q
     LEFT JOIN users u ON u.username = q.created_by
+    LEFT JOIN (SELECT DISTINCT quote_id FROM morning_documents_map WHERE morning_document_type = ${MORNING_ORDER_TYPE}) closed
+      ON closed.quote_id = q.id
     WHERE date(q.created_at) BETWEEN date(?) AND date(?)
     GROUP BY q.created_by
     ORDER BY totalBeforeVat DESC
@@ -88,15 +106,16 @@ function fetchSalesByAgent(db, fromDate, toDate) {
 // live on a line.
 function fetchSalesByProduct(db, fromDate, toDate) {
   const quotes = db.prepare(`
-    SELECT status, calculation_data FROM signshop_quotes
+    SELECT id, calculation_data FROM signshop_quotes
     WHERE date(created_at) BETWEEN date(?) AND date(?)
   `).all(fromDate, toDate);
+  const closedQuoteIds = fetchClosedQuoteIds(db);
 
   const map = {};
   const get = (type) => map[type] || (map[type] = { type, name: productLabel(type), revenue: 0, units: 0, quotesOffered: 0, quotesClosed: 0 });
 
   for (const q of quotes) {
-    const closed = q.status === 'approved';
+    const closed = closedQuoteIds.has(q.id);
     const typesInThisQuote = new Set();
     for (const l of linesOf(q)) {
       const type = l.productType || '—';

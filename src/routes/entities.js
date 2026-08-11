@@ -21,6 +21,7 @@ const REGISTRY = {
   LightboxSizeTier:     { table: 'signshop_lightbox_tiers', cols: ['size_label', 'width_cm', 'height_cm', 'frame_cost', 'led_cost', 'transformer_cost', 'selling_base_price', 'selling_price_per_sqm'] },
   LightboxSellingPrice: { table: 'signshop_lightbox_selling_prices', cols: ['sub_type', 'size_label', 'selling_base_price', 'selling_price_per_sqm'] },
   KapaPriceTier:        { table: 'signshop_kapa_tiers',      cols: ['sku', 'description', 'max_width_m', 'max_height_m', 'cut_type', 'price'] },
+  KapaDeal:             { table: 'signshop_kapa_deals',      cols: ['product_key', 'qty', 'price', 'mode'] },
   RollupPriceTier:      { table: 'signshop_rollup_tiers',    cols: ['product_type', 'sku', 'description', 'width_m', 'height_m', 'paper_cost_per_sqm', 'stand_cost', 'price_unit_1', 'price_unit_2', 'price_unit_3_plus'] },
   LokobondAreaTier:     { table: 'signshop_lokobond_area_tiers', cols: ['product_type', 'area_from', 'price_per_sqm', 'min_price', 'agent_min_price_per_sqm'] },
   GlassPriceTier:       { table: 'signshop_glass_tiers', cols: ['product_type', 'sku', 'description', 'width_cm', 'height_cm', 'cost_price', 'selling_price'] },
@@ -31,12 +32,16 @@ const REGISTRY = {
   Operation:             { table: 'production_operations',   cols: ['key', 'name'] },
   Recipe:                { table: 'production_recipes',      cols: ['product_type', 'notes'] },
   RecipeStep:            { table: 'production_recipe_steps', cols: ['recipe_id', 'seq', 'operation_key', 'station_key', 'performer', 'is_optional', 'condition_text', 'alt_group', 'notes'] },
+  // CRM (Phase 1) — plain reference data, exposed via the generic REGISTRY
+  // rather than crm.js (which handles Customer/Lead, both of which need
+  // joins the generic CRUD can't express).
+  Campaign:              { table: 'crm_campaigns', cols: ['name', 'channel', 'status', 'started_at', 'ended_at', 'notes'] },
 };
 
 // Which entities require admin for writes.
 const ADMIN_WRITE = new Set([
   'PriceTier', 'StickerPriceTier', 'PaintSurchargeTier',
-  'LightboxSizeTier', 'LightboxSellingPrice', 'PricingConfig', 'KapaPriceTier', 'RollupPriceTier', 'LokobondAreaTier', 'GlassPriceTier', 'NumberPriceTier', 'GraphicsPriceTier',
+  'LightboxSizeTier', 'LightboxSellingPrice', 'PricingConfig', 'KapaPriceTier', 'KapaDeal', 'RollupPriceTier', 'LokobondAreaTier', 'GlassPriceTier', 'NumberPriceTier', 'GraphicsPriceTier',
 ]);
 
 // Production recipe (תפ"י) entities: editable by 'operations' role staff
