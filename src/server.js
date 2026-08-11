@@ -23,8 +23,6 @@ const registerInbox    = require('./routes/inbox');
 const registerWhatsapp  = require('./routes/whatsapp');
 const registerCampaigns = require('./routes/campaigns');
 const registerMyDay    = require('./routes/myDay');
-const registerLeadQueue = require('./routes/leadQueue');
-const registerDrive     = require('./routes/drive');
 const { startCrmJobs } = require('./services/crm/jobs');
 const { startReportScheduler } = require('./services/reports/scheduledReports');
 const deliveryNotesReport = require('./services/reports/deliveryNotesReport');
@@ -278,6 +276,13 @@ for (const col of [
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_crm_leads_followup ON crm_leads(assigned_to, follow_up_date)`); } catch (_) {}
 
 // ─── CRM (Phase 5) — lead pull-queue + Drive materials ────────────────────
+// Schema/data prep only, kept even though the routes that use it
+// (routes/leadQueue.js, routes/drive.js) aren't committed yet and were
+// removed from the requires/registrations below — see the "Restore..." commit.
+// Every statement here is either idempotent (ALTER/INDEX IF NOT EXISTS) or
+// self-limiting (the two backfills below match nothing once already run), so
+// it's inert and safe to boot with, and won't need re-running once the routes
+// land.
 // crm_settings / crm_leads / monday_* all already exist from earlier phases'
 // unguarded CREATE TABLE IF NOT EXISTS, so every one of these is an ALTER
 // here, never an edit to schema.sql.
@@ -397,8 +402,6 @@ registerInbox(app, db, { requireAuth, requireAdmin });
 registerWhatsapp(app, db, { requireAuth, requireAdmin });
 registerCampaigns(app, db, { requireAuth, requireAdmin, requireCampaigns });
 registerMyDay(app, db, { requireAuth });
-registerLeadQueue(app, db, { requireAuth, requireAdmin });
-registerDrive(app, db, { requireAuth, requireAdmin });
 
 startReportScheduler(db, {
   [deliveryNotesReport.REPORT_TYPE]: deliveryNotesReport.sendReport,
