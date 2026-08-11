@@ -135,6 +135,7 @@ export default function QuotesArchive() {
   const [customFrom, setCustomFrom] = useState(toLocalDateStr(new Date()));
   const [customTo, setCustomTo] = useState(toLocalDateStr(new Date()));
   const [selectedAgent, setSelectedAgent] = useState(null);
+  const [selectedClient, setSelectedClient] = useState(null);
   const [docKind, setDocKind] = useState("all");
   const [statusFilter, setStatusFilter] = useState("");
   const [selectedProduct, setSelectedProduct] = useState("");
@@ -255,6 +256,12 @@ export default function QuotesArchive() {
     }))
     .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "he"));
 
+  // Same reasoning as agentOptions — built from every quote, not just the
+  // date-filtered set, so picking a range doesn't make a selected client's
+  // own filter option disappear out from under it.
+  const clientOptions = [...new Set(quotes.map((q) => q.client_name).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, "he"));
+
   // Product checklist is built from what's actually present in range, so it never
   // offers a filter that can only return zero rows.
   const availableProducts = useMemo(() => {
@@ -265,6 +272,7 @@ export default function QuotesArchive() {
 
   const filtered = byDate.filter((q) => {
     if (selectedAgent && q.created_by !== selectedAgent) return false;
+    if (selectedClient && q.client_name !== selectedClient) return false;
     if (statusFilter && (q.status || "draft") !== statusFilter) return false;
     if (docKind === "order" && !isOrder(q)) return false;
     if (docKind === "quote" && isOrder(q)) return false;
@@ -282,7 +290,7 @@ export default function QuotesArchive() {
   });
 
   const resetFilters = () => {
-    setSearch(""); setDatePreset("all"); setSelectedAgent(null); setDocKind("all");
+    setSearch(""); setDatePreset("all"); setSelectedAgent(null); setSelectedClient(null); setDocKind("all");
     setStatusFilter(""); setSelectedProduct("");
   };
 
@@ -364,6 +372,15 @@ export default function QuotesArchive() {
                 <option value="">כל הסוכנים</option>
                 {agentOptions.map((a) => (
                   <option key={a.key} value={a.key}>{a.name} ({a.count})</option>
+                ))}
+              </Filter>
+            )}
+
+            {clientOptions.length > 0 && (
+              <Filter label="לקוח" value={selectedClient || ""} onChange={(v) => setSelectedClient(v || null)} className="w-[15rem]">
+                <option value="">כל הלקוחות</option>
+                {clientOptions.map((name) => (
+                  <option key={name} value={name}>{name}</option>
                 ))}
               </Filter>
             )}
@@ -505,8 +522,28 @@ export default function QuotesArchive() {
                       key={q.id}
                       className="border-b border-slate-100 last:border-b-0 hover:bg-slate-50 transition-colors"
                     >
-                      <td className="px-3 py-2 text-slate-500 whitespace-nowrap">{sellers[q.created_by] || q.created_by}</td>
-                      <td className="px-3 py-2 font-semibold text-foreground whitespace-nowrap">{q.client_name}</td>
+                      {/* Agent/client cells double as one-click filters — same
+                          idea as the agent-summary table rows above, just
+                          reachable straight from the row you're already
+                          looking at instead of having to scroll up to it. */}
+                      <td className="px-3 py-2 text-slate-500 whitespace-nowrap">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setSelectedAgent(q.created_by === selectedAgent ? null : q.created_by); }}
+                          className="hover:text-primary hover:underline"
+                          title={`סנן לפי ${sellers[q.created_by] || q.created_by}`}
+                        >
+                          {sellers[q.created_by] || q.created_by}
+                        </button>
+                      </td>
+                      <td className="px-3 py-2 font-semibold text-foreground whitespace-nowrap">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setSelectedClient(q.client_name === selectedClient ? null : q.client_name); }}
+                          className="hover:text-primary hover:underline text-right"
+                          title={`סנן לפי ${q.client_name}`}
+                        >
+                          {q.client_name}
+                        </button>
+                      </td>
                       <td className="px-3 py-2">
                         <div className="flex flex-wrap gap-1">
                           {productTypesOf(q).sort(compareSku).map((type) => (
