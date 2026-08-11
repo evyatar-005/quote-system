@@ -85,24 +85,22 @@ function fetchClosedQuoteIds(db) {
   );
 }
 
-// One row per agent with at least one quote (any status) in the period,
-// ordered highest-selling first. quotesOffered = every quote created,
-// regardless of outcome; quotesClosed = the subset that actually became a
-// Morning order — revenue/totalBeforeVat only ever come from the closed
-// ones, so a pile of never-ordered quotes never inflates the money figures,
-// only the offered/closing-rate context around them.
+// One row per agent with at least one actual ORDER (a quote that got a real
+// Morning order document) in the period, ordered highest-selling first. Only
+// closed/ordered quotes are counted at all here — never-ordered quotes don't
+// appear in this report, not even as an "offered" count, per explicit
+// request: this report is about orders, not quotes.
 function fetchSalesByAgent(db, fromDate, toDate) {
   return db.prepare(`
     SELECT
       q.created_by AS username,
       COALESCE(u.full_name, q.created_by) AS agentName,
-      COUNT(*) AS quotesOffered,
-      SUM(CASE WHEN closed.quote_id IS NOT NULL THEN 1 ELSE 0 END) AS quotesClosed,
-      SUM(CASE WHEN closed.quote_id IS NOT NULL THEN q.price_before_vat ELSE 0 END) AS totalBeforeVat,
-      SUM(CASE WHEN closed.quote_id IS NOT NULL THEN q.price_with_vat ELSE 0 END) AS totalWithVat
+      COUNT(*) AS ordersCount,
+      SUM(q.price_before_vat) AS totalBeforeVat,
+      SUM(q.price_with_vat) AS totalWithVat
     FROM signshop_quotes q
     LEFT JOIN users u ON u.username = q.created_by
-    LEFT JOIN (SELECT DISTINCT quote_id FROM morning_documents_map WHERE morning_document_type = ${MORNING_ORDER_TYPE}) closed
+    INNER JOIN (SELECT DISTINCT quote_id FROM morning_documents_map WHERE morning_document_type = ${MORNING_ORDER_TYPE}) closed
       ON closed.quote_id = q.id
     WHERE date(q.created_at) BETWEEN date(?) AND date(?)
       AND ${NOT_SUPERSEDED('q')}
@@ -111,39 +109,34 @@ function fetchSalesByAgent(db, fromDate, toDate) {
   `).all(fromDate, toDate);
 }
 
-// Per-product rollup across every quote (any status) in the period.
-// quotesOffered/quotesClosed count DISTINCT QUOTES that included this
-// product (a quote referencing the same product twice via extra-size rows
-// still counts once) — revenue/units stay LINE-level and closed-only, same
-// as before, deliberately excluding VAT/shipping/installation which don't
-// live on a line.
+// Per-product rollup across every ORDERED quote in the period — never-ordered
+// quotes are skipped entirely (not counted, not shown), same "orders only"
+// rule as fetchSalesByAgent. ordersCount counts DISTINCT ORDERS that included
+// this product (a quote referencing the same product twice via extra-size
+// rows still counts once); revenue/units stay LINE-level, deliberately
+// excluding VAT/shipping/installation which don't live on a line.
 function fetchSalesByProduct(db, fromDate, toDate) {
+  const closedQuoteIds = fetchClosedQuoteIds(db);
   const quotes = db.prepare(`
     SELECT id, calculation_data FROM signshop_quotes q
     WHERE date(q.created_at) BETWEEN date(?) AND date(?)
       AND ${NOT_SUPERSEDED('q')}
-  `).all(fromDate, toDate);
-  const closedQuoteIds = fetchClosedQuoteIds(db);
+  `).all(fromDate, toDate).filter((q) => closedQuoteIds.has(q.id));
 
   const map = {};
-  const get = (type) => map[type] || (map[type] = { type, name: productLabel(type), revenue: 0, units: 0, quotesOffered: 0, quotesClosed: 0 });
+  const get = (type) => map[type] || (map[type] = { type, name: productLabel(type), revenue: 0, units: 0, ordersCount: 0 });
 
   for (const q of quotes) {
-    const closed = closedQuoteIds.has(q.id);
     const typesInThisQuote = new Set();
     for (const l of linesOf(q)) {
       const type = l.productType || '—';
       typesInThisQuote.add(type);
-      if (closed) {
-        const p = get(type);
-        p.revenue += l.result?.sellingPriceAll || 0;
-        p.units += l.quantity || 1;
-      }
+      const p = get(type);
+      p.revenue += l.result?.sellingPriceAll || 0;
+      p.units += l.quantity || 1;
     }
     for (const type of typesInThisQuote) {
-      const p = get(type);
-      p.quotesOffered += 1;
-      if (closed) p.quotesClosed += 1;
+      get(type).ordersCount += 1;
     }
   }
   return Object.values(map).sort((a, b) => b.revenue - a.revenue);
@@ -153,31 +146,25 @@ function fmtMoney(n) {
   return `₪ ${Number(n || 0).toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function closingRatePct(closed, offered) {
-  return offered > 0 ? `${Math.round((closed / offered) * 100)}%` : '—';
-}
-
 function agentSectionHtml(rows) {
   const max = Math.max(...rows.map((r) => r.totalBeforeVat || 0), 0);
   const tableRows = rows.map((r) => tableRow([
-    r.agentName, r.quotesOffered, r.quotesClosed, closingRatePct(r.quotesClosed, r.quotesOffered),
-    fmtMoney(r.totalBeforeVat), barCell(r.totalBeforeVat, max),
+    r.agentName, r.ordersCount, fmtMoney(r.totalBeforeVat), barCell(r.totalBeforeVat, max),
   ]));
   return tableShell(
-    ['סוכן', 'מס׳ הצעות', 'מס׳ סגירות', 'אחוז סגירה', 'סה״כ (לפני מע״מ)', 'חלק יחסי'],
+    ['סוכן', 'מס׳ הזמנות', 'סה״כ (לפני מע״מ)', 'חלק יחסי'],
     tableRows,
-    'אין הצעות בתקופה זו.'
+    'אין הזמנות בתקופה זו.'
   );
 }
 
 function productSectionHtml(rows) {
   const max = Math.max(...rows.map((r) => r.revenue || 0), 0);
   const tableRows = rows.map((r) => tableRow([
-    r.name, r.quotesOffered, r.quotesClosed, closingRatePct(r.quotesClosed, r.quotesOffered),
-    r.units, fmtMoney(r.revenue), barCell(r.revenue, max, '#2563eb'),
+    r.name, r.ordersCount, r.units, fmtMoney(r.revenue), barCell(r.revenue, max, '#2563eb'),
   ]));
   return tableShell(
-    ['מוצר', 'מס׳ הצעות', 'מס׳ סגירות', 'אחוז סגירה', 'יחידות (סגורות)', 'מחזור (לפני מע״מ)', 'חלק יחסי'],
+    ['מוצר', 'מס׳ הזמנות', 'יחידות', 'מחזור (לפני מע״מ)', 'חלק יחסי'],
     tableRows,
     'אין נתוני מוצרים בתקופה זו.'
   );
@@ -185,18 +172,15 @@ function productSectionHtml(rows) {
 
 function buildEmail(agentRows, productRows, frequencyLabel, fromDate, toDate) {
   const periodLabel = fromDate === toDate ? toDate : `${fromDate} — ${toDate}`;
-  const totalOffered = agentRows.reduce((sum, r) => sum + r.quotesOffered, 0);
-  const totalClosed = agentRows.reduce((sum, r) => sum + r.quotesClosed, 0);
+  const totalOrders = agentRows.reduce((sum, r) => sum + r.ordersCount, 0);
   const totalBeforeVat = agentRows.reduce((sum, r) => sum + (r.totalBeforeVat || 0), 0);
-  const subject = `דוח מכירות ${frequencyLabel} — ${periodLabel} (${totalClosed}/${totalOffered} הצעות)`;
+  const subject = `דוח מכירות ${frequencyLabel} — ${periodLabel} (${totalOrders} הזמנות)`;
 
   const html = renderReportEmail({
     title: 'דוח מכירות',
     periodLabel: `${frequencyLabel} · ${formatDateRangeHe(fromDate, toDate)}`,
     kpis: [
-      { label: 'הצעות שהוצאו', value: totalOffered },
-      { label: 'הצעות שנסגרו', value: totalClosed },
-      { label: 'אחוז סגירה', value: closingRatePct(totalClosed, totalOffered) },
+      { label: 'הזמנות', value: totalOrders },
       { label: 'סה״כ לפני מע״מ', value: fmtMoney(totalBeforeVat) },
     ],
     sections: [
@@ -207,9 +191,9 @@ function buildEmail(agentRows, productRows, frequencyLabel, fromDate, toDate) {
   });
 
   const text = `דוח מכירות ${frequencyLabel} — ${periodLabel}\n\n` +
-    `${totalClosed}/${totalOffered} הצעות נסגרו (${closingRatePct(totalClosed, totalOffered)}), סה"כ ${fmtMoney(totalBeforeVat)} לפני מע"מ\n\n` +
-    `לפי סוכן:\n` + agentRows.map((r) => `${r.agentName}: ${r.quotesClosed}/${r.quotesOffered} הצעות, ${fmtMoney(r.totalBeforeVat)}`).join('\n') +
-    `\n\nלפי מוצר:\n` + productRows.map((r) => `${r.name}: ${r.quotesClosed}/${r.quotesOffered} הצעות, ${r.units} יחידות, ${fmtMoney(r.revenue)}`).join('\n');
+    `${totalOrders} הזמנות, סה"כ ${fmtMoney(totalBeforeVat)} לפני מע"מ\n\n` +
+    `לפי סוכן:\n` + agentRows.map((r) => `${r.agentName}: ${r.ordersCount} הזמנות, ${fmtMoney(r.totalBeforeVat)}`).join('\n') +
+    `\n\nלפי מוצר:\n` + productRows.map((r) => `${r.name}: ${r.ordersCount} הזמנות, ${r.units} יחידות, ${fmtMoney(r.revenue)}`).join('\n');
 
   return { subject, html, text };
 }
@@ -227,7 +211,7 @@ async function sendReport(db, cfg) {
   const { subject, html, text } = buildEmail(agentRows, productRows, FREQUENCY_LABELS[cfg.frequency] || cfg.frequency, fromDate, toDate);
   await mail.sendMail(db, { to: recipients.join(', '), subject, html, text });
   console.log(`[salesReport] sent sales for ${agentRows.length} agent(s)/${productRows.length} product(s), ${fromDate}..${toDate}, to ${recipients.join(', ')}`);
-  return { sent: true, count: agentRows.reduce((sum, r) => sum + r.quotesOffered, 0) };
+  return { sent: true, count: agentRows.reduce((sum, r) => sum + r.ordersCount, 0) };
 }
 
 module.exports = { REPORT_TYPE, sendReport, fetchSalesByAgent, fetchSalesByProduct };
