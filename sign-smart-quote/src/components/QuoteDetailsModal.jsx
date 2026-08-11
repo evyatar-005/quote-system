@@ -300,7 +300,11 @@ function CostCard({ title, children, highlight = false }) {
 // two numbers react immediately to a discount instead of showing the
 // as-saved price forever. Omit (extra-size rows, which have no discount of
 // their own) to fall back to the result's own as-saved totals.
-function CostBreakdown({ result, livePrice, liveCost }) {
+// `priceRatio` is how far this item's price moved from what was saved (live
+// price ÷ original price) under the manager's discount / pricing mode. Only the
+// commissions and the price itself scale with it — material, labour, overhead
+// and third-party installation are all price-INDEPENDENT and stay as saved.
+function CostBreakdown({ result, priceRatio = 1 }) {
   if (!result) return null;
   // The engine fills every family's breakdown with the same key set, using a
   // literal 0 for fields that don't apply — so `!= null` alone can't tell
@@ -392,20 +396,27 @@ function CostBreakdown({ result, livePrice, liveCost }) {
         // family that genuinely has no physical size concept at all.
         const area = result.totalArea;
         const hasArea = area != null && area > 0;
-        // liveCost/livePrice (the manager's current, discount/pricing-mode-
-        // adjusted numbers) win when provided; otherwise fall back to this
-        // item's own as-saved totals (e.g. for extra-size rows, which aren't
-        // individually discountable).
-        const costAll = liveCost ?? result.totalCostAll ?? result.totalCostPerUnit ?? 0;
-        const priceAll = livePrice ?? result.sellingPriceAll ?? 0;
+        // Commissions are a straight % of the selling price, so a discount has
+        // to move them too — showing the originally-saved shekel amount next to
+        // a discounted price overstated the cost and understated the profit.
+        const agentCommission = result.breakdown?.salesAgentCommissionCost != null
+          ? result.breakdown.salesAgentCommissionCost * priceRatio : null;
+        const marketingCommission = result.breakdown?.marketingCommissionCost != null
+          ? result.breakdown.marketingCommissionCost * priceRatio : null;
+        const commissionDelta = ((agentCommission || 0) + (marketingCommission || 0))
+          - ((result.breakdown?.salesAgentCommissionCost || 0) + (result.breakdown?.marketingCommissionCost || 0));
+        // The only price-dependent slice of the cost is the commission, so the
+        // live cost is the saved cost plus however much the commission moved.
+        const costAll = (result.totalCostAll ?? result.totalCostPerUnit ?? 0) + commissionDelta;
+        const priceAll = (result.sellingPriceAll ?? 0) * priceRatio;
         const costPerSqm = hasArea ? costAll / area : null;
         const pricePerSqm = hasArea ? priceAll / area : null;
-        const commissionTotal = (result.breakdown?.salesAgentCommissionCost || 0)
-          + (result.breakdown?.marketingCommissionCost || 0)
+        const commissionTotal = (agentCommission || 0)
+          + (marketingCommission || 0)
           + (isStickerResult ? (result.breakdown?.stickerInstallCost || 0) : 0);
         const commissionRows = [
-          result.breakdown?.salesAgentCommissionCost != null && <MiniRow key="agent" label="עמלת סוכן מכירות" value={fmt(result.breakdown.salesAgentCommissionCost)} />,
-          result.breakdown?.marketingCommissionCost != null && <MiniRow key="marketing" label="עמלת שיווק" value={fmt(result.breakdown.marketingCommissionCost)} />,
+          agentCommission != null && <MiniRow key="agent" label="עמלת סוכן מכירות" value={fmt(agentCommission)} />,
+          marketingCommission != null && <MiniRow key="marketing" label="עמלת שיווק" value={fmt(marketingCommission)} />,
           // Installation is a paid-out third-party cost, not shop labour —
           // sits with the commissions rather than buried in the labour card.
           isStickerResult && result.breakdown?.stickerInstallCost != null && (
@@ -975,9 +986,24 @@ export default function QuoteDetailsModal({ quote, onClose, onSaved, readOnly = 
                 {(() => {
                   const rows = rowsByItem[Math.min(step, items.length - 1)] || [];
                   const totalArea = rows.reduce((s, r) => s + (r.result?.totalArea || 0), 0);
-                  const notes = rows
-                    .map((r) => [r.line?.description, r.line?.freeText].filter((t) => t && String(t).trim()).join(" — "))
-                    .filter(Boolean);
+                  // A saved description is multi-line: product name first, then
+                  // the spec the calculator built (measurements, extras,
+                  // installation, "הערה: …"). The table prints the first line
+                  // and has its own מידות/מ״ר columns, so only what's LEFT —
+                  // minus a spec line that just repeats the dimensions — belongs
+                  // in the notes box. Printing the whole description in both
+                  // places is what duplicated every note.
+                  const notes = rows.flatMap((r) => {
+                    const dims = dimsLabel(r.source);
+                    const rest = String(r.line?.description || "")
+                      .split("\n")
+                      .map((t) => t.trim())
+                      .filter(Boolean)
+                      .slice(1)
+                      .filter((t) => t !== dims);
+                    const free = String(r.line?.freeText || "").trim();
+                    return [...rest, ...(free && !rest.includes(free) ? [free] : [])];
+                  });
                   // The LIVE per-row price: the saved unitPrice scaled by the
                   // same ratio the whole item's price moved under the active
                   // pricing mode / discount, so the table never contradicts the
@@ -1017,14 +1043,14 @@ export default function QuoteDetailsModal({ quote, onClose, onSaved, readOnly = 
                               const lineTotal = (r.result?.sellingPriceAll || 0) * ratio;
                               return (
                                 <tr key={ri} className="text-zinc-800">
+                                  {/* First line of the description only — the
+                                      product name. The spec lines under it are
+                                      shown once, in the notes box below. */}
                                   <td className="px-3 py-2">
-                                    {r.line?.description
+                                    {String(r.line?.description || "").split("\n")[0].trim()
                                       || (r.isExtra
                                         ? r.source?.lineLabel || `שורה נוספת ${ri + 1}`
                                         : PRODUCT_NAMES[selectedItem.productType] || selectedItem.productType)}
-                                    {r.isExtra && r.line?.freeText && (
-                                      <span className="text-zinc-500"> · {r.line.freeText}</span>
-                                    )}
                                   </td>
                                   <td className="px-3 py-2 whitespace-nowrap text-zinc-600">{dimsLabel(r.source) || "—"}</td>
                                   <td className="px-3 py-2 whitespace-nowrap text-zinc-600">
@@ -1092,7 +1118,7 @@ export default function QuoteDetailsModal({ quote, onClose, onSaved, readOnly = 
                     // הפריט האחרון ב-DOM נופל לעמודה השמאלית ביותר, ולכן כרטיס
                     // הסיכום מסתיים בצד שמאל בלי להפוך את סדר הקריאה של השאר.
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                      <CostBreakdown result={selectedItem.result} livePrice={selectedPricing.price} liveCost={selectedPricing.cost} />
+                      <CostBreakdown result={selectedItem.result} priceRatio={selectedPricing.original > 0 ? selectedPricing.price / selectedPricing.original : 1} />
                       <CostCard title="סיכום" highlight>
                         <EmphasizedRow label="מחיר מכירה" value={fmt(selectedPricing.price)} color="green" />
                         {/* Installation can be the majority of a sticker's price
@@ -1117,7 +1143,7 @@ export default function QuoteDetailsModal({ quote, onClose, onSaved, readOnly = 
                       {row.lineLabel || `שורה נוספת ${ri + 2}`}{dimsLabel(row) ? ` · ${dimsLabel(row)}` : ""}
                     </div>
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                      <CostBreakdown result={row.result} />
+                      <CostBreakdown result={row.result} priceRatio={selectedPricing.original > 0 ? selectedPricing.price / selectedPricing.original : 1} />
                     </div>
                   </div>
                 ))}
