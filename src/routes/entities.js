@@ -251,7 +251,7 @@ module.exports = function registerEntities(app, db, deps) {
   }
 
   function quoteList(req, res) {
-    const { sort, limit, ...filters } = req.query;
+    const { sort, limit, own, ...filters } = req.query;
     const where = [];
     const params = [];
     for (const [k, v] of Object.entries(filters)) {
@@ -261,7 +261,13 @@ module.exports = function registerEntities(app, db, deps) {
     // the client's query string asked for, so this can't be bypassed by a
     // direct API call that omits/spoofs created_by (the UI-level filtering
     // in QuotesHistory.jsx was never a real access control).
-    if (req.user.role !== 'admin') {
+    //
+    // `own=1` forces the SAME scoping for an admin too — MyQuotes.jsx ("ההצעות
+    // שלי") sends it so an admin's personal-quotes screen shows only what they
+    // themselves created, never every agent's quotes. Admin-only screens that
+    // legitimately need everyone's quotes (QuotesHistory/QuotesArchive) simply
+    // omit this flag, so their access is unchanged.
+    if (req.user.role !== 'admin' || own) {
       const i = where.findIndex(c => c.startsWith('created_by'));
       if (i !== -1) { where.splice(i, 1); params.splice(i, 1); }
       where.push('created_by = ?');

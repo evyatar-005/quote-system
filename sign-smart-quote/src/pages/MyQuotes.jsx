@@ -71,7 +71,10 @@ export default function MyQuotes() {
 
   const loadQuotes = async () => {
     setLoading(true);
-    const data = await base44.entities.Quote.list("-created_date", 200);
+    // `own: 1` forces server-side scoping to the logged-in user's own quotes
+    // even for an admin — otherwise an admin viewing "ההצעות שלי" saw every
+    // agent's quotes too (see quoteList in routes/entities.js).
+    const data = await base44.entities.Quote.filter({ own: 1 }, "-created_date", 200);
     setQuotes(data);
     if (data.length > 0) {
       try {
