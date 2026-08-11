@@ -1,6 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { LogOut, Settings2, FileStack, Scissors, PenTool, Users, Target, MessagesSquare, Send, Sparkles } from "lucide-react";
+import { LogOut, Settings2, FileStack, Scissors, PenTool, Sparkles } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 
 // The agent-facing counterpart to ManagerSidebar — same fixed-width, full
@@ -10,6 +10,11 @@ import { useAuth } from "@/lib/AuthContext";
 // לבדיקה/אנליטיקה, no "ממשק סוכן מכירות" link back into itself) — same
 // permissions as before: the admin-only link stays gated behind
 // user.role === "admin".
+//
+// No CRM nav group here on purpose (CRM plan Phase 5 follow-up): לקוחות/
+// לידים/תיבת שיחות/דיוור are manager-facing oversight screens, not daily
+// agent tools — an agent's entire CRM workflow is "היום שלי" (claim, work
+// the WhatsApp thread, send materials) plus the lead workspace it links to.
 
 // Icon-only rail that expands on hover — same behaviour as ManagerSidebar, so
 // an admin switching between the two menus never sees them behave differently.
@@ -44,17 +49,11 @@ export default function AgentSidebar() {
   const { pathname } = useLocation();
 
   return (
-    <aside className="group relative w-16 shrink-0 sticky top-24 h-[calc(100vh-6rem)] z-10">
-      <div className="absolute inset-y-0 right-0 w-16 group-hover:w-64 transition-[width] duration-200 ease-out overflow-y-auto overflow-x-hidden border-l border-black bg-background group-hover:shadow-2xl px-2 space-y-6">
+    <aside className="group relative w-16 shrink-0 sticky top-32 h-[calc(100vh-8rem)] z-10">
+      <div className="absolute inset-y-0 right-0 w-16 group-hover:w-64 transition-[width] duration-200 ease-out overflow-y-auto overflow-x-hidden border-l border-black bg-background group-hover:shadow-2xl px-2 pt-3 pb-4 space-y-6">
       <NavGroup title="מכירות">
         <NavItem to="/my-day" icon={Sparkles} label="היום שלי" active={pathname === "/my-day"} />
         <NavItem to="/my-quotes" icon={FileStack} label="ההצעות שלי" active={pathname === "/my-quotes"} />
-      </NavGroup>
-      <NavGroup title="CRM">
-        <NavItem to="/crm/customers" icon={Users} label="לקוחות" active={pathname.startsWith("/crm/customers")} />
-        <NavItem to="/crm/leads" icon={Target} label="לידים" active={pathname === "/crm/leads"} />
-        <NavItem to="/crm/inbox" icon={MessagesSquare} label="תיבת שיחות" active={pathname === "/crm/inbox"} />
-        <NavItem to="/crm/campaigns" icon={Send} label="דיוור" active={pathname.startsWith("/crm/campaigns")} />
       </NavGroup>
       <NavGroup title="תפעול">
         <NavItem to="/cutting" icon={Scissors} label="ניצולת לוחות" active={pathname === "/cutting"} />

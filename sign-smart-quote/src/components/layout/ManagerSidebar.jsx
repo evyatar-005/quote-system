@@ -49,8 +49,8 @@ export default function ManagerSidebar() {
   const { pathname, search } = useLocation();
 
   return (
-    <aside className="group relative w-16 shrink-0 sticky top-24 h-[calc(100vh-6rem)] z-10">
-      <div className="absolute inset-y-0 right-0 w-16 group-hover:w-64 transition-[width] duration-200 ease-out overflow-y-auto overflow-x-hidden border-l border-black bg-background group-hover:shadow-2xl px-2 space-y-6">
+    <aside className="group relative w-16 shrink-0 sticky top-32 h-[calc(100vh-8rem)] z-10">
+      <div className="absolute inset-y-0 right-0 w-16 group-hover:w-64 transition-[width] duration-200 ease-out overflow-y-auto overflow-x-hidden border-l border-black bg-background group-hover:shadow-2xl px-2 pt-3 pb-4 space-y-6">
       <NavGroup title="מכירות">
         {/* An admin browsing the agent calculator still needs their own
             personal quote list — ManagerSidebar had no link to it at all,
