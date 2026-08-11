@@ -16,7 +16,7 @@ import {
 // not the coarse product_category — so names come from the calculator's canonical
 // PRODUCT_NAMES map, and the badge colour from the category that type rolls up to.
 import { PRODUCT_NAMES, PRODUCT_CODES, categoryOf } from "@/components/calculator/CalculatorForm";
-import { shippingOf } from "@/lib/quoteEconomics";
+import { shippingOf, latestRevisionsOnly } from "@/lib/quoteEconomics";
 
 // Deal amount excluding VAT and shipping — same definition as "סכום עסקה" in
 // the אנליטיקה screen (QuotesAnalytics.jsx), applied here too so every ₪
@@ -215,7 +215,12 @@ export default function QuotesArchive() {
     return { from: null, to: null }; // "all"
   })();
 
-  const byDate = quotes.filter((q) => {
+  // Collapse revision chains before anything else — a quote sent for review
+  // and then re-issued with a manager's discount is ONE deal stored as two
+  // rows (the newer carries parent_quote_number), so listing/summing both
+  // double-counted it. Supersession is decided against the FULL `quotes` set
+  // so a revision outside the current date range still hides its parent.
+  const byDate = latestRevisionsOnly(quotes, quotes).filter((q) => {
     if (!dateRange.from && !dateRange.to) return true;
     const created = new Date(q.created_date);
     if (dateRange.from && created < dateRange.from) return false;

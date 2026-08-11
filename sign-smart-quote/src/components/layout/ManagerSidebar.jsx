@@ -1,7 +1,7 @@
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
-  LogOut, Settings2, Info, BarChart3, Scissors, PenTool, ClipboardList, LineChart, Users, Target, MessagesSquare, Send, FileStack,
+  LogOut, Settings2, Info, BarChart3, Scissors, PenTool, ClipboardList, LineChart, Users, Target, MessagesSquare, Send, FileStack, Sparkles,
 } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 
@@ -49,6 +49,7 @@ export default function ManagerSidebar() {
             personal quote list — ManagerSidebar had no link to it at all,
             which silently hid "ההצעות שלי" the moment an admin's calculator
             page switched from AgentSidebar to this one. */}
+        <NavItem to="/my-day" icon={Sparkles} label="היום שלי" active={pathname === "/my-day"} />
         <NavItem to="/my-quotes" icon={FileStack} label="ההצעות שלי" active={pathname === "/my-quotes"} />
         <NavItem to="/quotes" icon={ClipboardList} label="הצעות לבדיקה" active={pathname === "/quotes"} />
         <NavItem to="/quotes-archive" icon={LineChart} label="אנליטיקה" active={pathname === "/quotes-archive"} />

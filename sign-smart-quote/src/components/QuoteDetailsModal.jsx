@@ -302,6 +302,12 @@ function CostCard({ title, children, highlight = false }) {
 // their own) to fall back to the result's own as-saved totals.
 function CostBreakdown({ result, livePrice, liveCost }) {
   if (!result) return null;
+  // The engine fills every family's breakdown with the same key set, using a
+  // literal 0 for fields that don't apply — so `!= null` alone can't tell
+  // "this family has no such cost" from "this cost happens to be zero".
+  // Gate family-specific rows on the family itself instead.
+  const isStickerResult = !!result.isSticker;
+  const isKapaResult = result.productFamily === "kapa" || !!result.isKapa;
   return (
     <>
       <CostCard title="חומרי גלם">
@@ -321,12 +327,12 @@ function CostBreakdown({ result, livePrice, liveCost }) {
         {result.perspexFrontCost != null && <MiniRow label="פרספקס חזית" value={fmt(result.perspexFrontCost)} />}
         {/* קאפה/מדבקה — הועברו לכאן מהכרטיסים הנפרדים "פירוט קאפה"/"פירוט
             מדבקה" שהיו קודם: אלה עלויות חומר גלם לכל דבר, לא קטגוריה משלהן. */}
-        {result.breakdown?.kapaSheetCost != null && <MiniRow label="לוח קאפה" value={fmt(result.breakdown.kapaSheetCost)} />}
-        {result.breakdown?.stickerMaterialCost != null && <MiniRow label="חומר מדבקה" value={fmt(result.breakdown.stickerMaterialCost)} />}
-        {result.breakdown?.stickerInkCost != null && <MiniRow label="דיו מדבקה" value={fmt(result.breakdown.stickerInkCost)} />}
-        {result.breakdown?.stickerWasteAmount != null && <MiniRow label="פחת מדבקה" value={fmt(result.breakdown.stickerWasteAmount)} />}
-        {result.rawMaterialBeforeWaste != null && <MiniRow label="לפני פחת" value={fmt(result.rawMaterialBeforeWaste)} />}
-        {result.wasteAmount != null && <MiniRow label="פחת (חומר)" value={fmt(result.wasteAmount)} />}
+        {isKapaResult && result.breakdown?.kapaSheetCost != null && <MiniRow label="לוח קאפה" value={fmt(result.breakdown.kapaSheetCost)} />}
+        {isStickerResult && result.breakdown?.stickerMaterialCost != null && <MiniRow label="חומר מדבקה" value={fmt(result.breakdown.stickerMaterialCost)} />}
+        {isStickerResult && result.breakdown?.stickerInkCost != null && <MiniRow label="דיו מדבקה" value={fmt(result.breakdown.stickerInkCost)} />}
+        {isStickerResult && result.breakdown?.stickerWasteAmount != null && <MiniRow label="פחת מדבקה" value={fmt(result.breakdown.stickerWasteAmount)} />}
+        {!isStickerResult && result.rawMaterialBeforeWaste != null && <MiniRow label="לפני פחת" value={fmt(result.rawMaterialBeforeWaste)} />}
+        {!isStickerResult && result.wasteAmount != null && <MiniRow label="פחת (חומר)" value={fmt(result.wasteAmount)} />}
         {/* שטיח פיויסי בלבד — פחת הגליל מתורגם לחיוב נפרד ללקוח (עלות פחת ×
             מכפיל שהוגדר באדמין), לא רק נספג כעלות פנימית. חשוב שהמנהל יראה
             את הסכום הזה בנפרד — הוא חלק מהמחיר שהלקוח משלם, לא רק עלות. */}
@@ -335,24 +341,44 @@ function CostBreakdown({ result, livePrice, liveCost }) {
       </CostCard>
 
       <CostCard title="עלויות עבודה ותקורה">
-        {result.breakdown?.printLaborCost != null && <MiniRow label="הדפסה" value={fmt(result.breakdown.printLaborCost)} />}
-        {result.breakdown?.preCutLaborCost != null && <MiniRow label="קדם חיתוך" value={fmt(result.breakdown.preCutLaborCost)} />}
-        {result.breakdown?.laserLaborCost != null && <MiniRow label="חיתוך לייזר" value={fmt(result.breakdown.laserLaborCost)} />}
-        {result.breakdown?.somaLaborCost != null && <MiniRow label="חיתוך סומא" value={fmt(result.breakdown.somaLaborCost)} />}
-        {result.breakdown?.cutLaborCost != null && <MiniRow label="חיתוך" value={fmt(result.breakdown.cutLaborCost)} />}
-        {result.breakdown?.cleanLaborCost != null && <MiniRow label="ניקוי" value={fmt(result.breakdown.cleanLaborCost)} />}
-        {result.breakdown?.packagingLaborCost != null && <MiniRow label="אריזה" value={fmt(result.breakdown.packagingLaborCost)} />}
-        {result.breakdown?.paintRoomCost != null && <MiniRow label="חדר צביעה" value={fmt(result.breakdown.paintRoomCost)} />}
+        {/* Every row here is gated on `!= null`, but the engine returns 0 (not
+            undefined) for fields belonging to OTHER families — a sticker's
+            breakdown carries printLaborCost/laserLaborCost/… as a literal 0
+            (see the STICKER PATH in useCalculator.jsx). Without the family
+            gate below, a sticker rendered five irrelevant "0.00" labour rows
+            (הדפסה / חיתוך לייזר / חיתוך סומא / אריזה / חדר צביעה) next to its
+            real ones. CostResults.jsx already branches by family this way. */}
+        {!isStickerResult && !isKapaResult && (
+          <>
+            {result.breakdown?.printLaborCost != null && <MiniRow label="הדפסה" value={fmt(result.breakdown.printLaborCost)} />}
+            {result.breakdown?.preCutLaborCost != null && <MiniRow label="קדם חיתוך" value={fmt(result.breakdown.preCutLaborCost)} />}
+            {result.breakdown?.laserLaborCost != null && <MiniRow label="חיתוך לייזר" value={fmt(result.breakdown.laserLaborCost)} />}
+            {result.breakdown?.somaLaborCost != null && <MiniRow label="חיתוך סומא" value={fmt(result.breakdown.somaLaborCost)} />}
+            {result.breakdown?.cutLaborCost != null && <MiniRow label="חיתוך" value={fmt(result.breakdown.cutLaborCost)} />}
+            {result.breakdown?.cleanLaborCost != null && <MiniRow label="ניקוי" value={fmt(result.breakdown.cleanLaborCost)} />}
+            {result.breakdown?.packagingLaborCost != null && <MiniRow label="אריזה" value={fmt(result.breakdown.packagingLaborCost)} />}
+            {result.breakdown?.paintRoomCost != null && <MiniRow label="חדר צביעה" value={fmt(result.breakdown.paintRoomCost)} />}
+          </>
+        )}
         {/* קאפה/מדבקה — ראו הערה מקבילה למעלה; אלה עלויות עבודה/התקנה. */}
-        {result.breakdown?.kapaPrePrintLaborCost != null && <MiniRow label="קדם דפוס (קאפה)" value={fmt(result.breakdown.kapaPrePrintLaborCost)} />}
-        {result.breakdown?.kapaPrintLaborCost != null && <MiniRow label="הדפסה (קאפה)" value={fmt(result.breakdown.kapaPrintLaborCost)} />}
-        {result.breakdown?.kapaPreCutLaborCost != null && <MiniRow label="קדם חיתוך (קאפה)" value={fmt(result.breakdown.kapaPreCutLaborCost)} />}
-        {result.breakdown?.kapaCncCutLaborCost != null && <MiniRow label="חיתוך CNC (סומא)" value={fmt(result.breakdown.kapaCncCutLaborCost)} />}
-        {result.breakdown?.kapaPackagingLaborCost != null && <MiniRow label="אריזה (קאפה)" value={fmt(result.breakdown.kapaPackagingLaborCost)} />}
-        {result.breakdown?.stickerPrintLaborCost != null && <MiniRow label="הדפסה (מדבקה)" value={fmt(result.breakdown.stickerPrintLaborCost)} />}
-        {result.breakdown?.stickerCutLaborCost != null && <MiniRow label="חיתוך (מדבקה)" value={fmt(result.breakdown.stickerCutLaborCost)} />}
-        {result.breakdown?.stickerInstallCost != null && <MiniRow label="עלות התקנה (בפועל)" value={fmt(result.breakdown.stickerInstallCost)} />}
-        {result.breakdown?.installationCost != null && <MiniRow label="מחיר התקנה (ללקוח)" value={fmt(result.breakdown.installationCost)} />}
+        {isKapaResult && (
+          <>
+            {result.breakdown?.kapaPrePrintLaborCost != null && <MiniRow label="קדם דפוס (קאפה)" value={fmt(result.breakdown.kapaPrePrintLaborCost)} />}
+            {result.breakdown?.kapaPrintLaborCost != null && <MiniRow label="הדפסה (קאפה)" value={fmt(result.breakdown.kapaPrintLaborCost)} />}
+            {result.breakdown?.kapaPreCutLaborCost != null && <MiniRow label="קדם חיתוך (קאפה)" value={fmt(result.breakdown.kapaPreCutLaborCost)} />}
+            {result.breakdown?.kapaCncCutLaborCost != null && <MiniRow label="חיתוך CNC (סומא)" value={fmt(result.breakdown.kapaCncCutLaborCost)} />}
+            {result.breakdown?.kapaPackagingLaborCost != null && <MiniRow label="אריזה (קאפה)" value={fmt(result.breakdown.kapaPackagingLaborCost)} />}
+          </>
+        )}
+        {isStickerResult && (
+          <>
+            {result.breakdown?.stickerPrintLaborCost != null && <MiniRow label="הדפסה (מדבקה)" value={fmt(result.breakdown.stickerPrintLaborCost)} />}
+            {result.breakdown?.stickerCutLaborCost != null && <MiniRow label="חיתוך (מדבקה)" value={fmt(result.breakdown.stickerCutLaborCost)} />}
+            {/* עלות התקנה moved to the "עמלות" card and מחיר התקנה (ללקוח) to
+                "סיכום" — installation is a big share of a sticker's price and
+                was too easy to miss buried among the labour minutiae. */}
+          </>
+        )}
         {result.laborCost != null && <MiniRow label="סה״כ עבודה" value={fmt(result.laborCost)} />}
         {result.overheadCost != null && <MiniRow label="תקורה תפעולית" value={fmt(result.overheadCost)} />}
         {(result.laborCost != null || result.overheadCost != null) && (
@@ -374,10 +400,17 @@ function CostBreakdown({ result, livePrice, liveCost }) {
         const priceAll = livePrice ?? result.sellingPriceAll ?? 0;
         const costPerSqm = hasArea ? costAll / area : null;
         const pricePerSqm = hasArea ? priceAll / area : null;
-        const commissionTotal = (result.breakdown?.salesAgentCommissionCost || 0) + (result.breakdown?.marketingCommissionCost || 0);
+        const commissionTotal = (result.breakdown?.salesAgentCommissionCost || 0)
+          + (result.breakdown?.marketingCommissionCost || 0)
+          + (isStickerResult ? (result.breakdown?.stickerInstallCost || 0) : 0);
         const commissionRows = [
           result.breakdown?.salesAgentCommissionCost != null && <MiniRow key="agent" label="עמלת סוכן מכירות" value={fmt(result.breakdown.salesAgentCommissionCost)} />,
           result.breakdown?.marketingCommissionCost != null && <MiniRow key="marketing" label="עמלת שיווק" value={fmt(result.breakdown.marketingCommissionCost)} />,
+          // Installation is a paid-out third-party cost, not shop labour —
+          // sits with the commissions rather than buried in the labour card.
+          isStickerResult && result.breakdown?.stickerInstallCost != null && (
+            <MiniRow key="install" label="עלות התקנה (בפועל)" value={fmt(result.breakdown.stickerInstallCost)} />
+          ),
         ].filter(Boolean);
         if (!commissionRows.length && !hasArea) return null;
         return (
@@ -856,6 +889,24 @@ export default function QuoteDetailsModal({ quote, onClose, onSaved, readOnly = 
                 </p>
               )}
               <QuoteAttachments quoteId={quote.id} />
+              {/* Free-text the agent wrote per line (תיאור / הערות גרפיקה) —
+                  saved only on line_items, never on calculation_data, so the
+                  per-item cost view below can't show it and it was invisible
+                  to the reviewing manager until now. */}
+              {(() => {
+                const notes = lineItems
+                  .map((li) => [li.description, li.freeText].filter((s) => s && String(s).trim()).join(" — "))
+                  .filter(Boolean);
+                if (!notes.length) return null;
+                return (
+                  <div className="text-[11px] text-zinc-300 bg-white/5 border border-white/10 rounded-md px-2 py-1.5 mt-1.5 space-y-1">
+                    <span className="font-semibold text-zinc-400">תיאורי השורות והערות גרפיקה:</span>
+                    {notes.map((t, i) => (
+                      <p key={i} className="whitespace-pre-wrap leading-snug">• {t}</p>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
             <h3 className="text-[11px] font-semibold text-zinc-400 mb-1 uppercase tracking-wider px-1">פריטים</h3>
             {items.map((it, i) => {
@@ -935,6 +986,12 @@ export default function QuoteDetailsModal({ quote, onClose, onSaved, readOnly = 
                       <CostBreakdown result={selectedItem.result} livePrice={selectedPricing.price} liveCost={selectedPricing.cost} />
                       <CostCard title="סיכום" highlight>
                         <EmphasizedRow label="מחיר מכירה" value={fmt(selectedPricing.price)} color="green" />
+                        {/* Installation can be the majority of a sticker's price
+                            (e.g. ₪600 of a ₪950 line) — surfaced right under the
+                            selling price so it's never mistaken for a material cost. */}
+                        {selectedItem.result?.isSticker && selectedItem.result?.breakdown?.installationCost > 0 && (
+                          <MiniRow label="מתוכו מחיר התקנה (ללקוח)" value={fmt(selectedItem.result.breakdown.installationCost)} />
+                        )}
                         <MiniRow label="עלות גולמית" value={fmt(selectedAgg.materialTotal)} />
                         <MiniRow label="עלות תפעולית" value={fmt(operationalOnly)} />
                         <MiniRow label="עלות עמלות" value={fmt(commissionTotal)} />

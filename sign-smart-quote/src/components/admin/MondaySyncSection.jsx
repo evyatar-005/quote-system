@@ -31,6 +31,7 @@ export default function MondaySyncSection() {
   const [statusLost, setStatusLost] = useState("");
   const [statusQuoted, setStatusQuoted] = useState("");
   const [quoteFileCol, setQuoteFileCol] = useState("");
+  const [followUpCol, setFollowUpCol] = useState("");
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [editColumns, setEditColumns] = useState([]);
@@ -69,7 +70,7 @@ export default function MondaySyncSection() {
 
   const onBoardSelect = async (boardId) => {
     setSelectedBoardId(boardId);
-    setColumns([]); setNameCol(""); setPhoneCol(""); setEmailCol(""); setStatusCol(""); setQuoteFileCol("");
+    setColumns([]); setNameCol(""); setPhoneCol(""); setEmailCol(""); setStatusCol(""); setQuoteFileCol(""); setFollowUpCol("");
     if (!boardId) return;
     setLoadingColumns(true);
     try {
@@ -90,7 +91,7 @@ export default function MondaySyncSection() {
       await mondaySync.createBoardMap({
         board_id: selectedBoardId,
         board_name: boardName,
-        column_map: { name: nameCol || undefined, phone: phoneCol || undefined, email: emailCol || undefined, quote_file: quoteFileCol || undefined },
+        column_map: { name: nameCol || undefined, phone: phoneCol || undefined, email: emailCol || undefined, quote_file: quoteFileCol || undefined, follow_up: followUpCol || undefined },
         status_column_id: statusCol || null,
         status_values: { won: statusWon || undefined, lost: statusLost || undefined, quoted: statusQuoted || undefined },
       });
@@ -270,6 +271,7 @@ export default function MondaySyncSection() {
             <ColumnPicker label="עמודת טלפון" columns={columns} value={phoneCol} onChange={setPhoneCol} />
             <ColumnPicker label="עמודת אימייל" columns={columns} value={emailCol} onChange={setEmailCol} />
             <ColumnPicker label="עמודת קובץ הצעת מחיר (לדחיפה חזרה)" columns={columns} value={quoteFileCol} onChange={setQuoteFileCol} />
+            <ColumnPicker label="עמודת תאריך פולואפ" columns={columns} value={followUpCol} onChange={setFollowUpCol} />
             <ColumnPicker
               label="עמודת סטטוס (לדחיפה חזרה)"
               columns={columns}

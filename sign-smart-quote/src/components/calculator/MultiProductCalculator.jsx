@@ -3,6 +3,7 @@ import CalculatorTab from "./CalculatorTab";
 import { PRODUCT_NAMES, PRODUCT_CODES, EXTRAS_OPTIONS, categoryOf, productImage } from "./CalculatorForm";
 import { base44 } from "@/api/base44Client";
 import { issueQuoteToMorning } from "@/api/morningClient";
+import { crmLeads } from "@/api/crmClient";
 import ClientSearchField from "./ClientSearchField";
 import NewClientModal from "./NewClientModal";
 import DocumentIssuedModal from "@/components/DocumentIssuedModal";
@@ -165,7 +166,7 @@ function hydrateBuilderState(state) {
   return { ...state, items, formDataMap, itemLabels };
 }
 
-export default function MultiProductCalculator({ config, priceTiers, stickerPriceTiers, paintSurchargeTiers, kapaPriceTiers, rollupPriceTiers, lokobondAreaTiers, glassPriceTiers, numberPriceTiers, graphicsPriceTiers, defaultForm, allowedProducts, allTabs, initialBuilderState, sourceQuoteNumber }) {
+export default function MultiProductCalculator({ config, priceTiers, stickerPriceTiers, paintSurchargeTiers, kapaPriceTiers, rollupPriceTiers, lokobondAreaTiers, glassPriceTiers, numberPriceTiers, graphicsPriceTiers, defaultForm, allowedProducts, allTabs, initialBuilderState, sourceQuoteNumber, sourceLeadId }) {
   const firstTabKey = allTabs?.[0]?.key;
   // Computed once on mount (never on re-render, which would otherwise burn
   // fresh ids from nextId every time) — see hydrateBuilderState above.
@@ -634,11 +635,23 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
     }
   };
 
+  // When the calculator was opened from a CRM lead ("בנה הצעה" on My Day),
+  // link the resulting quote back to that lead: it flips the lead to 'quoted'
+  // and stamps signshop_quotes.lead_id, which is what later lets the issued
+  // PDF get pushed onto the lead's monday row. Fire-and-forget — a CRM
+  // hiccup must never make a successfully-saved quote look failed.
+  const linkLeadIfAny = (created) => {
+    if (!sourceLeadId || !created?.id) return;
+    crmLeads.convert(sourceLeadId, created.id)
+      .catch((err) => console.error('[calculator] lead link failed:', err.message));
+  };
+
   const handleSave = async () => {
     if (!isQuoteValid) return;
     setSaving(true);
     try {
       const created = await base44.entities.Quote.create(buildQuotePayload("draft"));
+      linkLeadIfAny(created);
       setSavedQuoteNumber(created.quote_number);
       await uploadPendingAttachments(created.id);
       setSaved(true);
@@ -658,6 +671,7 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
     setSending(true);
     try {
       const created = await base44.entities.Quote.create(buildQuotePayload("sent"));
+      linkLeadIfAny(created);
       setSavedQuoteNumber(created.quote_number);
       await uploadPendingAttachments(created.id);
       setSent(true);
@@ -678,6 +692,7 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
     setIssuing(true);
     try {
       const created = await base44.entities.Quote.create(buildQuotePayload("approved"));
+      linkLeadIfAny(created);
       setSavedQuoteNumber(created.quote_number);
       const result = await issueQuoteToMorning(created);
       if (result.issued) {

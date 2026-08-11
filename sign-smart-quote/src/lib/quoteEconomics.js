@@ -93,3 +93,22 @@ export function aggregateProducts(quotes) {
     };
   });
 }
+
+// Revisions/duplicates ("שכפול") are saved as NEW quote rows carrying
+// parent_quote_number — so an original that was sent for review and then
+// re-issued with a manager's discount exists twice in the table, and any
+// naive sum counts the same real deal two (or more) times.
+//
+// A quote is superseded iff some other quote names it as its parent; the one
+// nothing points at is the live, current version of that deal. Returns only
+// those, collapsing a revision chain of any depth to its latest link.
+//
+// `allQuotes` must be the FULL set, not a date/agent-filtered slice — a
+// revision created outside the current filter still supersedes its parent
+// inside it, and passing only the slice would silently resurrect the old row.
+export function latestRevisionsOnly(quotes, allQuotes = quotes) {
+  const superseded = new Set(
+    allQuotes.map((q) => q.parent_quote_number).filter(Boolean)
+  );
+  return quotes.filter((q) => !superseded.has(q.quote_number));
+}

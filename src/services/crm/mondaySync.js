@@ -106,8 +106,14 @@ async function pullBoard(db, boardMap, ownerUsername) {
   const touchItemMap = db.prepare(`UPDATE monday_item_map SET last_pulled_at = CURRENT_TIMESTAMP, raw_json = ? WHERE id = ?`);
   const findLeadByExt = db.prepare(`SELECT * FROM crm_leads WHERE source = 'monday' AND external_ref = ?`);
   const insertLead = db.prepare(
-    `INSERT INTO crm_leads (customer_id, campaign_id, source, external_ref, status, title, assigned_to)
-     VALUES (@customer_id, @campaign_id, 'monday', @external_ref, 'new', @title, @assigned_to)`
+    `INSERT INTO crm_leads (customer_id, campaign_id, source, external_ref, status, title, assigned_to, follow_up_date)
+     VALUES (@customer_id, @campaign_id, 'monday', @external_ref, 'new', @title, @assigned_to, @follow_up_date)`
+  );
+  // Follow-up dates keep moving on the board, so unlike the rest of the lead
+  // (frozen at first pull) this one is refreshed on every poll for leads that
+  // are still open — it drives the "פולואאפים להיום" column on My Day.
+  const updateFollowUp = db.prepare(
+    `UPDATE crm_leads SET follow_up_date = ? WHERE id = ? AND status NOT IN ('won','lost','disqualified')`
   );
 
   let created = 0;
@@ -116,10 +122,19 @@ async function pullBoard(db, boardMap, ownerUsername) {
       const name = columnMap.name ? columnText(item.column_values, columnMap.name) : item.name;
       const phone = columnMap.phone ? columnText(item.column_values, columnMap.phone) : null;
       const email = columnMap.email ? columnText(item.column_values, columnMap.email) : null;
+      // monday date columns come back as 'YYYY-MM-DD' (sometimes with a time) —
+      // keep just the date part so it compares cleanly against date('now').
+      const followUp = columnMap.follow_up
+        ? (columnText(item.column_values, columnMap.follow_up) || '').slice(0, 10) || null
+        : null;
 
       const existingMap = findItemMap.get(boardMap.board_id, item.id);
       if (existingMap) {
         touchItemMap.run(JSON.stringify(item), existingMap.id);
+        // Already-known item: don't recreate anything, but DO refresh the
+        // follow-up date — an agent moving it on the board must show up on
+        // My Day, and this is the only place we see the new value.
+        if (existingMap.lead_id && columnMap.follow_up) updateFollowUp.run(followUp, existingMap.lead_id);
         continue;
       }
 
@@ -132,9 +147,12 @@ async function pullBoard(db, boardMap, ownerUsername) {
           external_ref: item.id,
           title: item.name,
           assigned_to: ownerUsername,
+          follow_up_date: followUp,
         });
         lead = { id: lastInsertRowid };
         created += 1;
+      } else if (columnMap.follow_up) {
+        updateFollowUp.run(followUp, lead.id);
       }
       insertItemMap.run({
         board_id: boardMap.board_id,

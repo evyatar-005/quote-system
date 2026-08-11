@@ -102,6 +102,10 @@ export default function CostsDashboard() {
   // the correct fallback (nothing here is persisted until the agent saves).
   const initialBuilderState = location.state?.builderState || null;
   const sourceQuoteNumber = location.state?.sourceQuoteNumber || null;
+  // Set when the calculator was opened from a CRM lead ("בנה הצעה" on My Day)
+  // — links the saved quote back to that lead. Same read-once router-state
+  // convention as the duplicate flow above.
+  const sourceLeadId = location.state?.sourceLeadId || null;
   const [config, setConfig] = useState(null);
   const [priceTiers, setPriceTiers] = useState([]);
   const [stickerPriceTiers, setStickerPriceTiers] = useState([]);
@@ -240,6 +244,7 @@ export default function CostsDashboard() {
               allTabs={TABS}
               initialBuilderState={initialBuilderState}
               sourceQuoteNumber={sourceQuoteNumber}
+              sourceLeadId={sourceLeadId}
             />
           )}
         </div>

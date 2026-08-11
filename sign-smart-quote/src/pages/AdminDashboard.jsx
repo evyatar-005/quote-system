@@ -37,7 +37,7 @@ import AboutSection from "../components/admin/AboutSection";
 import CollapsibleSection from "../components/admin/CollapsibleSection";
 import UsersManagementSection from "../components/admin/UsersManagementSection";
 import CrmSettingsSection from "../components/admin/CrmSettingsSection";
-import { ShieldAlert, Users, Receipt, Info, MessageCircle, LayoutGrid, Scissors, PenTool, PieChart, ClipboardList, LineChart, MessagesSquare, Target, Send } from "lucide-react";
+import { ShieldAlert, Users, Receipt, Info, MessageCircle, LayoutGrid, Scissors, PenTool, PieChart, ClipboardList, LineChart, MessagesSquare, Target, Send, Sparkles } from "lucide-react";
 
 // Formerly the horizontal TabsList atop the content area — now selected from
 // the "הגדרות" submenu in the sidebar instead, so this is just the list of
@@ -271,6 +271,7 @@ export default function AdminDashboard() {
             <NavItem to="/quotes-archive" icon={LineChart} label="אנליטיקה" />
           </NavGroup>
           <NavGroup title="CRM">
+            <NavItem to="/my-day" icon={Sparkles} label="היום שלי" />
             <NavItem to="/crm/customers" icon={Users} label="לקוחות" />
             <NavItem to="/crm/leads" icon={Target} label="לידים" />
             <NavItem to="/crm/inbox" icon={MessagesSquare} label="תיבת שיחות" />

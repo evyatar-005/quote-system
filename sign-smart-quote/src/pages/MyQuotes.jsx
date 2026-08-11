@@ -34,6 +34,15 @@ const STATUS_COLORS = {
 };
 // Morning document type codes — see docs/morning-api-reference.md / src/services/morning/mappings.js
 const MORNING_TYPE_LABELS = { 10: "הצעת מחיר", 100: "הזמנה", 300: "חשבון עסקה", 305: "חשבונית מס" };
+// Shown instead of the "מורנינג: ..." line when nothing was ever issued —
+// so a quote with no document reads as "not issued yet, here's why", not as
+// a blank line that looks like a loading glitch.
+const NOT_ISSUED_LABELS = {
+  draft: "לא הונפק — טיוטה",
+  sent: "לא הונפק — נוצר לבדיקת הנחה",
+  approved: "לא הונפק — ממתין להנפקה",
+  rejected: "לא הונפק — נדחה",
+};
 
 const TABS = [
   { key: "all", label: "כל ההצעות" },
@@ -47,6 +56,11 @@ export default function MyQuotes() {
   const [morningDocs, setMorningDocs] = useState({});
   const [issuingIds, setIssuingIds] = useState(() => new Set());
   const [documentQuote, setDocumentQuote] = useState(null);
+  // Raw Morning document URL currently previewed — resolved to a blob URL
+  // below (previewBlobUrl) before the iframe ever gets it (the proxy route
+  // needs the Bearer token, which a plain <iframe src> can't attach).
+  const [previewDoc, setPreviewDoc] = useState(null);
+  const [previewBlobUrl, setPreviewBlobUrl] = useState(null);
   const [paymentLinkPanel, setPaymentLinkPanel] = useState(null); // { quoteNumber, url }
   const [issuedDocument, setIssuedDocument] = useState(null); // { url, label }
   const [tab, setTab] = useState("all");
@@ -72,6 +86,27 @@ export default function MyQuotes() {
   useEffect(() => {
     loadQuotes();
   }, []);
+
+  // The document-proxy route needs the Bearer token, which a plain
+  // <iframe src="/api/morning/document-proxy?..."> can't attach — fetch it
+  // with the token instead and hand the iframe a blob: URL (same pattern as
+  // QuotesArchive.jsx/QuotesHistory.jsx).
+  useEffect(() => {
+    if (!previewDoc) { setPreviewBlobUrl(null); return; }
+    let cancelled = false;
+    let objectUrl = null;
+    base44.quotes.fetchMorningDocumentBlob(previewDoc)
+      .then((blob) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        setPreviewBlobUrl(objectUrl);
+      })
+      .catch(() => { if (!cancelled) toast.error("שגיאה בטעינת המסמך"); });
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [previewDoc]);
 
   const openQuoteDocument = (q) => {
     let lineItems = [];
@@ -368,8 +403,20 @@ export default function MyQuotes() {
         ) : (
           <div className="space-y-2">
             {visibleQuotes.map((q) => {
-              const morningDoc = morningDocs[q.id];
-              const alreadyOrder = morningDoc && morningDoc.morning_document_type === MORNING_ORDER_TYPE;
+              const ownDoc = morningDocs[q.id];
+              // A duplicated quote ("שכפול מ-...") never gets its own Morning
+              // document until it's issued separately — until then, fall back
+              // to the ORIGINAL quote's document so "פתח"/"הורד" still work,
+              // instead of just having nothing to show.
+              const parentQuote = !ownDoc && q.parent_quote_number
+                ? quotes.find((x) => x.quote_number === q.parent_quote_number)
+                : null;
+              const parentDoc = parentQuote ? morningDocs[parentQuote.id] : null;
+              const morningDoc = ownDoc || parentDoc;
+              const docIsFromParent = !ownDoc && !!parentDoc;
+              // Order/"אושרה" status is about THIS quote, never borrowed from
+              // the parent — only the document open/download actions fall back.
+              const alreadyOrder = ownDoc && ownDoc.morning_document_type === MORNING_ORDER_TYPE;
               return (
                 <div key={q.id} className="bg-white border border-black rounded-2xl p-4">
                   <div className="flex items-start justify-between gap-4">
@@ -403,11 +450,14 @@ export default function MyQuotes() {
                           <Calendar className="w-3 h-3" />
                           {new Date(q.created_date).toLocaleDateString("he-IL")}
                         </span>
-                        {morningDoc && (
+                        {morningDoc ? (
                           <span className="text-slate-400">
                             מורנינג: {MORNING_TYPE_LABELS[morningDoc.morning_document_type] || "מסמך"} #
                             {formatDocNumber(morningDoc.morning_document_number || morningDoc.morning_document_id)}
+                            {docIsFromParent && " (מהצעה המקורית)"}
                           </span>
+                        ) : (
+                          <span className="text-slate-400">{NOT_ISSUED_LABELS[q.status || "draft"]}</span>
                         )}
                         {morningDoc?.document_url && (
                           <a
@@ -416,7 +466,7 @@ export default function MyQuotes() {
                             rel="noreferrer"
                             className="flex items-center gap-1 text-amber-600 hover:text-amber-700 hover:underline"
                           >
-                            <Download className="w-3 h-3" /> הורד מסמך מורנינג
+                            <Download className="w-3 h-3" /> הורד מסמך מורנינג{docIsFromParent && " (מקורי)"}
                           </a>
                         )}
                       </div>
@@ -428,8 +478,8 @@ export default function MyQuotes() {
                         <div className="text-sm text-slate-400">כולל מע״מ</div>
                       </div>
                       <button
-                        onClick={() => (morningDoc?.document_url ? window.open(morningDoc.document_url, "_blank", "noopener,noreferrer") : openQuoteDocument(q))}
-                        title={morningDoc?.document_url ? "פותח את קובץ ה-PDF המקורי ממורנינג" : undefined}
+                        onClick={() => (morningDoc?.document_url ? setPreviewDoc(morningDoc.document_url) : openQuoteDocument(q))}
+                        title={morningDoc?.document_url ? "תצוגה מקדימה של מסמך המורנינג" : "טרם הונפק מסמך — מוצגת התצוגה הפנימית"}
                         className="text-xs px-3 py-1.5 rounded-lg border border-black text-slate-600 hover:border-slate-500 hover:bg-slate-50 transition-colors"
                       >
                         פתח

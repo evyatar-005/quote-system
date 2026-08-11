@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, LabelList, Text } from "recharts";
 import { ChevronDown, PackageSearch } from "lucide-react";
 import { fmt, DATE_PRESETS, computeDateRange, toLocalDateStr, MORNING_ORDER_TYPE } from "@/lib/quoteLabels";
-import { aggregateProducts } from "@/lib/quoteEconomics";
+import { aggregateProducts, latestRevisionsOnly } from "@/lib/quoteEconomics";
 
 const SERIES_COLORS = ["#C9A84C", "#3FA9A0", "#D6608E", "#6B5BA6", "#5CA666", "#C4703F", "#4A7FB5", "#A34F63"];
 
@@ -305,7 +305,9 @@ function ProductPieCard({ orders }) {
 // deliberately a smaller, truthier set than the agent-analytics tab.
 export default function ProductAnalytics({ quotes, morningDocs }) {
   const orders = useMemo(
-    () => quotes.filter((q) => morningDocs[q.id]?.morning_document_type === MORNING_ORDER_TYPE),
+    // latestRevisionsOnly first: a revised quote is one deal saved as two
+    // rows, and if both ever became orders the units/revenue would double.
+    () => latestRevisionsOnly(quotes).filter((q) => morningDocs[q.id]?.morning_document_type === MORNING_ORDER_TYPE),
     [quotes, morningDocs]
   );
 

@@ -22,6 +22,7 @@ const registerMondaySync = require('./routes/mondaySync');
 const registerInbox    = require('./routes/inbox');
 const registerWhatsapp  = require('./routes/whatsapp');
 const registerCampaigns = require('./routes/campaigns');
+const registerMyDay    = require('./routes/myDay');
 const { startCrmJobs } = require('./services/crm/jobs');
 const { startReportScheduler } = require('./services/reports/scheduledReports');
 const deliveryNotesReport = require('./services/reports/deliveryNotesReport');
@@ -246,7 +247,12 @@ for (const col of [
   // inbound.js clears the flag on the first inbound message.
   'ALTER TABLE crm_conversations ADD COLUMN is_broadcast_only INTEGER NOT NULL DEFAULT 0',
   'ALTER TABLE crm_conversations ADD COLUMN source_campaign_id INTEGER',
+  // Follow-up date — the agent's "come back to this lead on X" reminder, and
+  // the driver of the "פולואאפים להיום" column on the My Day screen. Pulled
+  // from monday's own follow-up date column when the board maps one.
+  'ALTER TABLE crm_leads ADD COLUMN follow_up_date TEXT',
 ]) { try { db.exec(col); } catch (_) {} }
+try { db.exec(`CREATE INDEX IF NOT EXISTS idx_crm_leads_followup ON crm_leads(assigned_to, follow_up_date)`); } catch (_) {}
 
 try {
   const { backfillMarketingConsent } = require('./services/crm/consentBackfill');
@@ -295,6 +301,7 @@ registerMondaySync(app, db, { requireAdmin });
 registerInbox(app, db, { requireAuth, requireAdmin });
 registerWhatsapp(app, db, { requireAuth, requireAdmin });
 registerCampaigns(app, db, { requireAuth, requireAdmin, requireCampaigns });
+registerMyDay(app, db, { requireAuth });
 
 startReportScheduler(db, {
   [deliveryNotesReport.REPORT_TYPE]: deliveryNotesReport.sendReport,

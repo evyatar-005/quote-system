@@ -65,6 +65,18 @@ function linesOf(quote) {
 // to inflate this report's revenue with quotes nobody ever closed, out of
 // sync with the in-app "אנליטיקה" screen which was always order-based.
 const MORNING_ORDER_TYPE = 100;
+
+// A revision/duplicate ("שכפול") is saved as a NEW quote row carrying
+// parent_quote_number — so a quote sent for review and then re-issued with a
+// manager's discount exists twice, and summing both counted the same real
+// deal twice. Only the row nothing else supersedes is the live version.
+// Mirrors latestRevisionsOnly() in the frontend's quoteEconomics.js.
+const NOT_SUPERSEDED = (alias) => `
+  NOT EXISTS (
+    SELECT 1 FROM signshop_quotes r
+    WHERE r.parent_quote_number IS NOT NULL
+      AND r.parent_quote_number = ${alias}.quote_number
+  )`;
 function fetchClosedQuoteIds(db) {
   return new Set(
     db.prepare(`SELECT DISTINCT quote_id FROM morning_documents_map WHERE morning_document_type = ?`)
@@ -93,6 +105,7 @@ function fetchSalesByAgent(db, fromDate, toDate) {
     LEFT JOIN (SELECT DISTINCT quote_id FROM morning_documents_map WHERE morning_document_type = ${MORNING_ORDER_TYPE}) closed
       ON closed.quote_id = q.id
     WHERE date(q.created_at) BETWEEN date(?) AND date(?)
+      AND ${NOT_SUPERSEDED('q')}
     GROUP BY q.created_by
     ORDER BY totalBeforeVat DESC
   `).all(fromDate, toDate);
@@ -106,8 +119,9 @@ function fetchSalesByAgent(db, fromDate, toDate) {
 // live on a line.
 function fetchSalesByProduct(db, fromDate, toDate) {
   const quotes = db.prepare(`
-    SELECT id, calculation_data FROM signshop_quotes
-    WHERE date(created_at) BETWEEN date(?) AND date(?)
+    SELECT id, calculation_data FROM signshop_quotes q
+    WHERE date(q.created_at) BETWEEN date(?) AND date(?)
+      AND ${NOT_SUPERSEDED('q')}
   `).all(fromDate, toDate);
   const closedQuoteIds = fetchClosedQuoteIds(db);
 

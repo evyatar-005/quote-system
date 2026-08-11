@@ -5,7 +5,7 @@ import {
 } from "recharts";
 import { AlertTriangle, Target, ChevronDown } from "lucide-react";
 import { fmt, MORNING_ORDER_TYPE, DATE_PRESETS, computeDateRange, toLocalDateStr } from "@/lib/quoteLabels";
-import { economicsOf, linesOf, shippingOf, productLabel, productSku, compareSku } from "@/lib/quoteEconomics";
+import { economicsOf, linesOf, shippingOf, productLabel, productSku, compareSku, latestRevisionsOnly } from "@/lib/quoteEconomics";
 
 // Printella brand hues — one stable colour per series so an agent keeps the
 // same colour across every chart on the page.
@@ -60,13 +60,18 @@ export default function QuotesAnalytics({ quotes, sellers, morningDocs = {} }) {
 
   const rangedQuotes = useMemo(() => {
     const { from, to } = computeDateRange(datePreset, customFrom, customTo);
-    if (!from && !to) return quotes;
-    return quotes.filter((q) => {
+    const inRange = (!from && !to) ? quotes : quotes.filter((q) => {
       const created = new Date(q.created_date);
       if (from && created < from) return false;
       if (to && created > to) return false;
       return true;
     });
+    // Collapse revision chains — a quote sent for review and then re-issued
+    // with a manager's discount is ONE deal saved as two rows, and counting
+    // both inflated every ₪ figure and every quote/order count on this
+    // screen. Supersession is decided against the full `quotes` set, not the
+    // filtered slice (see latestRevisionsOnly).
+    return latestRevisionsOnly(inRange, quotes);
   }, [quotes, datePreset, customFrom, customTo]);
 
   // A quote only counts as "closed" once Morning actually issued an order
