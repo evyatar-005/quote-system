@@ -33,6 +33,14 @@ function columnText(columnValues, columnId) {
   return cv ? (cv.text || null) : null;
 }
 
+// monday returns '2026-04-23T09:50:11Z'; SQLite's CURRENT_TIMESTAMP is
+// '2026-04-23 09:50:11'. Lexicographically 'T' (0x54) > ' ' (0x20), so mixing
+// the two formats in one ORDER BY sorts every monday timestamp above every
+// local one — normalize on write, always.
+function mondayTs(s) {
+  return s ? String(s).replace('T', ' ').replace(/\.\d+/, '').replace('Z', '') : null;
+}
+
 // ── Column discovery (used by the admin mapping UI — never guess column ids) ─
 // For status-type columns, monday's settings_str carries the board's actual
 // configured labels (e.g. {"0":"ליד חדש","1":"עסקה נסגרה",...}) — surfaced
@@ -75,29 +83,80 @@ function findOrCreateCustomer(db, { name, phone, email }, ownerUsername) {
 
 // Pulls up to 100 items from one board and upserts customers/leads.
 // Returns { pulled, created, errors }.
-async function pullBoard(db, boardMap, ownerUsername) {
-  const columnMap = JSON.parse(boardMap.column_map || '{}');
+//
+// Full cursor pagination — NOT the old "first 100 items only" cap. Verified
+// live against monday: some boards have 1000+ items (קמפיין קאפות: 1008,
+// קמפיין לוגו: 2283) and were silently truncated to their first page since
+// this was written. `items_page` gives the first page + a cursor; every
+// subsequent page comes from the top-level `next_items_page(cursor)` field
+// (not nested under boards — the cursor already carries that context). A
+// board this size costs real monday query-complexity budget to fully page,
+// so this only runs once per board per poll tick, same as before.
+async function fetchAllItems(db, boardId) {
   let data;
   try {
     data = await mondayRequest(
       db,
       `query ($boardId: ID!) {
          boards (ids: [$boardId]) {
+           columns { id title type settings_str }
            items_page (limit: 100) {
-             items { id name updated_at column_values { id text } }
+             cursor
+             items { id name created_at updated_at column_values { id text } }
            }
          }
        }`,
-      { boardId: boardMap.board_id }
+      { boardId }
     );
   } catch (err) {
-    db.prepare(`UPDATE monday_board_map SET last_error = ?, last_polled_at = CURRENT_TIMESTAMP WHERE id = ?`)
-      .run(err.message, boardMap.id);
-    logSync(db, { direction: 'pull', board_id: boardMap.board_id, success: false, error_message: err.message });
-    throw err;
+    return { error: err };
   }
+  const board = data.boards && data.boards[0];
+  if (!board) return { columns: [], items: [] };
 
-  const items = (data.boards && data.boards[0] && data.boards[0].items_page.items) || [];
+  const items = [...board.items_page.items];
+  let cursor = board.items_page.cursor;
+  while (cursor) {
+    const page = await mondayRequest(
+      db,
+      `query ($cursor: String!) { next_items_page (limit: 100, cursor: $cursor) { cursor items { id name created_at updated_at column_values { id text } } } }`,
+      { cursor }
+    );
+    items.push(...page.next_items_page.items);
+    cursor = page.next_items_page.cursor;
+  }
+  return { columns: board.columns || [], items };
+}
+
+async function pullBoard(db, boardMap, ownerUsername) {
+  const columnMap = JSON.parse(boardMap.column_map || '{}');
+  const { columns, items, error } = await fetchAllItems(db, boardMap.board_id);
+  if (error) {
+    db.prepare(`UPDATE monday_board_map SET last_error = ?, last_polled_at = CURRENT_TIMESTAMP WHERE id = ?`)
+      .run(error.message, boardMap.id);
+    logSync(db, { direction: 'pull', board_id: boardMap.board_id, success: false, error_message: error.message });
+    throw error;
+  }
+  const board = { columns };
+  // Cached so the lead workspace can put a friendly Hebrew title on every
+  // raw_json column_value — raw_json stores only column IDs, never titles.
+  // `labels` (status-type columns' real label bank, see fetchBoardColumns
+  // above) rides along so the workspace can render a real dropdown instead
+  // of plain text for status fields.
+  if (board) {
+    const columns = (board.columns || []).map(c => {
+      let labels = null;
+      if (c.type === 'status' || c.type === 'color') {
+        try {
+          const parsed = JSON.parse(c.settings_str || '{}').labels || {};
+          labels = Object.values(parsed).filter(Boolean);
+        } catch (_) { labels = []; }
+      }
+      return { id: c.id, title: c.title, type: c.type, labels };
+    });
+    db.prepare(`UPDATE monday_board_map SET columns_json = ? WHERE id = ?`)
+      .run(JSON.stringify(columns), boardMap.id);
+  }
   const findItemMap = db.prepare(`SELECT * FROM monday_item_map WHERE board_id = ? AND monday_item_id = ?`);
   const insertItemMap = db.prepare(
     `INSERT INTO monday_item_map (board_id, monday_item_id, lead_id, customer_id, last_pulled_at, raw_json)
@@ -106,15 +165,15 @@ async function pullBoard(db, boardMap, ownerUsername) {
   const touchItemMap = db.prepare(`UPDATE monday_item_map SET last_pulled_at = CURRENT_TIMESTAMP, raw_json = ? WHERE id = ?`);
   const findLeadByExt = db.prepare(`SELECT * FROM crm_leads WHERE source = 'monday' AND external_ref = ?`);
   const insertLead = db.prepare(
-    `INSERT INTO crm_leads (customer_id, campaign_id, source, external_ref, status, title, assigned_to, follow_up_date, follow_up_source)
-     VALUES (@customer_id, @campaign_id, 'monday', @external_ref, 'new', @title, @assigned_to, @follow_up_date, @follow_up_source)`
+    `INSERT INTO crm_leads (customer_id, campaign_id, source, external_ref, status, title, assigned_to, follow_up_date, follow_up_source, source_created_at)
+     VALUES (@customer_id, @campaign_id, 'monday', @external_ref, 'new', @title, @assigned_to, @follow_up_date, @follow_up_source, @source_created_at)`
   );
   // Follow-up dates keep moving on the board, so unlike the rest of the lead
   // (frozen at first pull) this one is refreshed on every poll for leads that
   // are still open — it drives the "פולואאפים להיום" column on My Day.
   //
-  // BUT never over an agent's own schedule (follow_up_source = 'agent', set
-  // by PUT /api/crm/leads/:id/follow-up): monday's value is usually
+  // BUT never over an agent's own schedule (follow_up_source = 'agent',
+  // set by PUT /api/crm/leads/:id/follow-up): monday's value is usually
   // date-only (see followUp below) and often simply empty on boards where
   // follow-up isn't actually used there, and this poll runs every 60s — an
   // agent who scheduled a callback for 14:30 would otherwise see it silently
@@ -132,8 +191,8 @@ async function pullBoard(db, boardMap, ownerUsername) {
       const phone = columnMap.phone ? columnText(item.column_values, columnMap.phone) : null;
       const email = columnMap.email ? columnText(item.column_values, columnMap.email) : null;
       // monday date columns come back as 'YYYY-MM-DD', or 'YYYY-MM-DD HH:MM'
-      // when the column has time-tracking turned on — keep the time when
-      // it's actually there instead of always truncating to the date, so a
+      // when the column has time-tracking turned on — keep the time when it's
+      // actually there instead of always truncating to the date, so a
       // callback time set on the board survives the sync. Anything that
       // doesn't match either shape (unexpected format) falls back to the
       // first 10 characters rather than failing closed.
@@ -145,10 +204,18 @@ async function pullBoard(db, boardMap, ownerUsername) {
       const existingMap = findItemMap.get(boardMap.board_id, item.id);
       if (existingMap) {
         touchItemMap.run(JSON.stringify(item), existingMap.id);
-        // Already-known item: don't recreate anything, but DO refresh the
-        // follow-up date — an agent moving it on the board must show up on
-        // My Day, and this is the only place we see the new value.
-        if (existingMap.lead_id && columnMap.follow_up) updateFollowUp.run(followUp, existingMap.lead_id);
+        // Backfills the real arrival time exactly once (COALESCE), for leads
+        // pulled before this column existed — required for queue ordering.
+        db.prepare(`UPDATE monday_item_map SET monday_created_at = COALESCE(monday_created_at, ?) WHERE id = ?`)
+          .run(mondayTs(item.created_at), existingMap.id);
+        if (existingMap.lead_id) {
+          db.prepare(`UPDATE crm_leads SET source_created_at = COALESCE(source_created_at, ?) WHERE id = ?`)
+            .run(mondayTs(item.created_at), existingMap.lead_id);
+          // Already-known item: don't recreate anything, but DO refresh the
+          // follow-up date — an agent moving it on the board must show up on
+          // My Day, and this is the only place we see the new value.
+          if (columnMap.follow_up) updateFollowUp.run(followUp, existingMap.lead_id);
+        }
         continue;
       }
 
@@ -160,9 +227,15 @@ async function pullBoard(db, boardMap, ownerUsername) {
           campaign_id: boardMap.campaign_id || null,
           external_ref: item.id,
           title: item.name,
-          assigned_to: ownerUsername,
+          // NULL = in the claimable pool. NEVER ownerUsername: the poller
+          // passes 'monday-sync' (a user that doesn't exist) and a manual
+          // "sync now" click passes the clicking admin's username, which
+          // would silently assign an entire 100-row board to whoever pressed
+          // the button. See CLAUDE.md CRM plan Phase 5 §2/§3.
+          assigned_to: null,
           follow_up_date: followUp,
           follow_up_source: followUp ? 'monday' : null,
+          source_created_at: mondayTs(item.created_at),
         });
         lead = { id: lastInsertRowid };
         created += 1;
@@ -219,6 +292,32 @@ async function pushBoard(db, boardMap) {
   return { pushed };
 }
 
+// Direct single-field edit from the lead workspace (e.g. a status-type
+// column rendered as a dropdown, per its real label bank — see
+// leadContext.js). Same mutation pushBoard uses; unlike pushBoard this is
+// one ad-hoc field on one item, called synchronously from the route handler,
+// not the poll tick — so the raw_json cache is patched in place immediately
+// rather than waiting for the next pull to reflect the new value.
+async function updateItemColumn(db, { boardId, itemId, columnId, value }) {
+  await mondayRequest(
+    db,
+    `mutation ($boardId: ID!, $itemId: ID!, $columnId: String!, $value: String!) {
+       change_simple_column_value (board_id: $boardId, item_id: $itemId, column_id: $columnId, value: $value) { id }
+     }`,
+    { boardId, itemId, columnId, value }
+  );
+  const map = db.prepare(`SELECT * FROM monday_item_map WHERE board_id = ? AND monday_item_id = ?`).get(boardId, itemId);
+  if (map) {
+    let raw = {};
+    try { raw = JSON.parse(map.raw_json || '{}'); } catch (_) { raw = {}; }
+    raw.column_values = raw.column_values || [];
+    const cv = raw.column_values.find(c => c.id === columnId);
+    if (cv) cv.text = value; else raw.column_values.push({ id: columnId, text: value });
+    db.prepare(`UPDATE monday_item_map SET raw_json = ? WHERE id = ?`).run(JSON.stringify(raw), map.id);
+  }
+  logSync(db, { direction: 'push', board_id: boardId, monday_item_id: itemId, success: true, request_json: { columnId, value } });
+}
+
 // Uploads an issued quote's PDF to its monday item's mapped "quote file"
 // column — triggered once, right after Morning creates the document (see
 // services/morning/sync.js createOrConvertDocument). The lead's status push
@@ -249,4 +348,4 @@ async function pushQuoteDocument(db, { leadId, documentUrl, fileName }) {
   }
 }
 
-module.exports = { fetchBoardColumns, pullBoard, pushBoard, pushQuoteDocument, logSync };
+module.exports = { fetchBoardColumns, pullBoard, pushBoard, pushQuoteDocument, updateItemColumn, logSync };

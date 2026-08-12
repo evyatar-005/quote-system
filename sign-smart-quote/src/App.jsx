@@ -18,11 +18,12 @@ import RecipesAdmin from './pages/RecipesAdmin.jsx';
 import ProductionBoard from './pages/ProductionBoard.jsx';
 import CrmCustomers from './pages/CrmCustomers.jsx';
 import CrmCustomerDetail from './pages/CrmCustomerDetail.jsx';
-import CrmLeads from './pages/CrmLeads.jsx';
+import CrmCampaignsOverview from './pages/CrmCampaignsOverview.jsx';
 import CrmInbox from './pages/CrmInbox.jsx';
 import CrmCampaigns from './pages/CrmCampaigns.jsx';
 import CrmCampaignDetail from './pages/CrmCampaignDetail.jsx';
 import MyDay from './pages/MyDay.jsx';
+import LeadWorkspace from './pages/LeadWorkspace.jsx';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import Login from './pages/Login.jsx';
 import ChangePassword from './pages/ChangePassword.jsx';
@@ -99,13 +100,22 @@ const AuthenticatedApp = () => {
         <Route path="/my-quotes" element={<MyQuotes />} />
         <Route path="/recipes" element={<OperationsOnly><RecipesAdmin /></OperationsOnly>} />
         <Route path="/production" element={<OperationsOnly><ProductionBoard /></OperationsOnly>} />
-        <Route path="/crm/customers" element={<CrmAccess><CrmCustomers /></CrmAccess>} />
+        {/* Manager-only oversight screens — an agent's daily CRM workflow is
+            entirely /my-day + the lead workspace it links into (see
+            AgentSidebar.jsx). Customer detail stays CrmAccess: /my-day's
+            follow-up cards link into it directly. */}
+        <Route path="/crm/customers" element={<AdminOnly><CrmCustomers /></AdminOnly>} />
         <Route path="/crm/customers/:id" element={<CrmAccess><CrmCustomerDetail /></CrmAccess>} />
-        <Route path="/crm/leads" element={<CrmAccess><CrmLeads /></CrmAccess>} />
-        <Route path="/crm/inbox" element={<CrmAccess><CrmInbox /></CrmAccess>} />
-        <Route path="/crm/campaigns" element={<CrmAccess><CrmCampaigns /></CrmAccess>} />
-        <Route path="/crm/campaigns/:id" element={<CrmAccess><CrmCampaignDetail /></CrmAccess>} />
+        {/* Merged into the "לידים" tab of CrmCampaignsOverview — kept as a
+            redirect so old bookmarks/links (AdminDashboard's sidebar, etc.)
+            still land somewhere useful. */}
+        <Route path="/crm/leads" element={<Navigate to="/crm/campaigns-overview?tab=leads" replace />} />
+        <Route path="/crm/campaigns-overview" element={<AdminOnly><CrmCampaignsOverview /></AdminOnly>} />
+        <Route path="/crm/inbox" element={<AdminOnly><CrmInbox /></AdminOnly>} />
+        <Route path="/crm/campaigns" element={<AdminOnly><CrmCampaigns /></AdminOnly>} />
+        <Route path="/crm/campaigns/:id" element={<AdminOnly><CrmCampaignDetail /></AdminOnly>} />
         <Route path="/my-day" element={<CrmAccess><MyDay /></CrmAccess>} />
+        <Route path="/crm/leads/:id/workspace" element={<CrmAccess><LeadWorkspace /></CrmAccess>} />
         <Route path="*" element={<PageNotFound />} />
       </Routes>
       <Footer />

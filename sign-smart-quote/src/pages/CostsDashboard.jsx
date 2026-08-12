@@ -100,12 +100,31 @@ export default function CostsDashboard() {
   // source quote number so the save sets parent_quote_number. Read once; a
   // page refresh loses router state and simply starts a blank quote, which is
   // the correct fallback (nothing here is persisted until the agent saves).
-  const initialBuilderState = location.state?.builderState || null;
+  // "בנה הצעה" from the lead workspace opens this in a NEW TAB (window.open),
+  // not a same-tab navigate — the agent keeps the WhatsApp thread open on
+  // the original tab and works the quote alongside it. A new tab has no
+  // access to router `state` (it's a fresh browsing context), so that flow
+  // passes the client fields as URL query params instead; read those as a
+  // fallback when state isn't present. See LeadWorkspacePanel.jsx.
+  const query = new URLSearchParams(location.search);
+  const queryLeadId = query.get('sourceLeadId');
+  const queryBuilderState = queryLeadId ? {
+    clientName: query.get('clientName') || '',
+    clientPhone: query.get('clientPhone') || '',
+    clientEmail: query.get('clientEmail') || '',
+  } : null;
+
+  const initialBuilderState = location.state?.builderState || queryBuilderState;
   const sourceQuoteNumber = location.state?.sourceQuoteNumber || null;
   // Set when the calculator was opened from a CRM lead ("בנה הצעה" on My Day)
   // — links the saved quote back to that lead. Same read-once router-state
-  // convention as the duplicate flow above.
-  const sourceLeadId = location.state?.sourceLeadId || null;
+  // convention as the duplicate flow above (or the query-param fallback for
+  // the new-tab flow — see comment above).
+  const sourceLeadId = location.state?.sourceLeadId || queryLeadId || null;
+  // Flagged when the lead workspace didn't have full client details to hand
+  // over (e.g. no email on file) — shown as an on-screen note so the agent
+  // knows to complete/verify before saving, per direct request.
+  const missingClientDetails = !!queryLeadId && (!query.get('clientPhone') || !query.get('clientEmail'));
   const [config, setConfig] = useState(null);
   const [priceTiers, setPriceTiers] = useState([]);
   const [stickerPriceTiers, setStickerPriceTiers] = useState([]);
@@ -222,6 +241,12 @@ export default function CostsDashboard() {
             every right to see just because of which screen they're on. */}
         {user?.role === "admin" ? <ManagerSidebar /> : <AgentSidebar />}
         <div className="flex-1 min-w-0 w-full">
+          {missingClientDetails && (
+            <div className="mb-4 px-4 py-2.5 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 text-sm">
+              חסרים פרטים על הלקוח (טלפון/אימייל) — הליד נפתח ישירות מתוך "הלידים שלי" בטאב נפרד; יש להשלים את הפרטים לפני השמירה.
+            </div>
+          )}
+
           {!config && (
             <div className="text-center py-20 text-slate-500 text-base">
               לא הוגדרו פרמטרים עדיין.

@@ -37,6 +37,8 @@ import AboutSection from "../components/admin/AboutSection";
 import CollapsibleSection from "../components/admin/CollapsibleSection";
 import UsersManagementSection from "../components/admin/UsersManagementSection";
 import CrmSettingsSection from "../components/admin/CrmSettingsSection";
+import AgentCampaignsSection from "../components/admin/AgentCampaignsSection";
+import DriveSettingsSection from "../components/admin/DriveSettingsSection";
 import { ShieldAlert, Users, Receipt, Info, MessageCircle, LayoutGrid, Scissors, PenTool, PieChart, ClipboardList, LineChart, MessagesSquare, Target, Send, Sparkles } from "lucide-react";
 
 // Formerly the horizontal TabsList atop the content area — now selected from
@@ -273,7 +275,7 @@ export default function AdminDashboard() {
           <NavGroup title="CRM">
             <NavItem to="/my-day" icon={Sparkles} label="היום שלי" />
             <NavItem to="/crm/customers" icon={Users} label="לקוחות" />
-            <NavItem to="/crm/leads" icon={Target} label="לידים" />
+            <NavItem to="/crm/campaigns-overview?tab=leads" icon={Target} label="לידים" />
             <NavItem to="/crm/inbox" icon={MessagesSquare} label="תיבת שיחות" />
             <NavItem to="/crm/campaigns" icon={Send} label="דיוור" />
           </NavGroup>
@@ -326,6 +328,8 @@ export default function AdminDashboard() {
 
           <TabsContent value="crm" className="space-y-6 mt-0">
             <CrmSettingsSection />
+            <AgentCampaignsSection />
+            <DriveSettingsSection />
           </TabsContent>
 
           <TabsContent value="about" className="space-y-6 mt-0">

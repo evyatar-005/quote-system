@@ -43,6 +43,11 @@ export default function UsersManagementSection() {
     // so a user created without one would have no way to ever sign in.
     if (!newUser.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newUser.email.trim())) return toast.error("יש להזין כתובת מייל תקינה — היא משמשת להתחברות");
     if (!newUser.password || newUser.password.length < 8) return toast.error("סיסמה חייבת להכיל לפחות 8 תווים");
+    // Mirrors the server rule: a customer-facing user signs every WhatsApp
+    // reply with their full name, so it can't be blank.
+    if ((newUser.role === "agent" || newUser.role === "admin") && !newUser.full_name.trim()) {
+      return toast.error("יש להזין שם מלא — הוא מופיע כחתימה בהודעות ללקוח");
+    }
     setCreating(true);
     try {
       await base44.adminUsers.create(newUser);
@@ -165,7 +170,7 @@ export default function UsersManagementSection() {
               className="bg-background"
             />
             <Input
-              placeholder="שם מלא (לא חובה)"
+              placeholder="שם מלא — יופיע כחתימה בהודעות ללקוח"
               value={newUser.full_name}
               onChange={(e) => setNewUser((p) => ({ ...p, full_name: e.target.value }))}
               className="bg-background"

@@ -39,15 +39,38 @@ function findOrCreateCustomerByPhone(db, phoneE164, senderName) {
   return lastInsertRowid;
 }
 
-// Returns { conversationId, messageId } | null (status updates return null —
-// nothing new was created, an existing message's status was just updated).
+// Provider status vocabulary → the six values crm_messages.status documents.
+// GreenAPI also emits noAccount/notInGroup for a number that can't receive
+// the message at all; writing those through verbatim left the UI rendering a
+// "still sending" clock forever on a message that will never arrive.
+const STATUS_MAP = {
+  sent: 'sent', delivered: 'delivered', read: 'read', failed: 'failed',
+  noAccount: 'failed', notInGroup: 'failed', pending: 'queued',
+};
+
+// Receipts can arrive out of order — a delayed 'delivered' must not walk an
+// already-'read' message backwards. Higher wins; 'failed' outranks everything
+// because a terminal failure has to beat a stale optimistic 'sent'.
+const STATUS_RANK = `CASE %s WHEN 'failed' THEN 9 WHEN 'read' THEN 4 WHEN 'delivered' THEN 3 WHEN 'sent' THEN 2 ELSE 1 END`;
+
+// Returns { conversationId, messageId } | null. A status update returns the
+// pair too (so the SSE stream can push fresh tick marks instead of the UI
+// waiting for its 8s poll) — but only when the write actually changed
+// something, so no-op receipts don't spam every connected client.
 function handleInboundEvent(db, providerName, event) {
   if (event.kind === 'status') {
     if (!event.providerMessageId) return null;
-    db.prepare(
-      `UPDATE crm_messages SET status = ? WHERE provider = ? AND provider_message_id = ?`
-    ).run(event.status || 'sent', providerName, event.providerMessageId);
-    return null;
+    const status = STATUS_MAP[event.status] || 'sent';
+    const { changes } = db.prepare(
+      `UPDATE crm_messages SET status = @status
+        WHERE provider = @provider AND provider_message_id = @pmid
+          AND ${STATUS_RANK.replace('%s', 'status')} < ${STATUS_RANK.replace('%s', '@status')}`
+    ).run({ status, provider: providerName, pmid: event.providerMessageId });
+    if (!changes) return null;
+    const row = db.prepare(
+      `SELECT id, conversation_id FROM crm_messages WHERE provider = ? AND provider_message_id = ?`
+    ).get(providerName, event.providerMessageId);
+    return row ? { conversationId: row.conversation_id, messageId: row.id } : null;
   }
   if (event.kind !== 'message' || !event.chatId) return null;
 

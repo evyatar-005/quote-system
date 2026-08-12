@@ -36,7 +36,14 @@ export const templates = {
   create(data) { return request('/api/campaigns/templates', { method: 'POST', body: data }); },
   update(id, data) { return request(`/api/campaigns/templates/${id}`, { method: 'PUT', body: data }); },
   remove(id) { return request(`/api/campaigns/templates/${id}`, { method: 'DELETE' }); },
-  preview(body, customerId) { return request('/api/campaigns/templates/preview', { method: 'POST', body: { body, customer_id: customerId } }); },
+  // agentIsMe makes {{agent}} resolve to the logged-in user instead of the
+  // customer's account owner — for 1:1 quick replies. Omit it for campaigns.
+  preview(body, customerId, agentIsMe) {
+    return request('/api/campaigns/templates/preview', {
+      method: 'POST',
+      body: { body, customer_id: customerId, agent_is_me: agentIsMe || undefined },
+    });
+  },
 };
 
 export const audience = {

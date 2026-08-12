@@ -3,6 +3,10 @@
 const DOCUMENT_TYPE = {
   quote: 10,
   order: 100,
+  deliveryNote: 200,  // תעודת משלוח — no code path creates this per-quote yet
+                       // (see services/crm/leadOutcome.js); previously only
+                       // hardcoded in services/reports/deliveryNotesReport.js
+                       // for an account-wide aggregate, not linked to quote_id.
   dealInvoice: 300,   // חשבון עסקה
   taxInvoice: 305,     // חשבונית מס
   taxInvoiceReceipt: 320,

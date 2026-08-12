@@ -922,6 +922,24 @@ CREATE TABLE IF NOT EXISTS crm_agent_campaigns (
 );
 CREATE INDEX IF NOT EXISTS idx_crm_agent_campaigns_user ON crm_agent_campaigns(username);
 
+-- Manually-entered DAILY ad spend per campaign — the ONLY source of cost
+-- data for campaign ROI (nothing pulls spend from Facebook/Google; a manager
+-- types it in). Without a row for a given campaign+day, that campaign's
+-- CPL/CPA/ROAS render as "—" rather than dividing by zero. Daily (not
+-- monthly) so it lines up exactly with any custom date range in the
+-- profitability table, no substr('YYYY-MM') bucketing needed.
+CREATE TABLE IF NOT EXISTS crm_campaign_spend (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  campaign_id INTEGER NOT NULL REFERENCES crm_campaigns(id) ON DELETE CASCADE,
+  day         TEXT NOT NULL,          -- 'YYYY-MM-DD'
+  amount      REAL NOT NULL,
+  notes       TEXT,
+  updated_by  TEXT,
+  updated_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (campaign_id, day)
+);
+CREATE INDEX IF NOT EXISTS idx_crm_campaign_spend_day ON crm_campaign_spend(day);
+
 -- Google Drive — same one-row / masked-GET / blank-means-keep credential
 -- pattern as morning_credentials, greenapi_credentials, smtp_credentials.
 CREATE TABLE IF NOT EXISTS google_drive_credentials (
@@ -960,3 +978,29 @@ CREATE INDEX IF NOT EXISTS idx_recipe_steps_recipe          ON production_recipe
 CREATE INDEX IF NOT EXISTS idx_worksheets_quote              ON production_worksheets(quote_id);
 CREATE INDEX IF NOT EXISTS idx_worksheet_steps_worksheet     ON production_worksheet_steps(worksheet_id);
 CREATE INDEX IF NOT EXISTS idx_password_resets_token       ON password_resets(token_hash);
+
+-- One row per raw-material line item extracted, with confidence, from Morning
+-- purchase-order documents (type 500). Populated by a one-off scan script,
+-- not by the app itself — kept here so the table exists via the normal
+-- schema.sql bootstrap instead of a manual ALTER. See docs/morning-api-reference.md.
+CREATE TABLE IF NOT EXISTS raw_materials_scan (
+  id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+  morning_document_id  TEXT NOT NULL,
+  document_number      TEXT,
+  document_date        TEXT,
+  supplier_name        TEXT,
+  line_description      TEXT NOT NULL,
+  material_name         TEXT,
+  length_cm             REAL,
+  width_cm               REAL,
+  thickness_mm            REAL,
+  color                     TEXT,
+  finish                     TEXT,
+  quantity                   REAL,
+  unit_price                  REAL,
+  total_price                  REAL,
+  currency                      TEXT DEFAULT 'ILS',
+  confidence                     TEXT NOT NULL DEFAULT 'medium', -- high | medium
+  created_at                      TEXT DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_raw_materials_scan_doc ON raw_materials_scan(morning_document_id);

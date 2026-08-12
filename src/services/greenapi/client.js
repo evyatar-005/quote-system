@@ -48,4 +48,24 @@ async function sendFileByUrl(db, { chatId, urlFile, fileName, caption }) {
   return text ? JSON.parse(text) : null;
 }
 
-module.exports = { toChatId, sendText, sendFileByUrl };
+// Multipart upload-and-send in one call — unlike sendFileByUrl, GreenAPI's
+// servers never fetch anything themselves, so no public URL is needed. This
+// is what makes it possible to relay a Drive file to WhatsApp from a machine
+// with no stable public address (see CLAUDE.md CRM plan Phase 5 §Drive).
+async function sendFileByUpload(db, { chatId, fileBuffer, mimeType, fileName, caption }) {
+  const creds = getCredentials(db);
+  const base = (creds.media_url || creds.api_url).replace(/\/$/, '');
+  const form = new FormData();
+  form.append('chatId', chatId);
+  if (caption) form.append('caption', caption);
+  form.append('file', new Blob([fileBuffer], { type: mimeType || 'application/octet-stream' }), fileName);
+  const res = await fetch(`${base}/waInstance${creds.instance_id}/sendFileByUpload/${creds.api_token}`, {
+    method: 'POST',
+    body: form,
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`GreenAPI sendFileByUpload failed (${res.status}): ${text}`);
+  return text ? JSON.parse(text) : null;
+}
+
+module.exports = { toChatId, sendText, sendFileByUrl, sendFileByUpload };

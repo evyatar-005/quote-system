@@ -329,6 +329,14 @@ module.exports = function registerAuth(app, db) {
     if (!normalizedEmail || !EMAIL_RE.test(normalizedEmail)) return res.status(400).json({ error: 'valid email required' });
     if (!password || password.length < MIN_PASSWORD_LENGTH) return res.status(400).json({ error: `password must be at least ${MIN_PASSWORD_LENGTH} characters` });
     if (!ROLES.has(role))   return res.status(400).json({ error: 'role must be admin, agent, or operations' });
+    // Required for customer-facing roles: full_name is what gets prefixed to
+    // every outgoing WhatsApp reply (crm_settings.agent_signature_template),
+    // so an account without one would either sign the customer's message with
+    // a technical username or not sign at all. operations staff never message
+    // customers, so they stay exempt.
+    if ((role === 'agent' || role === 'admin') && !full_name.trim()) {
+      return res.status(400).json({ error: 'שם מלא הוא שדה חובה — הוא מופיע כחתימה בהודעות ללקוח' });
+    }
     if (userByName.get(username.trim())) return res.status(409).json({ error: 'username already exists' });
     if (userByEmail.get(normalizedEmail)) return res.status(409).json({ error: 'email already exists' });
     // New accounts always start with must_change_password = 1 (see insertUser) —

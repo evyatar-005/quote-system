@@ -3,10 +3,11 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, Save, MessagesSquare } from "lucide-react";
+import { Loader2, Save, MessagesSquare, Users } from "lucide-react";
 import { toast } from "sonner";
 import { crmSettings } from "@/api/mondaySyncClient";
 import OptOutList from "@/components/crm/OptOutList";
+import TemplateManager from "@/components/crm/TemplateManager";
 import CostSectionCard from "./CostSectionCard";
 
 const DAY_LABELS = [
@@ -20,6 +21,7 @@ const DAY_LABELS = [
 export default function CrmSettingsSection() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingQueue, setSavingQueue] = useState(false);
   const [s, setS] = useState(null);
 
   useEffect(() => {
@@ -61,6 +63,26 @@ export default function CrmSettingsSection() {
     }
   };
 
+  const saveQueue = async () => {
+    setSavingQueue(true);
+    try {
+      const updated = await crmSettings.update({
+        reply_overdue_minutes: Number(s.reply_overdue_minutes),
+        max_claimed_leads: Number(s.max_claimed_leads),
+        lead_claim_ttl_hours: Number(s.lead_claim_ttl_hours),
+        agents_see_follow_ups: s.agents_see_follow_ups ? 1 : 0,
+        agent_signature_enabled: s.agent_signature_enabled ? 1 : 0,
+        agent_signature_template: s.agent_signature_template,
+      });
+      setS(updated);
+      toast.success("ההגדרות נשמרו");
+    } catch (err) {
+      toast.error(err.message || "השמירה נכשלה");
+    } finally {
+      setSavingQueue(false);
+    }
+  };
+
   if (loading || !s) {
     return <div className="flex items-center justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>;
   }
@@ -68,6 +90,71 @@ export default function CrmSettingsSection() {
   const activeDays = (s.send_days || "").split(",").filter(Boolean).map(Number);
 
   return (
+    <>
+    <CostSectionCard
+      icon={<Users className="w-5 h-5" />}
+      title="תור הלידים ומסך הסוכן"
+      description="סף איחור לתשובה, כמה לידים סוכן מחזיק במקביל, ושחרור אוטומטי של ליד ננטש"
+      defaultOpen
+    >
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+        <div className="space-y-1.5">
+          <label className="text-sm font-semibold text-slate-600">סף איחור לתשובה בווצאפ (דקות)</label>
+          <Input type="number" min={1} value={s.reply_overdue_minutes} onChange={(e) => set({ reply_overdue_minutes: e.target.value })} />
+          <p className="text-xs text-muted-foreground">שיחות שממתינות מעל הסף עוברות ל"ממתין לתשובה — איחור" בראש התור</p>
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-semibold text-slate-600">מקסימום לידים במקביל לסוכן</label>
+          <Input type="number" min={1} value={s.max_claimed_leads} onChange={(e) => set({ max_claimed_leads: e.target.value })} />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-semibold text-slate-600">שחרור אוטומטי של ליד ננטש (שעות)</label>
+          <Input type="number" min={0} value={s.lead_claim_ttl_hours} onChange={(e) => set({ lead_claim_ttl_hours: e.target.value })} />
+          <p className="text-xs text-muted-foreground">0 = כבוי — ליד לא משתחרר לבד, רק בפעולת סוכן/מנהל</p>
+        </div>
+        <div className="space-y-1.5 flex flex-col justify-center">
+          <label className="text-sm font-semibold text-slate-600 flex items-center gap-2">
+            <Switch checked={!!s.agents_see_follow_ups} onCheckedChange={(v) => set({ agents_see_follow_ups: v })} />
+            הצג לסוכנים "פולואפ להיום"
+          </label>
+        </div>
+        <div className="space-y-1.5 flex flex-col justify-center">
+          <label className="text-sm font-semibold text-slate-600 flex items-center gap-2">
+            <Switch checked={!!s.agent_signature_enabled} onCheckedChange={(v) => set({ agent_signature_enabled: v })} />
+            הוסף את שם הסוכן לכל הודעה יוצאת
+          </label>
+          <p className="text-xs text-muted-foreground">ווצאפ מציג ללקוח רק את זהות העסק — זו הדרך היחידה שהלקוח ידע מי עונה לו</p>
+        </div>
+        <div className="space-y-1.5 sm:col-span-2">
+          <label className="text-sm font-semibold text-slate-600">תבנית החתימה</label>
+          <Input
+            value={s.agent_signature_template || ""}
+            onChange={(e) => set({ agent_signature_template: e.target.value })}
+            disabled={!s.agent_signature_enabled}
+            placeholder="*{agent}* מפרינטלה:"
+          />
+          <p className="text-xs text-muted-foreground">
+            {"{agent}"} יוחלף בשם הסוכן. החתימה נוספת בשורה נפרדת מעל ההודעה, ורק בתשובות שסוכן הקליד — לא בדיוור ולא בשליחה אוטומטית של מסמכים.
+          </p>
+        </div>
+      </div>
+
+      <Button onClick={saveQueue} disabled={savingQueue} className="gap-2">
+        {savingQueue ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+        {savingQueue ? "שומר..." : "שמור"}
+      </Button>
+
+      {/* Lives here and not under דיוור on purpose — these are 1:1 service
+          replies the agent picks in the inbox, not marketing copy. */}
+      <div className="border-t border-slate-200 pt-4 space-y-2">
+        <p className="text-sm font-semibold text-slate-600">תבניות מענה מהיר</p>
+        <p className="text-xs text-muted-foreground">
+          תבניות משותפות שהסוכנים בוחרים מתוך תיבת השיחות. הטקסט נכנס לתיבת ההקלדה וניתן לעריכה לפני השליחה.
+        </p>
+        <TemplateManager />
+      </div>
+    </CostSectionCard>
+
     <CostSectionCard
       icon={<MessagesSquare className="w-5 h-5" />}
       title="דיוור ווצאפ — קצב, חלון שעות והסרה"
@@ -137,5 +224,6 @@ export default function CrmSettingsSection() {
         <OptOutList />
       </div>
     </CostSectionCard>
+    </>
   );
 }

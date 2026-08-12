@@ -87,15 +87,23 @@ module.exports = function registerCampaigns(app, db, deps) {
   });
 
   app.post('/api/campaigns/templates/preview', requireAuth, (req, res) => {
-    const { body, customer_id } = req.body || {};
+    const { body, customer_id, agent_is_me } = req.body || {};
     let customer = null;
     if (customer_id) {
       customer = db.prepare(`
         SELECT c.*, (SELECT MAX(created_at) FROM signshop_quotes q WHERE q.customer_id = c.id) AS last_quote_at
         FROM customers c WHERE c.id = ?`).get(customer_id);
     }
+    // {{agent}} normally means the customer's account owner, which is right
+    // for a דיוור blast. For a 1:1 quick reply it should mean whoever is
+    // typing — and owner_* is usually empty on customers auto-created from an
+    // inbound WhatsApp, so the default would just render blank. Opt-in per
+    // request so campaign previews keep their existing meaning exactly.
+    const ctx = agent_is_me
+      ? { ...(customer || {}), owner_full_name: req.user.full_name || req.user.username }
+      : (customer || {});
     res.json({
-      rendered: render(body, customer || {}),
+      rendered: render(body, ctx),
       variables: usedVariables(body),
       unknown_variables: unknownVariables(body),
       has_optout_line: hasOptOutLine(db, body),

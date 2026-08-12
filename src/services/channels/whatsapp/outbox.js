@@ -50,23 +50,30 @@ function resolveConversation(db, { customerId, phoneE164, provider, campaignId, 
 // on the first opted-out number.
 //
 // opts: { conversationId?, customerId?, toE164|toPhone, kind='text', body,
-//         mediaUrl?, mediaFilename?, sentBy?, priority=10,
+//         mediaUrl?, mediaFilename?, driveFileId?, sentBy?, priority=10,
 //         campaignId?, recipientId?, marketing=false, provider? }
+//
+// kind='drive' is the Google-Drive materials sender (CRM plan Phase 5 §8):
+// media_url is deliberately left NULL — we have no URL, the drainer downloads
+// driveFileId itself and uploads straight to WhatsApp (sendMediaUpload).
 function enqueue(db, opts) {
   const {
     conversationId: convIn, customerId, toE164: toRaw, toPhone,
-    kind = 'text', body, mediaUrl, mediaFilename,
+    kind = 'text', body, mediaUrl, mediaFilename, driveFileId,
     sentBy, priority = 10, campaignId = null, recipientId = null,
     marketing = false, provider = null,
   } = opts;
 
   const to = toRaw || toE164(toPhone);
   if (!to) return { skipped: true, reason: 'no_phone' };
-  if (kind !== 'media' && !(body || '').toString().trim()) {
+  if (kind !== 'media' && kind !== 'drive' && !(body || '').toString().trim()) {
     throw Object.assign(new Error('body required'), { status: 400 });
   }
   if (kind === 'media' && !mediaUrl) {
     throw Object.assign(new Error('mediaUrl required for kind=media'), { status: 400 });
+  }
+  if (kind === 'drive' && !driveFileId) {
+    throw Object.assign(new Error('driveFileId required for kind=drive'), { status: 400 });
   }
 
   if (marketing || campaignId) {
@@ -82,11 +89,13 @@ function enqueue(db, opts) {
     const { lastInsertRowid: messageId } = db.prepare(
       `INSERT INTO crm_messages (conversation_id, direction, body, media_url, media_filename, message_type, status, sent_by, campaign_id)
        VALUES (?, 'out', ?, ?, ?, ?, 'queued', ?, ?)`
-    ).run(conversationId, body || null, mediaUrl || null, mediaFilename || null,
-      kind === 'media' ? 'document' : 'text', sentBy || null, campaignId);
+    ).run(conversationId, body || null, kind === 'drive' ? null : (mediaUrl || null), mediaFilename || null,
+      (kind === 'media' || kind === 'drive') ? 'document' : 'text', sentBy || null, campaignId);
 
     const payload = kind === 'media'
       ? { kind: 'media', url: mediaUrl, filename: mediaFilename, caption: body }
+      : kind === 'drive'
+      ? { kind: 'drive', driveFileId, filename: mediaFilename, caption: body }
       : { kind: 'text', body };
 
     const { lastInsertRowid: queueId } = db.prepare(

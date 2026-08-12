@@ -45,6 +45,20 @@ async function sendMedia(db, { toE164, url, filename, caption }) {
   }
 }
 
+// Used exclusively by the Drive materials sender (see outbox.js's 'drive'
+// kind) — the file is downloaded server-side first, so no public URL is
+// ever exposed and the customer receives an actual file, never a link.
+async function sendMediaUpload(db, { toE164, fileBuffer, mimeType, filename, caption }) {
+  const chatId = toChatId(toE164);
+  if (!chatId) return { ok: false, providerMessageId: null, status: 'failed', error: 'invalid phone', retryable: false };
+  try {
+    const result = await client.sendFileByUpload(db, { chatId, fileBuffer, mimeType, fileName: filename, caption });
+    return { ok: true, providerMessageId: result?.idMessage || null, status: 'sent', error: null, retryable: false, urlFile: result?.urlFile || null };
+  } catch (err) {
+    return { ok: false, providerMessageId: null, status: 'failed', error: err.message, retryable: true };
+  }
+}
+
 async function sendTemplate() {
   throw Object.assign(new Error('GreenAPI does not support pre-approved templates'), { code: 'UNSUPPORTED' });
 }
@@ -121,6 +135,7 @@ module.exports = assertProvider({
   isConfigured,
   sendText,
   sendMedia,
+  sendMediaUpload,
   sendTemplate,
   verifyWebhook,
   normalizeInboundWebhook,

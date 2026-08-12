@@ -23,6 +23,8 @@ const registerInbox    = require('./routes/inbox');
 const registerWhatsapp  = require('./routes/whatsapp');
 const registerCampaigns = require('./routes/campaigns');
 const registerMyDay    = require('./routes/myDay');
+const registerLeadQueue = require('./routes/leadQueue');
+const registerDrive     = require('./routes/drive');
 const { startCrmJobs } = require('./services/crm/jobs');
 const { startReportScheduler } = require('./services/reports/scheduledReports');
 const deliveryNotesReport = require('./services/reports/deliveryNotesReport');
@@ -38,6 +40,14 @@ app.use(express.json());
 const db = new Database(DB_PATH);
 db.pragma('foreign_keys = ON');
 console.log('[db] Connected to', DB_PATH);
+
+// One-time: crm_campaign_spend went from monthly to daily granularity before
+// any real spend had been entered (see CLAUDE.md CRM analytics plan) — a
+// plain column rename, no data to reshape. Must run BEFORE schema.sql below,
+// since schema.sql's CREATE INDEX ... (day) fails if the table still exists
+// with the old `month` column. No-ops if the table doesn't exist yet or is
+// already renamed.
+try { db.exec(`ALTER TABLE crm_campaign_spend RENAME COLUMN month TO day`); } catch (_) {}
 
 // Ensure SignCalc Pro tables exist (all IF NOT EXISTS — safe on a live DB) and
 // seed placeholders only when empty. Never wipes existing data.
@@ -298,10 +308,28 @@ for (const col of [
   // Requirement 5 — the manager can hide "פולואפ להיום" from agents.
   'ALTER TABLE crm_settings ADD COLUMN agents_see_follow_ups INTEGER NOT NULL DEFAULT 1',
 
+  // Agent signature on outgoing WhatsApp replies. WhatsApp itself shows the
+  // customer only ONE business identity no matter which agent typed — the
+  // only way to reveal who is answering is to put the name in the message
+  // body. Applied to agent-typed inbox replies only (never to campaigns or
+  // auto-sent documents), so a broadcast can't get signed by whoever
+  // happened to trigger it.
+  // Default ON: the customer must know which of the 5 agents is answering,
+  // and WhatsApp shows them one business identity regardless. A manager can
+  // still turn it off in CRM settings, and that choice survives restarts —
+  // this default only applies the first time the column is created.
+  "ALTER TABLE crm_settings ADD COLUMN agent_signature_enabled  INTEGER NOT NULL DEFAULT 1",
+  "ALTER TABLE crm_settings ADD COLUMN agent_signature_template TEXT NOT NULL DEFAULT '*{agent}* מפרינטלה:'",
+
   // The lead's REAL arrival time (monday Item.created_at), not our pull time.
   // crm_leads.created_at is worthless for queue ordering — the existing 525
   // rows all landed inside 4 minutes of one import.
   'ALTER TABLE crm_leads ADD COLUMN source_created_at TEXT',
+  // Set exactly once (COALESCE) the first time a lead's status becomes
+  // 'quoted' — either via PUT /api/crm/leads/:id or POST .../convert. Needed
+  // because updated_at gets overwritten by any later edit, so it can't be
+  // trusted as "when did this lead reach a quote" for the קמפיינים funnel.
+  'ALTER TABLE crm_leads ADD COLUMN quoted_at TEXT',
   // 'agent' | 'monday' | NULL — see schema.sql. Backfilled below: every
   // existing follow_up_date got there through mondaySync (the only writer
   // until this column existed), so it's safe to default those to 'monday'.
@@ -326,6 +354,7 @@ try {
   db.exec(`CREATE INDEX IF NOT EXISTS idx_crm_leads_pool
              ON crm_leads(status, assigned_to, source_created_at)`);
 } catch (_) {}
+
 
 // (A) Release the 524 monday leads from the 'monday-sync' pseudo-owner into
 // the claimable pool. Naturally idempotent — after it runs nothing matches.
@@ -414,6 +443,8 @@ registerInbox(app, db, { requireAuth, requireAdmin });
 registerWhatsapp(app, db, { requireAuth, requireAdmin });
 registerCampaigns(app, db, { requireAuth, requireAdmin, requireCampaigns });
 registerMyDay(app, db, { requireAuth });
+registerLeadQueue(app, db, { requireAuth, requireAdmin });
+registerDrive(app, db, { requireAuth, requireAdmin });
 
 startReportScheduler(db, {
   [deliveryNotesReport.REPORT_TYPE]: deliveryNotesReport.sendReport,

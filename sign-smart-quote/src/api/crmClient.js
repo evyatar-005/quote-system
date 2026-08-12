@@ -88,4 +88,7 @@ export const crmLeads = {
   convert(id, quoteId) {
     return request(`/api/crm/leads/${id}/convert`, { method: 'POST', body: { quote_id: quoteId } });
   },
+  monthlyStats() {
+    return request('/api/crm/leads/stats/monthly');
+  },
 };

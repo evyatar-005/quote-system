@@ -1,7 +1,7 @@
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
-  LogOut, Settings2, Info, BarChart3, Scissors, PenTool, ClipboardList, LineChart, Users, Target, MessagesSquare, Send, FileStack, Sparkles,
+  LogOut, Settings2, Info, BarChart3, Scissors, PenTool, ClipboardList, LineChart, Users, Target, MessagesSquare, Send, FileStack, Sparkles, PieChart,
 } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 
@@ -56,16 +56,17 @@ export default function ManagerSidebar() {
             personal quote list — ManagerSidebar had no link to it at all,
             which silently hid "ההצעות שלי" the moment an admin's calculator
             page switched from AgentSidebar to this one. */}
-        <NavItem to="/my-day" icon={Sparkles} label="היום שלי" active={pathname === "/my-day"} />
         <NavItem to="/my-quotes" icon={FileStack} label="ההצעות שלי" active={pathname === "/my-quotes"} />
         <NavItem to="/quotes" icon={ClipboardList} label="הצעות לבדיקה" active={pathname === "/quotes"} />
         <NavItem to="/quotes-archive" icon={LineChart} label="אנליטיקה" active={pathname === "/quotes-archive"} />
       </NavGroup>
       <NavGroup title="CRM">
+        <NavItem to="/my-day" icon={Sparkles} label="היום שלי" active={pathname === "/my-day"} />
         <NavItem to="/crm/customers" icon={Users} label="לקוחות" active={pathname.startsWith("/crm/customers")} />
-        <NavItem to="/crm/leads" icon={Target} label="לידים" active={pathname === "/crm/leads"} />
+        <NavItem to="/crm/campaigns-overview?tab=leads" icon={Target} label="לידים" active={pathname === "/crm/campaigns-overview" && search.includes("tab=leads")} />
+        <NavItem to="/crm/campaigns-overview" icon={PieChart} label="קמפיינים" active={pathname === "/crm/campaigns-overview" && !search.includes("tab=leads")} />
         <NavItem to="/crm/inbox" icon={MessagesSquare} label="תיבת שיחות" active={pathname === "/crm/inbox"} />
-        <NavItem to="/crm/campaigns" icon={Send} label="דיוור" active={pathname.startsWith("/crm/campaigns")} />
+        <NavItem to="/crm/campaigns" icon={Send} label="דיוור" active={pathname.startsWith("/crm/campaigns") && !pathname.startsWith("/crm/campaigns-overview")} />
       </NavGroup>
       <NavGroup title="תפעול">
         <NavItem to="/cutting" icon={Scissors} label="ניצולת לוחות" active={pathname === "/cutting"} />

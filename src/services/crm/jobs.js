@@ -6,6 +6,8 @@
 const { pullBoard, pushBoard } = require('./mondaySync');
 const { getActiveWhatsApp, getBulkWhatsApp } = require('../channels');
 const { publish } = require('./realtime');
+const { downloadFile } = require('../google/driveClient');
+const { DOCUMENT_TYPE } = require('../morning/mappings');
 
 const POLL_TICK_MS = 60 * 1000;
 const QUEUE_TICK_MS = 5 * 1000;
@@ -27,6 +29,7 @@ function startCrmJobs(db) {
   }, QUEUE_TICK_MS);
   setInterval(() => {
     try { idleSweeperTick(db); } catch (err) { console.error('[crm jobs] idleSweeper tick failed:', err.message); }
+    try { leadOutcomeSweepTick(db); } catch (err) { console.error('[crm jobs] leadOutcomeSweep tick failed:', err.message); }
   }, IDLE_TICK_MS);
   console.log('[crm jobs] started (monday poller/pusher 60s, wa queue drainer 5s, idle sweeper 60s)');
 }
@@ -139,9 +142,25 @@ async function waQueueDrainerTick(db) {
   const payload = JSON.parse(row.payload_json);
   let result;
   try {
-    result = payload.kind === 'media'
-      ? await provider.sendMedia(db, { toE164: row.to_e164, url: payload.url, filename: payload.filename, caption: payload.caption })
-      : await provider.sendText(db, { toE164: row.to_e164, body: payload.body });
+    if (payload.kind === 'media') {
+      result = await provider.sendMedia(db, { toE164: row.to_e164, url: payload.url, filename: payload.filename, caption: payload.caption });
+    } else if (payload.kind === 'drive') {
+      // Download server-side, then upload straight to WhatsApp — the
+      // customer gets a real file, we never expose a public URL for it.
+      const file = await downloadFile(db, payload.driveFileId);
+      result = await provider.sendMediaUpload(db, {
+        toE164: row.to_e164, fileBuffer: file.buffer, mimeType: file.mimeType,
+        filename: payload.filename || file.filename, caption: payload.caption,
+      });
+      if (result.ok && result.urlFile && row.message_id) {
+        // Internal only — the URL never reaches the customer, it just lets
+        // our own timeline show what was sent (GreenAPI's CDN, ~15 days).
+        db.prepare(`UPDATE crm_messages SET media_url = ?, media_filename = ? WHERE id = ?`)
+          .run(result.urlFile, payload.filename || file.filename, row.message_id);
+      }
+    } else {
+      result = await provider.sendText(db, { toE164: row.to_e164, body: payload.body });
+    }
   } catch (err) {
     result = { ok: false, error: err.message, retryable: true };
   }
@@ -198,6 +217,33 @@ function idleSweeperTick(db) {
     ).run(lock.conversation_id, lock.username);
     publish('lock.released', { conversationId: lock.conversation_id, reason: 'expired' });
   }
+}
+
+// Marks a lead 'won' + stamps closed_at once its quote has a Morning ORDER
+// document (הזמנת עבודה) — the same signal QuotesAnalytics treats as "closed",
+// so campaign profitability and the quotes reports can never disagree.
+//
+// leadContext.js already does this, but only lazily when someone opens the
+// lead's workspace. Campaign analytics has to be right whether or not anyone
+// clicked into a lead, hence this sweep. Both write the same COALESCE'd
+// closed_at, so whichever runs first wins and the other is a no-op.
+function leadOutcomeSweepTick(db) {
+  const rows = db.prepare(`
+    SELECT l.id, l.customer_id
+    FROM crm_leads l
+    JOIN morning_documents_map m ON m.quote_id = l.quote_id
+    WHERE l.quote_id IS NOT NULL
+      AND l.closed_at IS NULL
+      AND l.status NOT IN ('won','lost','disqualified')
+      AND m.morning_document_type = ?
+    GROUP BY l.id
+  `).all(DOCUMENT_TYPE.order);
+  for (const r of rows) {
+    db.prepare(`UPDATE crm_leads SET status = 'won', closed_at = COALESCE(closed_at, CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(r.id);
+    db.prepare(`INSERT INTO crm_activity_log (customer_id, lead_id, type, summary, actor) VALUES (?, ?, 'status_change', 'עודכן אוטומטית ל-"זכינו" — זוהתה הזמנת עבודה', 'system')`)
+      .run(r.customer_id, r.id);
+  }
+  if (rows.length) console.log(`[crm jobs] lead outcome sweep: marked ${rows.length} lead(s) as won`);
 }
 
 // One board per tick — the board whose poll_minutes has most overdue elapsed

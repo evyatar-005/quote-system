@@ -51,6 +51,12 @@ export const inbox = {
   forceClaim(id) {
     return request(`/api/inbox/conversations/${id}/force-claim`, { method: 'POST' });
   },
+  leadCandidates(id) {
+    return request(`/api/inbox/conversations/${id}/lead-candidates`);
+  },
+  createLead(id, leadId) {
+    return request(`/api/inbox/conversations/${id}/lead`, { method: 'POST', body: leadId ? { lead_id: leadId } : {} });
+  },
   sendMessage(id, bodyText) {
     return request(`/api/inbox/conversations/${id}/messages`, { method: 'POST', body: { body: bodyText } });
   },

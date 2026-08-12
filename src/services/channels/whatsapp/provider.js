@@ -37,11 +37,12 @@
 // @property {(db)=>boolean} isConfigured
 // @property {(db, {toE164:string, body:string})=>Promise<SendResult>} sendText
 // @property {(db, {toE164:string, url:string, filename?:string, caption?:string})=>Promise<SendResult>} sendMedia
+// @property {(db, {toE164:string, fileBuffer:Buffer, mimeType?:string, filename?:string, caption?:string})=>Promise<SendResult>} sendMediaUpload
 // @property {(db, req)=>boolean} verifyWebhook
 // @property {(payload, headers)=>NormalizedInbound[]} normalizeInboundWebhook
 
 function assertProvider(impl) {
-  const required = ['name', 'capabilities', 'isConfigured', 'sendText', 'sendMedia', 'verifyWebhook', 'normalizeInboundWebhook'];
+  const required = ['name', 'capabilities', 'isConfigured', 'sendText', 'sendMedia', 'sendMediaUpload', 'verifyWebhook', 'normalizeInboundWebhook'];
   for (const key of required) {
     if (typeof impl[key] === 'undefined') throw new Error(`WhatsApp provider "${impl.name || '?'}" is missing "${key}"`);
   }
