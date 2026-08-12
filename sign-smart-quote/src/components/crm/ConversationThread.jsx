@@ -223,10 +223,25 @@ export default function ConversationThread({ conversationId, headerExtra, hideLe
   const isLockedByOther = thread?.conversation?.lock_username && !isMine;
 
   if (!conversationId) {
+    // Same WhatsApp shell (header bar + doodle canvas) as the loaded-but-empty
+    // thread below, just with placeholder skeletons instead of real customer
+    // data — LeadWorkspacePanel normally opens a conversation before this ever
+    // renders, so this is the brief moment before that lands (or the rare case
+    // it can't: no phone number, provider not configured). A plain white box
+    // here read as broken; this reads as "WhatsApp, just not started yet."
     return (
-      <div className="border border-black rounded-xl bg-white flex flex-col min-h-[65vh] items-center justify-center text-slate-400 text-sm gap-2">
-        <MessagesSquare className="w-8 h-8" />
-        אין שיחת ווצאפ פתוחה עבור ליד זה
+      <div className="border border-black rounded-xl bg-white flex flex-col h-[75vh] overflow-hidden">
+        <div className="px-4 py-2 flex items-center gap-3 shrink-0" style={{ background: WA.panel }}>
+          <div className="w-10 h-10 rounded-full bg-slate-300 shrink-0" />
+          <div className="h-3.5 w-28 rounded bg-slate-300/70" />
+        </div>
+        <div
+          className="flex-1 flex flex-col items-center justify-center gap-2 text-slate-400 text-sm"
+          style={{ background: WA.chatBg, backgroundImage: `url("${DOODLE}")`, backgroundRepeat: "repeat" }}
+        >
+          <MessagesSquare className="w-8 h-8" />
+          אין שיחת ווצאפ פתוחה עבור ליד זה
+        </div>
       </div>
     );
   }
