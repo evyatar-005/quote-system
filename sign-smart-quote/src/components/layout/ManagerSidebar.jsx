@@ -45,8 +45,12 @@ function NavItem({ to, icon: Icon, label, active }) {
 }
 
 export default function ManagerSidebar() {
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const { pathname, search } = useLocation();
+  // The CRM is gated per-user (users.can_access_crm, enforced server-side in
+  // server.js). Hiding the group is cosmetic — the API refuses regardless —
+  // but it keeps people from clicking into screens that will only 403.
+  const canAccessCrm = !!user?.canAccessCrm;
 
   return (
     <aside className="group w-16 shrink-0">
@@ -60,6 +64,7 @@ export default function ManagerSidebar() {
         <NavItem to="/quotes" icon={ClipboardList} label="הצעות לבדיקה" active={pathname === "/quotes"} />
         <NavItem to="/quotes-archive" icon={LineChart} label="אנליטיקה" active={pathname === "/quotes-archive"} />
       </NavGroup>
+      {canAccessCrm && (
       <NavGroup title="CRM">
         <NavItem to="/my-day" icon={Sparkles} label="היום שלי" active={pathname === "/my-day"} />
         <NavItem to="/crm/customers" icon={Users} label="לקוחות" active={pathname.startsWith("/crm/customers")} />
@@ -68,6 +73,7 @@ export default function ManagerSidebar() {
         <NavItem to="/crm/inbox" icon={MessagesSquare} label="תיבת שיחות" active={pathname === "/crm/inbox"} />
         <NavItem to="/crm/campaigns" icon={Send} label="דיוור" active={pathname.startsWith("/crm/campaigns") && !pathname.startsWith("/crm/campaigns-overview")} />
       </NavGroup>
+      )}
       <NavGroup title="תפעול">
         <NavItem to="/cutting" icon={Scissors} label="ניצולת לוחות" active={pathname === "/cutting"} />
         <NavItem to="/cutfile" icon={PenTool} label="קו חיתוך אוטומטי" active={pathname === "/cutfile"} />

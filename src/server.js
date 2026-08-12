@@ -259,6 +259,23 @@ try {
   db.prepare(`UPDATE users SET can_send_campaigns = 1 WHERE role = 'admin'`).run();
 } catch (_) {}
 
+// Third slice of the granular permission model: who may reach the CRM at all.
+// Default 0 for EVERYONE including admins (unlike can_view_costs/can_send_campaigns,
+// which grandfather admins) — the CRM is being rolled out to one person first, so
+// "closed unless explicitly opened" is the whole point. Grant is by email, the
+// login identity, and re-asserted on every boot so a fresh deploy or a restored
+// database can't lock the owner out of their own system.
+const CRM_OWNER_EMAIL = 'evyatar@fibonacci.co.il';
+try { db.exec('ALTER TABLE users ADD COLUMN can_access_crm INTEGER NOT NULL DEFAULT 0'); } catch (_) {}
+try {
+  const { changes } = db.prepare(
+    `UPDATE users SET can_access_crm = 1 WHERE lower(email) = ?`
+  ).run(CRM_OWNER_EMAIL);
+  console.log(`[auth] CRM access granted to ${CRM_OWNER_EMAIL} (${changes} account${changes === 1 ? '' : 's'} matched)`);
+} catch (err) {
+  console.error('[auth] CRM owner grant failed:', err.message);
+}
+
 // crm_settings already existed (Phase 1 CREATE TABLE IF NOT EXISTS), so these
 // are ALTERs, not schema.sql edits. Send window/days are enforced in LOCAL
 // time by jobs.js — SQLite's CURRENT_TIMESTAMP is UTC and would be 2-3h off.
@@ -428,7 +445,7 @@ function loadConfig() {
 // ═══════════════════════════════════════════════════════════════════════════
 // Base44-compatible API — auth + generic entities (frontend SDK shim target)
 // ═══════════════════════════════════════════════════════════════════════════
-const { requireAuth, requireAdmin, requireOperations, requireCampaigns } = registerAuth(app, db);
+const { requireAuth, requireAdmin, requireOperations, requireCampaigns, userFromRequest } = registerAuth(app, db);
 registerEntities(app, db, {
   loadConfig,
   upsertConfig,
@@ -446,6 +463,28 @@ registerSmtp(app, db, { requireAuth, requireAdmin });
 registerReports(app, db, { requireAuth, requireAdmin });
 registerCutFile(app, db, { requireAuth });
 registerProduction(app, db, { requireOperations });
+// ─── CRM access gate ──────────────────────────────────────────────────────
+// ONE guard in front of every CRM path instead of swapping requireAuth for a
+// stricter middleware in each of the ~90 CRM route handlers: a single mount
+// point can't be forgotten, and it also covers CRM routes added later.
+// Mounted BEFORE the CRM registrations below so it runs first. Public webhook
+// paths are exempt — WhatsApp and monday.com POST to them unauthenticated, and
+// gating those would silently stop inbound messages and board sync.
+const CRM_PATH_PREFIXES = ['/api/crm', '/api/inbox', '/api/campaigns', '/api/drive', '/api/monday-sync'];
+const CRM_PUBLIC_PATHS = ['/api/whatsapp/webhooks', '/api/monday-sync/webhooks'];
+app.use((req, res, next) => {
+  const path = req.path || '';
+  if (!CRM_PATH_PREFIXES.some((p) => path.startsWith(p))) return next();
+  if (CRM_PUBLIC_PATHS.some((p) => path.startsWith(p))) return next();
+  const user = userFromRequest(req);
+  if (!user) return res.status(401).json({ error: 'unauthorized' });
+  if (!user.can_access_crm) {
+    return res.status(403).json({ error: 'להרשאת כניסה פנה לאביתר', code: 'crm_forbidden' });
+  }
+  req.user = user;
+  next();
+});
+
 registerCrm(app, db, { requireAuth, requireAdmin });
 registerMondaySync(app, db, { requireAdmin });
 registerInbox(app, db, { requireAuth, requireAdmin });

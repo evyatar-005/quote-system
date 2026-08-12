@@ -54,8 +54,15 @@ export default function AgentSidebar() {
     <aside className="group w-16 shrink-0">
       <div className="fixed inset-y-0 right-0 z-30 w-16 group-hover:w-64 transition-[width] duration-200 ease-out overflow-y-auto overflow-x-hidden border-l border-black bg-background group-hover:shadow-2xl px-2 py-4 space-y-6">
       <NavGroup title="מכירות">
-        <NavItem to="/my-day" icon={Sparkles} label="היום שלי" active={pathname === "/my-day"} />
-        <NavItem to="/crm/leads" icon={Target} label="לידים" active={pathname === "/crm/leads"} />
+        {/* CRM entries are gated per-user (users.can_access_crm, enforced in
+            server.js). "ההצעות שלי" is NOT part of the CRM and stays visible —
+            an agent without CRM access still works from the calculator. */}
+        {user?.canAccessCrm && (
+          <>
+            <NavItem to="/my-day" icon={Sparkles} label="היום שלי" active={pathname === "/my-day"} />
+            <NavItem to="/crm/leads" icon={Target} label="לידים" active={pathname === "/crm/leads"} />
+          </>
+        )}
         <NavItem to="/my-quotes" icon={FileStack} label="ההצעות שלי" active={pathname === "/my-quotes"} />
       </NavGroup>
       <NavGroup title="תפעול">

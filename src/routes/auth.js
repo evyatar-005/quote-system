@@ -41,7 +41,7 @@ function verifyPassword(password, stored) {
 
 function publicUser(u) {
   if (!u) return null;
-  return { id: u.id, username: u.username, full_name: u.full_name, email: u.email, role: u.role, mustChangePassword: !!u.must_change_password, canViewCosts: !!u.can_view_costs, canSendCampaigns: !!u.can_send_campaigns };
+  return { id: u.id, username: u.username, full_name: u.full_name, email: u.email, role: u.role, mustChangePassword: !!u.must_change_password, canViewCosts: !!u.can_view_costs, canSendCampaigns: !!u.can_send_campaigns, canAccessCrm: !!u.can_access_crm };
 }
 
 // ── idempotent seed of the two demo users ────────────────────────────────────
@@ -401,7 +401,10 @@ module.exports = function registerAuth(app, db) {
     res.json({ deleted: true, id });
   });
 
-  return { requireAuth, requireAdmin, requireOperations, requireCampaigns, hashPassword, verifyPassword, publicUser };
+  // userFromRequest is exported so server.js can mount the CRM access gate as a
+  // path-prefix middleware (one guard for every /api/crm|inbox|campaigns|drive
+  // route) without re-implementing bearer-token → user resolution.
+  return { requireAuth, requireAdmin, requireOperations, requireCampaigns, hashPassword, verifyPassword, publicUser, userFromRequest };
 };
 
 module.exports.hashPassword = hashPassword;

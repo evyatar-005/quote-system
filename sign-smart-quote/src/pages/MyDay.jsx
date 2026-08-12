@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Loader2, Inbox } from "lucide-react";
+import { Loader2, Inbox, Lock } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 import { myDay } from "@/api/myDayClient";
 import ManagerSidebar from "@/components/layout/ManagerSidebar";
@@ -32,11 +32,17 @@ export default function MyDay() {
   const [openLeadId, setOpenLeadId] = useState(null);
   const Sidebar = user?.role === "agent" ? AgentSidebar : ManagerSidebar;
 
+  const [forbidden, setForbidden] = useState(null);
+
   const load = useCallback(async () => {
     try {
       setData(await myDay.get());
     } catch (err) {
-      toast.error(err.message || "טעינת המסך נכשלה");
+      // A user without CRM access gets a standing message, not a toast that
+      // disappears and leaves them on a blank screen wondering what broke
+      // (the gate lives in server.js and covers every /api/crm path).
+      if (err.status === 403) setForbidden(err.message);
+      else toast.error(err.message || "טעינת המסך נכשלה");
     } finally {
       setLoading(false);
     }
@@ -47,6 +53,17 @@ export default function MyDay() {
     const t = setInterval(load, REFRESH_MS);
     return () => clearInterval(t);
   }, [load]);
+
+  if (forbidden) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-6" dir="rtl">
+        <div className="border border-black rounded-xl bg-white px-8 py-10 text-center space-y-2 max-w-sm">
+          <Lock className="w-8 h-8 text-slate-300 mx-auto" />
+          <div className="font-semibold text-sm">{forbidden}</div>
+        </div>
+      </div>
+    );
+  }
 
   if (loading || !data) {
     return (
