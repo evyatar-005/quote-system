@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { ChevronDown, MoreHorizontal, XCircle, LogOut, Timer } from "lucide-react";
+import { ChevronDown, MoreHorizontal, XCircle, LogOut, Timer, FileCheck, Send, Loader2 } from "lucide-react";
+import { issueQuoteToMorning } from "@/api/morningClient";
 import { crmLeads } from "@/api/crmClient";
 import { leadQueue } from "@/api/leadQueueClient";
 import { Button } from "@/components/ui/button";
@@ -29,7 +30,7 @@ const TONE_BADGE = {
 // Clicking a name SWITCHES to that lead immediately — the rail is a lead
 // switcher first (which is why MyDay no longer needs LeadSwitcher); the chevron
 // is the way to peek at details without leaving the lead currently open.
-export default function LeadRail({ leads, openLeadId, onOpen, onChanged }) {
+export default function LeadRail({ leads, readyToIssue = [], openLeadId, onOpen, onChanged }) {
   // One ticker for the whole rail rather than an interval per row. It also
   // re-ranks on every tick, so a lead crossing its follow-up time moves itself
   // up into "דורש טיפול עכשיו" without waiting for MyDay's 60s refetch.
@@ -72,7 +73,99 @@ export default function LeadRail({ leads, openLeadId, onOpen, onChanged }) {
         {ranked.length === 0 && (
           <div className="px-2.5 py-6 text-center text-[11px] text-slate-400">אין לידים פתוחים</div>
         )}
+
+        {/* Under the lead stack, in the same rail: quotes a manager approved
+            that the customer STILL hasn't received. This is the agent's own
+            next action (unlike "waiting for the manager", which is someone
+            else's), so it belongs in the work list, not behind a bell. */}
+        {readyToIssue.length > 0 && (
+          <div>
+            <div className="px-2.5 py-0.5 bg-emerald-50 border-y border-emerald-100 text-[10px] font-bold text-emerald-700">
+              מוכנות להנפקה ללקוח <span className="font-normal text-emerald-600">{readyToIssue.length}</span>
+            </div>
+            {readyToIssue.map((q) => (
+              <ReadyToIssueRow key={q.id} quote={q} onIssued={onChanged} onOpen={onOpen} />
+            ))}
+          </div>
+        )}
       </div>
+    </div>
+  );
+}
+
+function ReadyToIssueRow({ quote, onIssued, onOpen }) {
+  const [busy, setBusy] = useState(false);
+
+  // The discount the manager actually approved: the gap between what the agent
+  // asked for (the parent quote) and the revision that came back approved.
+  const parent = Number(quote.parent_quote_number ? quote.parent_price_with_vat : 0);
+  const price = Number(quote.price_with_vat) || 0;
+  const discount = parent > price ? parent - price : 0;
+  const discountPct = discount > 0 ? Math.round((discount / parent) * 100) : 0;
+  const sentAt = quote.sent_at ? new Date(`${quote.sent_at.replace(" ", "T")}Z`) : null;
+
+  const issue = async () => {
+    setBusy(true);
+    try {
+      const result = await issueQuoteToMorning({
+        quote_number: quote.quote_number,
+        client_name: quote.client_name,
+        price_before_vat: null,
+        price_with_vat: quote.price_with_vat,
+      });
+      // issueQuoteToMorning resolves with { issued:false } when Morning has no
+      // credentials yet — that's a configuration state, not a failure.
+      if (result?.issued) {
+        toast.success(`הצעה ${quote.quote_number} הונפקה ונשלחה ללקוח`);
+        onIssued?.();
+      } else {
+        toast.message("החיבור למורנינג עדיין לא מוגדר", {
+          description: "הנתונים מוכנים — ההנפקה תעבוד ברגע שיוגדר חשבון מורנינג.",
+        });
+      }
+    } catch (err) {
+      toast.error(err?.message || "ההנפקה נכשלה");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    // Clicking the row opens the CUSTOMER (the lead the quote was built from,
+    // via crm_leads.quote_id) — issuing is also possible from there, so this
+    // row is a shortcut, not the only path. The button stops propagation so
+    // "issue" doesn't also navigate away from what the agent is doing.
+    <div
+      className={`px-2.5 py-1.5 border-b border-slate-100 space-y-0.5 ${quote.lead_id ? "cursor-pointer hover:bg-emerald-50/50" : ""}`}
+      onClick={() => quote.lead_id && onOpen?.(quote.lead_id)}
+      title={quote.lead_id ? "פתח את הלקוח" : "אין ליד מקושר להצעה זו"}
+    >
+      <div className="flex items-center gap-1.5">
+        <FileCheck className="w-3 h-3 text-emerald-600 shrink-0" />
+        <span className="text-[11px] font-semibold truncate flex-1">{quote.client_name || "ללא שם"}</span>
+        <span className="text-[11px] font-bold shrink-0">₪{price.toLocaleString()}</span>
+      </div>
+
+      <div className="text-[10px] text-slate-400 flex items-center gap-1.5">
+        <span dir="ltr" className="truncate">{quote.quote_number}</span>
+        {sentAt && <span className="shrink-0">· נשלח לבדיקה {sentAt.toLocaleDateString("he-IL")}</span>}
+      </div>
+
+      {discount > 0 && (
+        <div className="text-[10px] text-emerald-700 bg-emerald-50 rounded px-1.5 py-0.5 w-fit">
+          אושרה הנחה ₪{discount.toLocaleString()} ({discountPct}%) — מ-₪{parent.toLocaleString()}
+        </div>
+      )}
+
+      <Button
+        size="sm"
+        className="h-6 w-full px-2 text-[10px] gap-1 bg-emerald-600 hover:bg-emerald-700"
+        disabled={busy}
+        onClick={(e) => { e.stopPropagation(); issue(); }}
+      >
+        {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+        הנפק ושלח ללקוח
+      </Button>
     </div>
   );
 }

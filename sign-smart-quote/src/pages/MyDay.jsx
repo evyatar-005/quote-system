@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Link } from "react-router-dom";
-import { Loader2, FileText, Inbox } from "lucide-react";
+import { Loader2, Inbox } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 import { myDay } from "@/api/myDayClient";
 import ManagerSidebar from "@/components/layout/ManagerSidebar";
@@ -63,12 +62,16 @@ export default function MyDay() {
 
   return (
     <div className="min-h-screen bg-background text-foreground" dir="rtl">
+      {/* Compact header. This is the agent's working screen — the rail and the
+          open lead need the vertical room far more than a large logo does, and
+          the full-size masthead the report screens use pushed the first row of
+          real content a chunk of the viewport down for nothing. */}
       <div className="sticky top-0 z-20 bg-background/90 backdrop-blur-xl">
-        <div className="flex pl-4 sm:pl-6 pr-16 sm:pr-24 pt-3">
-          <div className="inline-flex items-center gap-2.5 border-b border-black pb-2.5">
-            <img src={printellaLogo} alt="Printella" className="h-14 object-contain" />
-            <div>
-              <h1 className="text-base font-bold leading-tight">היום שלי</h1>
+        <div className="flex pl-4 sm:pl-6 pr-16 sm:pr-24 pt-1.5">
+          <div className="inline-flex items-center gap-2 border-b border-black pb-1">
+            <img src={printellaLogo} alt="Printella" className="h-8 object-contain" />
+            <div className="flex items-baseline gap-1.5">
+              <h1 className="text-sm font-bold leading-tight">היום שלי</h1>
               {firstName && <span className="text-xs text-slate-500">{firstName}</span>}
             </div>
             <NotificationBell />
@@ -76,7 +79,7 @@ export default function MyDay() {
         </div>
       </div>
 
-      <div className="w-full mx-auto px-4 sm:px-8 pt-3 pb-8 flex flex-col lg:flex-row gap-8 items-start">
+      <div className="w-full mx-auto px-4 sm:px-8 pt-1.5 pb-8 flex flex-col lg:flex-row gap-8 items-start">
         <Sidebar />
         <div className="flex-1 min-w-0 w-full space-y-2">
           {/* One dense line, no card: pull CTA + slot meter + the two secondary
@@ -96,18 +99,10 @@ export default function MyDay() {
                 badge on the rail, so the shared inbox only covers conversations
                 that aren't a lead of this agent at all — a rare case that the
                 permanent sidebar's "תיבת שיחות" entry already links to. */}
-            <div className="flex items-center gap-3 mr-auto shrink-0">
-              <Link
-                to="/my-quotes"
-                title="הצעות שנשלחו וממתינות לאישור/דחייה של מנהל מכירות"
-                className="text-[11px] text-slate-500 hover:text-primary flex items-center gap-1"
-              >
-                <FileText className="w-3 h-3" /> הצעות לאישור
-                {counts.pending_quotes > 0 && (
-                  <span className="bg-slate-200 text-slate-700 rounded-full px-1.5">{counts.pending_quotes}</span>
-                )}
-              </Link>
-            </div>
+            {/* Quotes waiting on a manager used to show here as a count. It's
+                not the agent's task and it isn't actionable from this screen,
+                so it was noise on a line meant for what the agent does next —
+                the list still lives at /my-quotes. */}
           </div>
 
           <InactiveAgentsPanel agents={data.inactive_agents || []} />
@@ -118,6 +113,7 @@ export default function MyDay() {
           <div className="flex flex-col lg:flex-row gap-3 items-start">
             <LeadRail
               leads={data.my_leads}
+              readyToIssue={data.ready_to_issue || []}
               openLeadId={openLeadId}
               onOpen={setOpenLeadId}
               onChanged={load}

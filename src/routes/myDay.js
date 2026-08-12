@@ -119,12 +119,48 @@ module.exports = function registerMyDay(app, db, deps) {
       LIMIT 100
     `).all({ me });
 
-    // 4. Quotes this agent sent that are still awaiting a decision.
+    // 4. Quotes this agent sent that are still awaiting a manager decision.
     const pendingQuotes = db.prepare(`
       SELECT id, quote_number, client_name, price_with_vat, status, created_at
       FROM signshop_quotes
       WHERE status = 'sent' ${isAdmin ? '' : ' AND created_by = @me '}
       ORDER BY created_at DESC
+      LIMIT 20
+    `).all({ me });
+
+    // 4b. The agent's own to-do on the quotes side: approved by a manager but
+    // NOT yet issued to the customer. "Issued" isn't a column — it's the
+    // existence of a Morning document for the quote (morning_documents_map),
+    // the same source leadOutcome.js derives document state from. Waiting for a
+    // manager's decision is someone else's task; THIS is the one that leaves a
+    // customer sitting without the quote they were promised.
+    // sent_at: a quote is CREATED already in status 'sent' (see routes/entities.js
+    // quoteCreate → notifyAdminsOfSentQuote), so created_at IS the moment it went
+    // for review. The exception is a manager-discount revision, which is created
+    // when the MANAGER saves it — for those the send moment is the parent's
+    // created_at, so that's what COALESCE reaches for first. Deliberately not
+    // taken from the 'sent' notification: notifications are user-deletable
+    // ("מחק הכל" in the bell), so they can't be trusted as a timestamp.
+    // The approved discount is the gap to the parent quote: a revision saved out
+    // of the manager review screen carries parent_quote_number, and the parent is
+    // the price the agent originally asked for.
+    const readyToIssue = db.prepare(`
+      SELECT q.id, q.quote_number, q.client_name, q.price_with_vat, q.created_at,
+             q.origin, q.parent_quote_number,
+             COALESCE(
+               (SELECT p.created_at FROM signshop_quotes p
+                 WHERE p.quote_number = q.parent_quote_number ORDER BY p.id DESC LIMIT 1),
+               q.created_at
+             ) AS sent_at,
+             (SELECT p.price_with_vat FROM signshop_quotes p
+               WHERE p.quote_number = q.parent_quote_number
+               ORDER BY p.id DESC LIMIT 1) AS parent_price_with_vat,
+             (SELECT l.id FROM crm_leads l WHERE l.quote_id = q.id ORDER BY l.id DESC LIMIT 1) AS lead_id
+      FROM signshop_quotes q
+      WHERE q.status = 'approved'
+        AND NOT EXISTS (SELECT 1 FROM morning_documents_map m WHERE m.quote_id = q.id)
+        ${isAdmin ? '' : ' AND q.created_by = @me '}
+      ORDER BY q.created_at DESC
       LIMIT 20
     `).all({ me });
 
@@ -162,12 +198,14 @@ module.exports = function registerMyDay(app, db, deps) {
         due_follow_ups: dueFollowUps.length,
         waiting_unread: waitingUnread.length,
         pending_quotes: pendingQuotes.length,
+        ready_to_issue: readyToIssue.length,
       },
       my_leads: myLeads,
       inactive_agents: inactiveAgents,
       due_follow_ups: dueFollowUps,
       waiting_unread: waitingUnread,
       pending_quotes: pendingQuotes,
+      ready_to_issue: readyToIssue,
     };
 
     // Neither the lead pool nor the per-agent workload strip is surfaced
