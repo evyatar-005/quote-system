@@ -40,10 +40,22 @@ module.exports = function registerMonday(app, db, deps) {
   });
 
   // ── GET /api/monday/boards — for the board-picker dropdown ────────────────
+  // Paginated: a `limit: 100` query with no `page` silently truncates any
+  // account with more than 100 boards (real accounts easily cross that once
+  // every board's "Subitems of X" companion is counted) — the board picker
+  // then just doesn't list a board that genuinely exists, with no error and
+  // no hint why. Loops page-by-page until monday returns fewer than a full
+  // page back, capped at 20 pages (2000 boards) as a runaway backstop.
   app.get('/api/monday/boards', requireAdmin, async (req, res) => {
     try {
-      const data = await request(db, `query { boards (limit: 100) { id name } }`);
-      res.json({ boards: data.boards });
+      const boards = [];
+      const PAGE_SIZE = 100;
+      for (let page = 1; page <= 20; page++) {
+        const data = await request(db, `query ($page: Int!) { boards (limit: ${PAGE_SIZE}, page: $page) { id name } }`, { page });
+        boards.push(...data.boards);
+        if (data.boards.length < PAGE_SIZE) break;
+      }
+      res.json({ boards });
     } catch (err) {
       res.status(400).json({ error: err.message });
     }
