@@ -32,7 +32,16 @@ export default function RailNotifications() {
     return () => clearInterval(t);
   }, []);
 
-  const visible = items.filter((n) => n.type !== "approved");
+  // 'approved' notices are dropped (see file header). A 'sent' notice is a
+  // manager to-do that only makes sense while the quote is STILL pending — once
+  // decided, quote_status moves off 'sent' but nothing ever retired the
+  // notification row itself, so without this it piles up forever with every
+  // quote ever submitted, most already resolved.
+  const visible = items.filter((n) => {
+    if (n.type === "approved") return false;
+    if (n.type === "sent") return n.quote_status === "sent";
+    return true;
+  });
   if (visible.length === 0) return null;
 
   const remove = (id) => {

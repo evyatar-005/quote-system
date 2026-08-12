@@ -9,8 +9,19 @@ module.exports = function registerNotifications(app, db, deps) {
   const insertNotif = db.prepare(
     `INSERT INTO notifications (recipient_username, quote_id, quote_number, type, message) VALUES (?, ?, ?, ?, ?)`
   );
+  // quote_status is joined in so the client can tell a STALE 'sent' notice
+  // apart from a live one: 'sent' fires the moment an agent submits a quote for
+  // review, but nothing ever retires it once a manager decides — the decision
+  // creates its OWN 'approved'/'rejected' notification instead of touching the
+  // original row. Without this join, "ההצעות שלי לבדיקה" reads empty (every
+  // quote was already decided) while the notification list still shows every
+  // "ממתינה לאישור הנחה" ever sent, because status lived only on the quote.
   const listForUser = db.prepare(
-    `SELECT * FROM notifications WHERE recipient_username = ? ORDER BY id DESC LIMIT 50`
+    `SELECT n.*, q.status AS quote_status
+     FROM notifications n
+     LEFT JOIN signshop_quotes q ON q.id = n.quote_id
+     WHERE n.recipient_username = ?
+     ORDER BY n.id DESC LIMIT 50`
   );
   const markRead = db.prepare(`UPDATE notifications SET is_read = 1 WHERE id = ? AND recipient_username = ?`);
   const markAllRead = db.prepare(`UPDATE notifications SET is_read = 1 WHERE recipient_username = ?`);

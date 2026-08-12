@@ -44,7 +44,13 @@ export default function NotificationBell() {
     return () => document.removeEventListener("mousedown", onClickOutside);
   }, []);
 
-  const unreadCount = items.filter((n) => !n.is_read).length;
+  // A 'sent' notification is a manager to-do that only makes sense while the
+  // quote is still pending a decision — the decision itself creates a separate
+  // 'approved'/'rejected' notification instead of retiring this row, so left
+  // unfiltered it piles up with every quote ever submitted, most already
+  // resolved. quote_status is joined server-side (routes/notifications.js).
+  const visibleItems = items.filter((n) => n.type !== "sent" || n.quote_status === "sent");
+  const unreadCount = visibleItems.filter((n) => !n.is_read).length;
 
   const handleOpen = () => {
     setOpen((o) => !o);
@@ -108,7 +114,7 @@ export default function NotificationBell() {
         <div className="absolute right-0 mt-2 w-80 max-h-96 overflow-y-auto bg-white border-2 border-black rounded-xl shadow-lg z-50" dir="rtl">
           <div className="p-3 border-b border-black flex items-center justify-between">
             <span className="text-sm font-semibold text-slate-700">התראות</span>
-            {items.length > 0 && (
+            {visibleItems.length > 0 && (
               <button
                 onClick={handleDeleteAll}
                 className="flex items-center gap-1 text-xs text-slate-400 hover:text-red-500 transition-colors"
@@ -117,11 +123,11 @@ export default function NotificationBell() {
               </button>
             )}
           </div>
-          {items.length === 0 ? (
+          {visibleItems.length === 0 ? (
             <p className="p-4 text-sm text-slate-400 text-center">אין התראות</p>
           ) : (
             <div className="divide-y divide-slate-100">
-              {items.map((n) => {
+              {visibleItems.map((n) => {
                 const Icon = TYPE_ICON[n.type] || Bell;
                 return (
                   <div key={n.id} className="p-3 space-y-2">
