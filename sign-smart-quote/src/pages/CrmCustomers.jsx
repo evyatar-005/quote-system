@@ -102,7 +102,7 @@ export default function CrmCustomers() {
   return (
     <div className="min-h-screen bg-background text-foreground" dir="rtl">
       <div className="sticky top-0 z-20 bg-background/90 backdrop-blur-xl border-b border-black">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center gap-3">
+        <div className="w-full px-4 sm:px-8 py-4 flex items-center gap-3">
           <img src={printellaLogo} alt="Printella" className="h-24 object-contain" />
           <div>
             <h1 className="text-lg font-bold">לקוחות</h1>
@@ -113,7 +113,9 @@ export default function CrmCustomers() {
 
       <div className="w-full mx-auto px-4 sm:px-8 py-8 flex flex-col lg:flex-row gap-8 items-start">
         <Sidebar />
-        <div className="flex-1 min-w-0 w-full max-w-7xl space-y-4">
+        {/* No max-width: this screen is a table, and the wasted gutter cost
+            more than the long-line-length rule it was following. */}
+        <div className="flex-1 min-w-0 w-full space-y-4">
           {/* Control bar */}
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative flex-1 min-w-[220px] max-w-md">
