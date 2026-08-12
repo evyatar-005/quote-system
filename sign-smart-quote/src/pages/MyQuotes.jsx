@@ -21,7 +21,7 @@ import { convertMorningDocument, createPaymentLink, getLatestMorningDocuments } 
 import QuoteDocument from "@/components/calculator/QuoteDocument";
 import DocumentIssuedModal from "@/components/DocumentIssuedModal";
 import { MORNING_ORDER_TYPE, toLocalDateStr, DATE_PRESETS, computeDateRange, formatDocNumber, ORIGIN_LABELS, ORIGIN_COLORS, originOf } from "@/lib/quoteLabels";
-import { latestRevisionsOnly } from "@/lib/quoteEconomics";
+import { latestRevisionsOnly, reconstructBuilderState } from "@/lib/quoteEconomics";
 import { useAuth } from "@/lib/AuthContext";
 
 const fmt = (val) =>
@@ -177,8 +177,22 @@ export default function MyQuotes() {
         return;
       }
     }
-    // Pre-existing quote saved before builder_state existed — restore client
-    // fields only, leave the product list empty.
+    // No builder_state — most commonly a quote saved out of QuoteDetailsModal
+    // before v1.0.85 (see reconstructBuilderState's own comment). Recover what
+    // we can from calculation_data instead of giving up to an empty product
+    // list — still worth a clear warning, since תוספות/אלמנטים/התקנה per item
+    // don't survive and need a manual re-check.
+    const rebuilt = reconstructBuilderState(q);
+    if (rebuilt) {
+      toast.message("המוצרים שוחזרו חלקית מנתוני ההצעה", {
+        description: "מידות/כמויות/מק\"ט חזרו, אבל תוספות ואלמנטים לא נשמרו במקור — יש לבדוק כל פריט לפני שליחה.",
+      });
+      navigate("/costs", { state: { builderState: rebuilt, sourceQuoteNumber: q.quote_number } });
+      return;
+    }
+
+    // Truly nothing to recover — restore client fields only, leave the
+    // product list empty.
     toast.message("לא ניתן לשחזר את פרטי המוצרים להצעה זו", {
       description: "ההצעה נשמרה לפני תכונה זו — יחזרו רק פרטי הלקוח, יש לבנות את המוצרים מחדש.",
     });

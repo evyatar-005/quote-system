@@ -3,7 +3,13 @@
 // place so "what counts as a line" and "how is profit derived" can never
 // drift between the two.
 import { CATEGORY_LABELS } from "@/lib/quoteLabels";
-import { PRODUCT_NAMES, PRODUCT_CODES } from "@/components/calculator/CalculatorForm";
+import { PRODUCT_NAMES, PRODUCT_CODES, categoryOf } from "@/components/calculator/CalculatorForm";
+
+// tabKey values MultiProductCalculator's TABS actually offers (CostsDashboard.jsx)
+// — the only ones categoryOf() can map a saved productType onto that the live
+// calculator can reopen. Anything else (e.g. a family only reachable from a
+// different calculator entirely) can't be reconstructed into this shape.
+const RECONSTRUCTABLE_TAB_KEYS = new Set(["logo", "sticker", "kapa", "lokobond", "foamex", "rollup"]);
 
 export const safeParse = (json, fallback) => {
   try {
@@ -111,4 +117,77 @@ export function latestRevisionsOnly(quotes, allQuotes = quotes) {
     allQuotes.map((q) => q.parent_quote_number).filter(Boolean)
   );
   return quotes.filter((q) => !superseded.has(q.quote_number));
+}
+
+// "שכפל" (MyQuotes.jsx) reopens a saved quote by restoring its builder_state —
+// the full per-item form snapshot. Quotes saved out of QuoteDetailsModal's
+// "שמור הצעה מתוקנת" before v1.0.85 never got one (fixed going forward in
+// 2f89980), so duplicating one of those permanently opens to an empty product
+// list with nothing to edit — builder_state was simply never written, there is
+// no correct copy to recover.
+//
+// This rebuilds a best-effort builder_state from calculation_data instead,
+// which every such quote DOES have (QuoteDetailsModal is what reads it to
+// render the review screen). It recovers what calculation_data actually
+// stores per item — productType/widthM/heightM/thicknessMm/quantity and any
+// extra-size rows — but NOT things the live calculator form also tracks that
+// calculation_data never saved (תוספות, אלמנטים, התקנה/אזור, שם פריט מותאם
+// אישית). The agent needs to re-check those on each item after reopening;
+// this is a recovery of dimensions and product selection, not a perfect
+// restore. Returns null (never a half-broken shape) if any item's family
+// isn't one the live calculator can actually reopen — see
+// RECONSTRUCTABLE_TAB_KEYS above.
+export function reconstructBuilderState(quote) {
+  const calc = safeParse(quote.calculation_data, null);
+  const items = calc?.items;
+  if (!Array.isArray(items) || !items.length) return null;
+
+  const builtItems = [];
+  const formDataMap = {};
+  let nextId = 1;
+
+  for (const it of items) {
+    const tabKey = categoryOf(it.productType);
+    if (!RECONSTRUCTABLE_TAB_KEYS.has(tabKey)) return null;
+    const id = nextId++;
+    builtItems.push({ id, tabKey });
+    formDataMap[id] = {
+      productType: it.productType || "",
+      widthM: it.widthM ?? "",
+      heightM: it.heightM ?? "",
+      thicknessMm: it.thicknessMm ?? "",
+      quantity: it.quantity ?? "1",
+      extras: [],
+      lineLabel: "",
+      extraRows: (it.extraRows || []).map((r) => ({
+        id: r.id ?? Math.random(),
+        lineLabel: r.lineLabel || "",
+        widthM: r.widthM ?? "",
+        heightM: r.heightM ?? "",
+        quantity: r.quantity ?? "1",
+        elements: r.elements || "",
+      })),
+    };
+  }
+
+  const installments = /^installments:(\d+)$/.exec(quote.payment_type || "");
+
+  return {
+    items: builtItems,
+    formDataMap,
+    itemLabels: {},
+    clientName: quote.client_name || "",
+    clientPhone: quote.client_phone || "",
+    clientAddress: quote.client_address || "",
+    clientVatId: quote.client_vat_id || "",
+    clientEmail: quote.client_email || "",
+    clientPaymentTerms: "",
+    documentTitle: quote.notes || "",
+    agentNote: quote.agent_note || "",
+    // Not recoverable from calculation_data (shipping cost is folded into a
+    // line total, not stored separately) — safe defaults the agent can change.
+    shipping: "0",
+    delivery: "pickup",
+    installmentCount: installments ? parseInt(installments[1], 10) : 1,
+  };
 }
