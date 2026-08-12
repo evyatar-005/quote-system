@@ -144,7 +144,19 @@ module.exports = function registerMyDay(app, db, deps) {
     // The approved discount is the gap to the parent quote: a revision saved out
     // of the manager review screen carries parent_quote_number, and the parent is
     // the price the agent originally asked for.
+    // "Handled" is stricter than "a later revision exists": a revision that is
+    // itself still sitting unissued does NOT clear the earlier one — only a
+    // revision (at any depth: a revision of a revision is possible) that was
+    // actually issued to the customer does. root_of walks the parent_quote_number
+    // chain to a shared root for every quote, so "any quote sharing my root has
+    // an issued document" is a single self-join instead of one query per depth.
     const readyToIssue = db.prepare(`
+      WITH RECURSIVE root_of(quote_number, root_number) AS (
+        SELECT quote_number, quote_number FROM signshop_quotes WHERE parent_quote_number IS NULL
+        UNION ALL
+        SELECT c.quote_number, r.root_number
+        FROM signshop_quotes c JOIN root_of r ON c.parent_quote_number = r.quote_number
+      )
       SELECT q.id, q.quote_number, q.client_name, q.price_with_vat, q.created_at,
              q.origin, q.parent_quote_number,
              COALESCE(
@@ -157,8 +169,15 @@ module.exports = function registerMyDay(app, db, deps) {
                ORDER BY p.id DESC LIMIT 1) AS parent_price_with_vat,
              (SELECT l.id FROM crm_leads l WHERE l.quote_id = q.id ORDER BY l.id DESC LIMIT 1) AS lead_id
       FROM signshop_quotes q
+      JOIN root_of ro ON ro.quote_number = q.quote_number
       WHERE q.status = 'approved'
         AND NOT EXISTS (SELECT 1 FROM morning_documents_map m WHERE m.quote_id = q.id)
+        AND NOT EXISTS (
+          SELECT 1 FROM root_of ro2
+          JOIN signshop_quotes c ON c.quote_number = ro2.quote_number
+          WHERE ro2.root_number = ro.root_number
+            AND EXISTS (SELECT 1 FROM morning_documents_map m WHERE m.quote_id = c.id)
+        )
         ${isAdmin ? '' : ' AND q.created_by = @me '}
       ORDER BY q.created_at DESC
       LIMIT 20
