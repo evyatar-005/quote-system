@@ -3,23 +3,18 @@ import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from "recharts";
 import { Loader2, PieChart as PieChartIcon, AlertOctagon, Clock, TrendingUp, Wallet, Target, Users } from "lucide-react";
 import { leadQueue } from "@/api/leadQueueClient";
-import { crmLeads } from "@/api/crmClient";
 import { crmSettings } from "@/api/mondaySyncClient";
+import KpiTile from "@/components/crm/analytics/KpiTile";
+import TrendChart from "@/components/crm/analytics/TrendChart";
+import FunnelChart from "@/components/crm/analytics/FunnelChart";
+import SlaPanel from "@/components/crm/analytics/SlaPanel";
+import LostReasons from "@/components/crm/analytics/LostReasons";
+import { fmtPct, fmtDays } from "@/components/crm/analytics/format";
 import { toLocalDateStr } from "@/lib/quoteLabels";
 import { Input } from "@/components/ui/input";
 import ManagerSidebar from "@/components/layout/ManagerSidebar";
 import printellaLogo from "@/assets/printella-logo.png";
 import { toast } from "sonner";
-
-const STATUS_LABELS = {
-  new: "חדש", contacted: "יצרנו קשר", quoted: "נשלחה הצעה",
-  won: "זכינו", lost: "אבדנו", disqualified: "לא רלוונטי",
-};
-const STATUS_COLORS = {
-  new: "bg-blue-50 text-blue-600", contacted: "bg-amber-50 text-amber-600",
-  quoted: "bg-purple-50 text-purple-600", won: "bg-emerald-50 text-emerald-600",
-  lost: "bg-red-50 text-red-500", disqualified: "bg-slate-100 text-slate-500",
-};
 
 const fmt = (n) => (n == null ? "—" : new Intl.NumberFormat("he-IL", { maximumFractionDigits: 0 }).format(n));
 const fmtMoney = (n) => (n == null ? "—" : `₪${fmt(n)}`);
@@ -90,11 +85,18 @@ export default function CrmCampaignsOverview() {
   const [customTo, setCustomTo] = useState(toLocalDateStr(new Date()));
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  // Period-over-period comparison. "הכל" has no preceding window, so the
+  // server ignores compare there and the toggle is disabled.
+  const [compare, setCompare] = useState(false);
 
-  const load = useCallback(async (cid, preset, cFrom, cTo) => {
+  const load = useCallback(async (cid, preset, cFrom, cTo, cmp) => {
     setLoading(true);
     try {
-      const params = { ...(cid ? { campaign_id: cid } : {}), ...rangeToDates(preset, cFrom, cTo) };
+      const params = {
+        ...(cid ? { campaign_id: cid } : {}),
+        ...rangeToDates(preset, cFrom, cTo),
+        ...(cmp ? { compare: 1 } : {}),
+      };
       setData(await leadQueue.campaignsOverview(params));
     } catch (err) {
       toast.error(err.message || "טעינת הנתונים נכשלה");
@@ -108,7 +110,7 @@ export default function CrmCampaignsOverview() {
   // range filters changed while a different tab was open (those filters are
   // shared across tabs, but only "overview" needs this particular payload).
   useEffect(() => {
-    if (tab === "overview") load(campaignId, rangePreset, customFrom, customTo);
+    if (tab === "overview" || tab === "leads") load(campaignId, rangePreset, customFrom, customTo, compare);
   }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     leadQueue.campaigns().then(setCampaigns).catch(() => {});
@@ -119,18 +121,26 @@ export default function CrmCampaignsOverview() {
     if (tabParam && TABS.some((t) => t.key === tabParam) && tabParam !== tab) setTabState(tabParam);
   }, [tabParam]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // The overview payload now also feeds the "לידים" tab's trend chart, so
+  // both tabs reload on a filter change — that tab used to ignore the shared
+  // campaign/range filters entirely and show a fixed 12-month chart.
+  const needsOverview = tab === "overview" || tab === "leads";
   const onFilterChange = (cid) => {
     setCampaignId(cid);
-    if (tab === "overview") load(cid, rangePreset, customFrom, customTo);
+    if (needsOverview) load(cid, rangePreset, customFrom, customTo, compare);
   };
   const onRangeChange = (preset) => {
     setRangePreset(preset);
-    if (preset !== "custom" && tab === "overview") load(campaignId, preset, customFrom, customTo);
+    if (preset !== "custom" && needsOverview) load(campaignId, preset, customFrom, customTo, compare);
   };
   const onCustomRangeChange = (from, to) => {
     setCustomFrom(from);
     setCustomTo(to);
-    if (tab === "overview") load(campaignId, "custom", from, to);
+    if (needsOverview) load(campaignId, "custom", from, to, compare);
+  };
+  const onCompareChange = (next) => {
+    setCompare(next);
+    if (needsOverview) load(campaignId, rangePreset, customFrom, customTo, next);
   };
 
   const pieData = (data?.by_status || []).map((r) => ({ ...r, name: r.status }));
@@ -197,6 +207,19 @@ export default function CrmCampaignsOverview() {
                 <input type="date" value={customTo} onChange={(e) => onCustomRangeChange(customFrom, e.target.value)} className="h-8 rounded-lg border border-black bg-white px-2 text-xs" dir="ltr" />
               </div>
             )}
+            <label
+              className={`flex items-center gap-1.5 text-xs mr-auto ${rangePreset === "all" ? "text-slate-300 cursor-not-allowed" : "text-slate-500 cursor-pointer"}`}
+              title={rangePreset === "all" ? 'אין תקופה קודמת להשוואה כאשר הטווח הוא "הכל"' : undefined}
+            >
+              <input
+                type="checkbox"
+                checked={compare && rangePreset !== "all"}
+                disabled={rangePreset === "all"}
+                onChange={(e) => onCompareChange(e.target.checked)}
+                className="accent-primary"
+              />
+              השוואה לתקופה קודמת
+            </label>
           </div>
 
           <div className="flex items-center gap-2">
@@ -220,19 +243,29 @@ export default function CrmCampaignsOverview() {
           )}
           {tab === "budget" && <BudgetTab campaigns={campaigns} />}
           {tab === "leads" && (
-            <LeadsTab campaignId={campaignId} rangePreset={rangePreset} customFrom={customFrom} customTo={customTo} />
+            <LeadsTab series={data?.series} loading={loading} />
           )}
 
           {tab === "overview" && (loading || !data ? (
             <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-slate-400" /></div>
           ) : (
             <>
-              {/* Funnel tiles — respect the range above */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <PeriodTile label="לידים נכנסים" value={data.funnel.leads_in} />
-                <PeriodTile label="הגיעו לשלב הצעת מחיר" value={data.funnel.leads_quoted} />
-                <PeriodTile label="נסגרה עסקה" value={data.funnel.leads_won} />
+              {/* KPI row — cohort counts + the two rates and the cycle time
+                  that a manager actually steers on. `previous` is present
+                  only when the comparison toggle is on. */}
+              <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+                <KpiTile label="לידים נכנסים" value={data.funnel.leads_in} previous={data.previous?.funnel.leads_in} series={data.series} seriesKey="leads" />
+                <KpiTile label="הגיעו להצעת מחיר" value={data.funnel.leads_quoted} previous={data.previous?.funnel.leads_quoted} series={data.series} seriesKey="quoted" />
+                <KpiTile label="נסגרה עסקה" value={data.funnel.leads_won} previous={data.previous?.funnel.leads_won} series={data.series} seriesKey="won" />
+                <KpiTile label="% המרה כולל" value={data.funnel.win_rate} previous={data.previous?.funnel.win_rate} format={fmtPct} />
+                <KpiTile label="זמן מהצעה לסגירה" value={data.funnel.avg_days_quote_to_close} previous={data.previous?.funnel.avg_days_quote_to_close} format={fmtDays} lowerIsBetter />
               </div>
+
+              <TrendChart series={data.series} />
+
+              <FunnelChart funnel={data.funnel} />
+
+              <SlaPanel sla={data.sla} overdueMinutes={data.reply_overdue_minutes} />
 
               {/* Status breakdown — numbers + pie */}
               <div className="border border-black rounded-xl bg-white p-4">
@@ -296,6 +329,8 @@ export default function CrmCampaignsOverview() {
                 )}
               </div>
 
+              <LostReasons rows={data.lost_reasons} />
+
               {/* Exceptional leads */}
               <div className="border border-black rounded-xl bg-white">
                 <div className="px-3 py-2 border-b border-slate-200 flex items-center gap-2">
@@ -334,15 +369,6 @@ export default function CrmCampaignsOverview() {
   );
 }
 
-function PeriodTile({ label, value }) {
-  return (
-    <div className="border border-black rounded-xl bg-white px-4 py-3">
-      <div className="text-2xl font-bold leading-none">{value ?? 0}</div>
-      <div className="text-xs text-slate-500 mt-1">{label}</div>
-    </div>
-  );
-}
-
 const PROFIT_COLS = [
   { key: "campaign_name", label: "קמפיין", fmt: (v) => v },
   { key: "leads", label: "לידים", fmt },
@@ -368,25 +394,35 @@ function ProfitabilityTab({ campaignId, rangePreset, customFrom, customTo }) {
   const [loading, setLoading] = useState(true);
   const [sortKey, setSortKey] = useState("net_profit");
   const [sortDir, setSortDir] = useState(-1);
+  // Same columns, different row key — the server returns an identical row
+  // shape for both (see GET /api/crm/analytics/campaigns's `group`).
+  const [groupBy, setGroupBy] = useState("campaign");
+  const byAgent = groupBy === "agent";
 
   useEffect(() => {
     setLoading(true);
-    leadQueue.campaignAnalytics(rangeToDates(rangePreset, customFrom, customTo))
+    leadQueue.campaignAnalytics({
+      ...rangeToDates(rangePreset, customFrom, customTo),
+      ...(byAgent ? { group: "agent", ...(campaignId ? { campaign_id: campaignId } : {}) } : {}),
+    })
       .then((d) => setRows(d.rows))
       .catch((err) => toast.error(err.message || "טעינת הנתונים נכשלה"))
       .finally(() => setLoading(false));
-  }, [rangePreset, customFrom, customTo]);
+  }, [rangePreset, customFrom, customTo, groupBy, campaignId, byAgent]);
 
   const filtered = useMemo(() => {
     let r = rows || [];
-    if (campaignId) r = r.filter((x) => String(x.campaign_id) === String(campaignId));
+    // Agent rows are already narrowed server-side by campaign_id; filtering
+    // them again by that id here would match nothing (the row key is a
+    // username, not a campaign id).
+    if (campaignId && !byAgent) r = r.filter((x) => String(x.campaign_id) === String(campaignId));
     return [...r].sort((a, b) => {
       const av = a[sortKey], bv = b[sortKey];
       if (av == null) return 1;
       if (bv == null) return -1;
       return av < bv ? sortDir : av > bv ? -sortDir : 0;
     });
-  }, [rows, campaignId, sortKey, sortDir]);
+  }, [rows, campaignId, byAgent, sortKey, sortDir]);
 
   const toggleSort = (key) => {
     if (sortKey === key) setSortDir((d) => -d);
@@ -401,14 +437,28 @@ function ProfitabilityTab({ campaignId, rangePreset, customFrom, customTo }) {
     <div className="border border-black rounded-xl bg-white overflow-x-auto">
       <div className="px-3 py-2 border-b border-slate-200 flex items-center gap-2">
         <TrendingUp className="w-4 h-4 text-slate-500" />
-        <span className="font-semibold text-sm">רווחיות קמפיינים</span>
+        <span className="font-semibold text-sm">{byAgent ? "ביצועי נציגים" : "רווחיות קמפיינים"}</span>
+        <div className="flex items-center gap-1 mr-auto">
+          {[{ key: "campaign", label: "לפי קמפיין" }, { key: "agent", label: "לפי נציג" }].map((g) => (
+            <button
+              key={g.key}
+              type="button"
+              onClick={() => setGroupBy(g.key)}
+              className={`h-7 px-2.5 text-xs rounded-lg border transition-colors ${
+                groupBy === g.key ? "border-primary bg-primary/10 text-primary font-semibold" : "border-slate-200 text-slate-500 hover:border-slate-400"
+              }`}
+            >
+              {g.label}
+            </button>
+          ))}
+        </div>
       </div>
       <table className="w-full text-sm whitespace-nowrap">
         <thead>
           <tr className="text-sm text-black border-b border-slate-200">
             {PROFIT_COLS.map((c) => (
               <th key={c.key} className="text-right font-semibold py-2 px-3 cursor-pointer select-none" onClick={() => toggleSort(c.key)}>
-                {c.label}{sortKey === c.key ? (sortDir === 1 ? " ▲" : " ▼") : ""}
+                {c.key === "campaign_name" && byAgent ? "נציג" : c.label}{sortKey === c.key ? (sortDir === 1 ? " ▲" : " ▼") : ""}
               </th>
             ))}
           </tr>
@@ -436,6 +486,11 @@ function ProfitabilityTab({ campaignId, rangePreset, customFrom, customTo }) {
           ⚠ חלק מהעסקאות הסגורות חסרות פירוט עלות (לא נכנסו לחישוב הרווח) — כמו במסך "הצעות" הראשי.
         </div>
       )}
+      {byAgent && (
+        <div className="px-3 py-2 text-xs text-slate-400 border-t border-slate-100">
+          התקציב מוזן ברמת קמפיין בלבד, ולכן עמודות תקציב / עלות לליד / עלות לעסקה / ROAS / רווח נקי מוצגות כ־"—" בתצוגת נציגים.
+        </div>
+      )}
     </div>
   );
 }
@@ -447,13 +502,24 @@ function ProfitabilityTab({ campaignId, rangePreset, customFrom, customTo }) {
 function BudgetTab({ campaigns }) {
   const [day, setDay] = useState(toLocalDateStr(new Date()));
   const [values, setValues] = useState({});
+  const [dayLeads, setDayLeads] = useState({});
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState(null);
 
   useEffect(() => {
     setLoading(true);
-    leadQueue.campaignSpend(day)
-      .then((rows) => setValues(Object.fromEntries(rows.map((r) => [r.campaign_id, String(r.amount)]))))
+    // Alongside the spend rows, that same day's lead count per campaign —
+    // typing a budget blind is how a campaign ends up overfunded for a day
+    // it produced nothing. Reuses the profitability endpoint with a
+    // single-day range rather than adding another one.
+    Promise.all([
+      leadQueue.campaignSpend(day),
+      leadQueue.campaignAnalytics({ date_from: day, date_to: day }).catch(() => ({ rows: [] })),
+    ])
+      .then(([rows, analytics]) => {
+        setValues(Object.fromEntries(rows.map((r) => [r.campaign_id, String(r.amount)])));
+        setDayLeads(Object.fromEntries((analytics.rows || []).map((r) => [r.campaign_id, r.leads])));
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [day]);
@@ -484,6 +550,9 @@ function BudgetTab({ campaigns }) {
           {campaigns.map((c) => (
             <div key={c.id} className="flex items-center gap-2 px-3 py-2">
               <span className="text-sm flex-1">{c.name}</span>
+              <span className="text-xs text-slate-400 shrink-0 w-24 text-left" dir="rtl">
+                {dayLeads[c.id] ? `${dayLeads[c.id]} לידים` : "אין לידים"}
+              </span>
               <Input
                 type="number"
                 min={0}
@@ -510,90 +579,35 @@ function BudgetTab({ campaigns }) {
   );
 }
 
-// Every lead (up to 500, newest first), filterable by status/agent/free-text
-// search, plus the 12-month trend and per-agent claim-slot strip. Ported
-// from the old standalone CrmLeads.jsx — campaign + date range now come from
-// the parent (the side rail / range selector above), so this tab only owns
-// its own status/agent/search filters.
-function LeadsTab({ campaignId, rangePreset, customFrom, customTo }) {
-  const [leads, setLeads] = useState([]);
-  const [agents, setAgents] = useState([]);
-  const [monthly, setMonthly] = useState([]);
+// Campaign-level lead analytics: the trend chart and the per-agent
+// claim-slot strip. The lead LIST it used to also render moved out to the
+// standalone /crm/leads page (CrmLeads.jsx) — that page is role-aware and can
+// search/sort/page, which this tab never could.
+//
+// The trend now comes from the shared overview payload (`series`), so it
+// finally honours the campaign and date filters at the top of the page. The
+// old hand-rolled bar chart was hardwired to the last 12 months across all
+// campaigns and quietly contradicted every other number on screen.
+function LeadsTab({ series, loading }) {
   const [workload, setWorkload] = useState([]);
   const [maxClaimed, setMaxClaimed] = useState(4);
-  const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({ status: "", assigned_to: "" });
-  const [q, setQ] = useState("");
-  const [debouncedQ, setDebouncedQ] = useState("");
-
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedQ(q), 300);
-    return () => clearTimeout(t);
-  }, [q]);
-
-  const load = useCallback(async (f, cid, dates, query) => {
-    setLoading(true);
-    try {
-      const params = Object.fromEntries(
-        Object.entries({ ...f, campaign_id: cid, ...dates, q: query }).filter(([, v]) => v)
-      );
-      setLeads(await crmLeads.list(params));
-    } catch (err) {
-      toast.error(err.message || "טעינת הלידים נכשלה");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    load(filters, campaignId, rangeToDates(rangePreset, customFrom, customTo), debouncedQ);
-  }, [filters, campaignId, rangePreset, customFrom, customTo, debouncedQ]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     (async () => {
       try {
-        const [a, m, w, s] = await Promise.all([
-          leadQueue.agentCampaigns(), crmLeads.monthlyStats(), leadQueue.agentsWorkload(), crmSettings.get(),
-        ]);
-        setAgents(a);
-        setMonthly(m);
+        const [w, s] = await Promise.all([leadQueue.agentsWorkload(), crmSettings.get()]);
         setWorkload(w);
         setMaxClaimed(s.max_claimed_leads || 4);
-      } catch { /* non-critical — chart/strip just stay empty */ }
+      } catch { /* non-critical — the strip just stays empty */ }
     })();
   }, []);
 
-  const setFilter = (patch) => setFilters((f) => ({ ...f, ...patch }));
-
-  const move = async (leadId, status) => {
-    try {
-      await crmLeads.update(leadId, { status });
-      load(filters, campaignId, rangeToDates(rangePreset, customFrom, customTo), debouncedQ);
-    } catch (err) {
-      toast.error(err.message || "עדכון הליד נכשל");
-    }
-  };
-
-  const maxMonthly = useMemo(() => Math.max(1, ...monthly.map((m) => m.total)), [monthly]);
-
   return (
     <div className="space-y-6">
-      {/* Monthly trend */}
-      {monthly.length > 0 && (
-        <div className="border border-black rounded-xl bg-white p-3 space-y-2">
-          <div className="flex items-center gap-2 text-sm font-semibold">
-            <TrendingUp className="w-4 h-4 text-slate-500" /> לידים לפי חודש (12 חודשים אחרונים)
-          </div>
-          <div className="flex items-end gap-1.5 h-24">
-            {monthly.map((m) => (
-              <div key={m.month} className="flex-1 flex flex-col items-center justify-end gap-1" title={`${m.month}: ${m.total}`}>
-                <span className="text-[10px] text-slate-400">{m.total}</span>
-                <div className="w-full bg-primary/20 rounded-t" style={{ height: `${Math.max(4, (m.total / maxMonthly) * 70)}px` }} />
-                <span className="text-[10px] text-slate-400">{m.month.slice(5)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
+      {loading && !series ? (
+        <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-slate-400" /></div>
+      ) : (
+        <TrendChart series={series} title="לידים לאורך זמן" />
       )}
 
       {/* Agent workload */}
@@ -615,76 +629,19 @@ function LeadsTab({ campaignId, rangePreset, customFrom, customTo }) {
         </div>
       )}
 
-      {/* Filters */}
-      <div className="border border-black rounded-xl bg-white p-3 flex flex-wrap gap-2 items-center">
-        <Input
-          type="text"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="חיפוש לפי שם או טלפון"
-          className="w-56 h-8 text-xs"
-        />
-        <select value={filters.status} onChange={(e) => setFilter({ status: e.target.value })} className="text-xs border border-black rounded-md px-2 py-1.5 bg-white">
-          <option value="">כל הסטטוסים</option>
-          {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-        </select>
-        <select value={filters.assigned_to} onChange={(e) => setFilter({ assigned_to: e.target.value })} className="text-xs border border-black rounded-md px-2 py-1.5 bg-white">
-          <option value="">כל הסוכנים</option>
-          <option value="unassigned">לא משויך (בבריכה)</option>
-          {agents.map((a) => <option key={a.username} value={a.username}>{a.full_name || a.username}</option>)}
-        </select>
-        <span className="text-xs text-slate-400 mr-auto">{leads.length} תוצאות</span>
-      </div>
-
-      {/* Results table */}
-      {loading ? (
-        <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-slate-400" /></div>
-      ) : leads.length === 0 ? (
-        <div className="text-center py-20 text-slate-400">
-          <Target className="w-10 h-10 mx-auto mb-2" />
-          אין לידים תואמים לסינון
-        </div>
-      ) : (
-        <div className="border border-black rounded-xl bg-white overflow-hidden overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-xs text-slate-500">
-              <tr>
-                <th className="text-right px-3 py-2 font-medium">לקוח</th>
-                <th className="text-right px-3 py-2 font-medium">קמפיין</th>
-                <th className="text-right px-3 py-2 font-medium">משויך ל</th>
-                <th className="text-right px-3 py-2 font-medium">נוצר</th>
-                <th className="text-right px-3 py-2 font-medium">סטטוס</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {leads.map((l) => (
-                <tr key={l.id} className="hover:bg-slate-50">
-                  <td className="px-3 py-2">
-                    <Link to={`/crm/customers/${l.customer_id}`} className="font-medium hover:text-primary block truncate max-w-[220px]">
-                      {l.customer_name}
-                    </Link>
-                    {l.customer_phone && <div className="text-xs text-slate-400" dir="ltr">{l.customer_phone}</div>}
-                  </td>
-                  <td className="px-3 py-2 text-xs text-slate-500">{l.campaign_name || "—"}</td>
-                  <td className="px-3 py-2 text-xs text-slate-500">{l.assigned_to_name || l.assigned_to || "לא משויך"}</td>
-                  <td className="px-3 py-2 text-xs text-slate-400" dir="ltr">
-                    {(l.source_created_at || l.created_at || "").slice(0, 10)}
-                  </td>
-                  <td className="px-3 py-2">
-                    <select
-                      value={l.status}
-                      onChange={(e) => move(l.id, e.target.value)}
-                      className={`text-xs rounded-full px-2 py-1 border-none ${STATUS_COLORS[l.status] || "bg-slate-100 text-slate-500"}`}
-                    >
-                      {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                    </select>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      {/* The working list itself now lives at /crm/leads (search, sort,
+          paging, last-activity, stuck/overdue filters). Keeping a second,
+          weaker copy of it here is how the two drifted apart in the first
+          place — this tab keeps only what's genuinely campaign analytics. */}
+      <Link
+        to="/crm/leads"
+        className="border border-black rounded-xl bg-white p-4 flex items-center justify-between hover:bg-slate-50 transition-colors"
+      >
+        <span className="flex items-center gap-2 text-sm font-semibold">
+          <Target className="w-4 h-4 text-slate-500" /> רשימת הלידים המלאה — חיפוש, סינון ומיון
+        </span>
+        <span className="text-xs text-primary font-semibold">פתח בדף הלידים ←</span>
+      </Link>
     </div>
   );
 }

@@ -18,6 +18,7 @@ import RecipesAdmin from './pages/RecipesAdmin.jsx';
 import ProductionBoard from './pages/ProductionBoard.jsx';
 import CrmCustomers from './pages/CrmCustomers.jsx';
 import CrmCustomerDetail from './pages/CrmCustomerDetail.jsx';
+import CrmLeads from './pages/CrmLeads.jsx';
 import CrmCampaignsOverview from './pages/CrmCampaignsOverview.jsx';
 import CrmInbox from './pages/CrmInbox.jsx';
 import CrmCampaigns from './pages/CrmCampaigns.jsx';
@@ -106,10 +107,11 @@ const AuthenticatedApp = () => {
             follow-up cards link into it directly. */}
         <Route path="/crm/customers" element={<AdminOnly><CrmCustomers /></AdminOnly>} />
         <Route path="/crm/customers/:id" element={<CrmAccess><CrmCustomerDetail /></CrmAccess>} />
-        {/* Merged into the "לידים" tab of CrmCampaignsOverview — kept as a
-            redirect so old bookmarks/links (AdminDashboard's sidebar, etc.)
-            still land somewhere useful. */}
-        <Route path="/crm/leads" element={<Navigate to="/crm/campaigns-overview?tab=leads" replace />} />
+        {/* The real leads list — sales-facing, so CrmAccess (admin + agent),
+            NOT AdminOnly. It used to redirect into the AdminOnly campaigns
+            overview, which meant an agent clicking "לידים" landed on /costs.
+            Row scoping is enforced server-side in GET /api/crm/leads. */}
+        <Route path="/crm/leads" element={<CrmAccess><CrmLeads /></CrmAccess>} />
         <Route path="/crm/campaigns-overview" element={<AdminOnly><CrmCampaignsOverview /></AdminOnly>} />
         <Route path="/crm/inbox" element={<AdminOnly><CrmInbox /></AdminOnly>} />
         <Route path="/crm/campaigns" element={<AdminOnly><CrmCampaigns /></AdminOnly>} />

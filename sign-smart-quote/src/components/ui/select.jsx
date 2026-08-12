@@ -16,7 +16,12 @@ const SelectTrigger = React.forwardRef(({ className, children, ...props }, ref) 
   <SelectPrimitive.Trigger
     ref={ref}
     className={cn(
-      "flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border-2 border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background data-[placeholder]:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1",
+      // [&>span]:min-w-0 + truncate: a flex child defaults to min-width:auto,
+      // so a label longer than a fixed-width trigger refused to shrink and
+      // overflowed — in RTL that clipped the FIRST character ("כל הסטטוסים"
+      // rendered as "ל הסטטוסים"). Now it ellipsises at the end instead.
+      // shrink-0 keeps the chevron from being squeezed away by that text.
+      "flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border-2 border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background data-[placeholder]:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1 [&>span]:min-w-0 [&>span]:truncate [&>span]:text-start [&>svg]:shrink-0",
       className
     )}
     {...props}>

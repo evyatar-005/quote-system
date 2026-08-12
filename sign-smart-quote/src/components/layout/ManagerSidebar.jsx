@@ -63,7 +63,7 @@ export default function ManagerSidebar() {
       <NavGroup title="CRM">
         <NavItem to="/my-day" icon={Sparkles} label="היום שלי" active={pathname === "/my-day"} />
         <NavItem to="/crm/customers" icon={Users} label="לקוחות" active={pathname.startsWith("/crm/customers")} />
-        <NavItem to="/crm/campaigns-overview?tab=leads" icon={Target} label="לידים" active={pathname === "/crm/campaigns-overview" && search.includes("tab=leads")} />
+        <NavItem to="/crm/leads" icon={Target} label="לידים" active={pathname === "/crm/leads"} />
         <NavItem to="/crm/campaigns-overview" icon={PieChart} label="קמפיינים" active={pathname === "/crm/campaigns-overview" && !search.includes("tab=leads")} />
         <NavItem to="/crm/inbox" icon={MessagesSquare} label="תיבת שיחות" active={pathname === "/crm/inbox"} />
         <NavItem to="/crm/campaigns" icon={Send} label="דיוור" active={pathname.startsWith("/crm/campaigns") && !pathname.startsWith("/crm/campaigns-overview")} />

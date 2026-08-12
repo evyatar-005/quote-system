@@ -31,7 +31,13 @@ async function request(path, { method = 'GET', body } = {}) {
 
 export const leadQueue = {
   claim() { return request('/api/crm/leads/claim', { method: 'POST' }); },
+  // Tops the box up to max_claimed_leads in one call; resolves (never throws)
+  // on a short pool, returning { claimed, reason, slots }.
+  claimFill() { return request('/api/crm/leads/claim-fill', { method: 'POST' }); },
   context(leadId) { return request(`/api/crm/leads/${leadId}/context`); },
+  // Find-or-create the lead's WhatsApp thread, so a lead who never wrote still
+  // opens as a normal (empty) conversation with a composer.
+  openConversation(leadId) { return request(`/api/crm/leads/${leadId}/conversation`, { method: 'POST' }); },
   myClaimedLeads() { return request('/api/crm/my-claimed-leads'); },
   updateMondayField(leadId, columnId, value) {
     return request(`/api/crm/leads/${leadId}/monday-field`, { method: 'PUT', body: { columnId, value } });

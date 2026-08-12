@@ -84,6 +84,11 @@ module.exports = function registerInbox(app, db, deps) {
     // 200-recipient blast buries every real conversation. The campaign
     // detail screen passes ?include_broadcast=1 to see them anyway.
     if (!include_broadcast) where.push('c.is_broadcast_only = 0');
+    // A thread with no messages at all isn't inbox material — since opening a
+    // lead's workspace creates its WhatsApp conversation up front (see
+    // routes/leadQueue.js POST /leads/:id/conversation), the shared inbox would
+    // otherwise fill with blank rows for every lead anyone merely looked at.
+    where.push('EXISTS (SELECT 1 FROM crm_messages m WHERE m.conversation_id = c.id)');
     if (status) { where.push('c.status = @status'); params.status = status; }
     if (channel) { where.push('c.channel = @channel'); params.channel = channel; }
 

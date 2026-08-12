@@ -71,7 +71,23 @@ function findOrCreateCustomer(db, { name, phone, email }, ownerUsername) {
   const e164 = phone ? toE164(phone) : null;
   let customer = null;
   if (e164) customer = db.prepare(`SELECT * FROM customers WHERE phone_e164 = ? AND merged_into_id IS NULL`).get(e164);
-  if (!customer && email) customer = db.prepare(`SELECT * FROM customers WHERE email = ? AND merged_into_id IS NULL`).get(email);
+
+  // The email fallback ONLY applies when the item has no usable phone at all.
+  //
+  // It used to run whenever the phone didn't match an existing customer, and
+  // that silently glued unrelated people together: several boards carry the
+  // company's own address (sales@printella.co.il) in their email column on
+  // every row, so the first item created a customer holding that address and
+  // then every later item — each with its own real, distinct phone number —
+  // matched it by email and was attached to that one person. It collapsed
+  // ~1,700 leads (half the table) onto two customers, discarding phone numbers
+  // that were right there in the payload.
+  //
+  // A phone number identifies a person; a shared mailbox does not. So when we
+  // have a phone and it finds nobody, the correct answer is a NEW customer.
+  if (!customer && !e164 && email) {
+    customer = db.prepare(`SELECT * FROM customers WHERE email = ? AND merged_into_id IS NULL`).get(email);
+  }
   if (customer) return customer.id;
 
   const { lastInsertRowid } = db.prepare(

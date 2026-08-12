@@ -355,6 +355,15 @@ try {
              ON crm_leads(status, assigned_to, source_created_at)`);
 } catch (_) {}
 
+// Campaign-analytics indexes — the overview/profitability endpoints scan
+// crm_leads once per campaign (and per agent) over a date range, plus one
+// spend lookup per bucket.
+try {
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_crm_leads_closed_at   ON crm_leads(closed_at)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_crm_leads_agent_status ON crm_leads(assigned_to, status)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_crm_campaign_spend_day ON crm_campaign_spend(day)`);
+} catch (_) {}
+
 
 // (A) Release the 524 monday leads from the 'monday-sync' pseudo-owner into
 // the claimable pool. Naturally idempotent — after it runs nothing matches.

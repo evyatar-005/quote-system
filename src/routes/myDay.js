@@ -12,6 +12,10 @@
 
 const { releaseClaim, releaseReason } = require('../services/crm/leadClaims');
 
+// How early a scheduled follow-up starts warning the agent (the pop-up counts
+// down to the exact minute from here).
+const PRE_ALERT_MINUTES = 20;
+
 module.exports = function registerMyDay(app, db, deps) {
   const { requireAuth } = deps;
 
@@ -25,20 +29,36 @@ module.exports = function registerMyDay(app, db, deps) {
     // their own claims — everyone gets "my claimed leads" scoped to @me.
     const mineOnly = ' AND l.assigned_to = @me ';
 
-    // 1. My claimed leads (requirement: "הלידים שלי (X/4)"). Each carries the
-    // "טופל לאחרונה ע״י" line from the lead's own handling spans.
+    // 1. My leads — everything I OWN and haven't closed, not just what holds a
+    // slot right now. A follow-up frees the slot but keeps the lead with its
+    // agent (see leadClaims.js); when this query was claim-based, that lead
+    // vanished from the screen until FollowUpPopup happened to fire, so a missed
+    // pop-up meant a lost lead. `holds_slot` marks the ones actually occupying
+    // one of the max_claimed_leads slots, which is what "משוך ליד (X/4)" counts.
+    // Each row carries the "טופל לאחרונה ע״י" line from its handling spans.
     const myLeads = db.prepare(`
-      SELECT l.id, l.title, l.status, l.follow_up_date, cl.acquired_at AS claimed_at,
+      SELECT l.id, l.title, l.status, l.follow_up_date, l.quote_id, cl.acquired_at AS claimed_at,
+             (cl.lead_id IS NOT NULL) AS holds_slot,
              c.id AS customer_id, c.display_name, c.phone_e164, c.email,
              cam.name AS campaign_name,
+             conv.id AS conversation_id, conv.unread_count, conv.last_message_at,
+             conv.last_inbound_at, conv.last_outbound_at,
+             (SELECT m.body FROM crm_messages m WHERE m.conversation_id = conv.id ORDER BY m.id DESC LIMIT 1) AS last_message,
              (SELECT h.username FROM crm_lead_handling h WHERE h.lead_id = l.id ORDER BY h.id DESC LIMIT 1) AS last_handled_by,
              (SELECT u.full_name FROM users u WHERE u.username = (SELECT h.username FROM crm_lead_handling h WHERE h.lead_id = l.id ORDER BY h.id DESC LIMIT 1)) AS last_handled_by_name
-      FROM crm_lead_claims cl
-      JOIN crm_leads l ON l.id = cl.lead_id
+      FROM crm_leads l
+      LEFT JOIN crm_lead_claims cl ON cl.lead_id = l.id
+             AND cl.username = @me AND (cl.expires_at IS NULL OR cl.expires_at > CURRENT_TIMESTAMP)
       JOIN customers c ON c.id = l.customer_id
       LEFT JOIN crm_campaigns cam ON cam.id = l.campaign_id
-      WHERE cl.username = @me AND (cl.expires_at IS NULL OR cl.expires_at > CURRENT_TIMESTAMP)
-      ORDER BY cl.acquired_at ASC
+      LEFT JOIN crm_conversations conv ON conv.id = (
+        SELECT c2.id FROM crm_conversations c2
+        WHERE c2.lead_id = l.id OR c2.customer_id = l.customer_id
+        ORDER BY c2.last_message_at DESC, c2.id DESC LIMIT 1
+      )
+      WHERE l.assigned_to = @me
+        AND l.status NOT IN ('won','lost','disqualified')
+      ORDER BY cl.acquired_at ASC, l.updated_at DESC
     `).all({ me });
 
     // 2. Follow-ups due RIGHT NOW (date+time precision) — powers a pop-up
@@ -52,18 +72,31 @@ module.exports = function registerMyDay(app, db, deps) {
     // the manager turned off agents_see_follow_ups — not just visually, so
     // a disabled feature isn't sitting in the response payload either.
     const showFollowUps = isAdmin || settings.agents_see_follow_ups;
+    // The window opens PRE_ALERT_MINUTES early so the pop-up can count down to
+    // the exact minute the customer asked for, instead of appearing at it —
+    // the agent needs a moment to open the lead and read the thread first.
+    // due_in_seconds is negative once the time has passed (already overdue).
     const dueFollowUps = showFollowUps ? db.prepare(`
-      SELECT l.id, l.title, l.follow_up_date,
-             c.id AS customer_id, c.display_name, c.phone_e164
+      SELECT l.id, l.title, l.follow_up_date, l.status, l.notes, l.value_estimate, l.quote_id,
+             CAST((julianday(l.follow_up_date) - julianday('now','localtime')) * 86400 AS INTEGER) AS due_in_seconds,
+             c.id AS customer_id, c.display_name, c.phone_e164, c.email,
+             cam.name AS campaign_name,
+             (SELECT m.body FROM crm_messages m
+               WHERE m.conversation_id = (
+                 SELECT c2.id FROM crm_conversations c2
+                  WHERE c2.lead_id = l.id OR c2.customer_id = l.customer_id
+                  ORDER BY c2.last_message_at DESC, c2.id DESC LIMIT 1)
+               ORDER BY m.id DESC LIMIT 1) AS last_message
       FROM crm_leads l
       JOIN customers c ON c.id = l.customer_id
+      LEFT JOIN crm_campaigns cam ON cam.id = l.campaign_id
       WHERE l.follow_up_date IS NOT NULL
-        AND datetime(l.follow_up_date) <= datetime('now','localtime')
+        AND datetime(l.follow_up_date) <= datetime('now','localtime',@preAlert)
         AND l.status NOT IN ('won','lost','disqualified')
         ${mineOnly}
       ORDER BY l.follow_up_date ASC
       LIMIT 10
-    `).all({ me }) : [];
+    `).all({ me, preAlert: `+${PRE_ALERT_MINUTES} minutes` }) : [];
 
     // 3. Conversations with an unread inbound message ("ממתין לתשובה").
     // Deliberately simple and binary — unread_count > 0 — not a "haven't
@@ -95,16 +128,43 @@ module.exports = function registerMyDay(app, db, deps) {
       LIMIT 20
     `).all({ me });
 
+    // 5. Manager-only: who hasn't shown up today, and what is waiting on them.
+    // "Active today" = a session row created today; there is no last_login
+    // column and sessions are created on login, so this is the honest signal
+    // without a schema change. Only agents who actually have work today are
+    // listed — an absent agent with nothing pending isn't the manager's problem.
+    const inactiveAgents = isAdmin ? db.prepare(`
+      SELECT * FROM (
+      SELECT u.username, u.full_name,
+             (SELECT COUNT(*) FROM crm_leads l WHERE l.assigned_to = u.username
+                AND l.status NOT IN ('won','lost','disqualified')
+                AND l.follow_up_date IS NOT NULL
+                AND date(l.follow_up_date) <= date('now','localtime')) AS due_today,
+             (SELECT COUNT(*) FROM crm_lead_claims c WHERE c.username = u.username
+                AND (c.expires_at IS NULL OR c.expires_at > CURRENT_TIMESTAMP)) AS open_slots
+      FROM users u
+      WHERE u.role = 'agent'
+        AND NOT EXISTS (
+          SELECT 1 FROM sessions s WHERE s.user_id = u.id
+            AND date(s.created_at,'localtime') = date('now','localtime')
+        )
+      ) WHERE due_today > 0 OR open_slots > 0
+      ORDER BY due_today DESC, open_slots DESC
+    `).all() : [];
+
     const payload = {
       view: isAdmin ? 'manager' : 'agent',
-      settings: { max_claimed_leads: maxClaimed, reply_overdue_minutes: overdueMinutes, agents_see_follow_ups: !!settings.agents_see_follow_ups },
+      settings: { max_claimed_leads: maxClaimed, reply_overdue_minutes: overdueMinutes, agents_see_follow_ups: !!settings.agents_see_follow_ups, follow_up_pre_alert_minutes: PRE_ALERT_MINUTES },
       counts: {
         my_leads: myLeads.length,
+        slots_used: myLeads.filter((l) => l.holds_slot).length,
+        inactive_agents: inactiveAgents.length,
         due_follow_ups: dueFollowUps.length,
         waiting_unread: waitingUnread.length,
         pending_quotes: pendingQuotes.length,
       },
       my_leads: myLeads,
+      inactive_agents: inactiveAgents,
       due_follow_ups: dueFollowUps,
       waiting_unread: waitingUnread,
       pending_quotes: pendingQuotes,

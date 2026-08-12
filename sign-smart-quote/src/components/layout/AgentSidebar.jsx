@@ -1,6 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { LogOut, Settings2, FileStack, Scissors, PenTool, Sparkles } from "lucide-react";
+import { LogOut, Settings2, FileStack, Scissors, PenTool, Sparkles, Target } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 
 // The agent-facing counterpart to ManagerSidebar — same fixed-width, full
@@ -11,10 +11,12 @@ import { useAuth } from "@/lib/AuthContext";
 // permissions as before: the admin-only link stays gated behind
 // user.role === "admin".
 //
-// No CRM nav group here on purpose (CRM plan Phase 5 follow-up): לקוחות/
-// לידים/תיבת שיחות/דיוור are manager-facing oversight screens, not daily
-// agent tools — an agent's entire CRM workflow is "היום שלי" (claim, work
-// the WhatsApp thread, send materials) plus the lead workspace it links to.
+// "היום שלי" stays the agent's daily driver (claim, work the WhatsApp thread,
+// send materials). "לידים" was added alongside it because MyDay can only ever
+// show the leads the agent currently holds a slot on — it can't answer "where
+// is the lead I spoke to last week" or "what did I close this month", since a
+// closed lead releases its claim and disappears. The other manager-facing CRM
+// screens (לקוחות/תיבת שיחות/דיוור) are still deliberately absent.
 
 // Icon-only rail that expands on hover — same behaviour as ManagerSidebar, so
 // an admin switching between the two menus never sees them behave differently.
@@ -53,6 +55,7 @@ export default function AgentSidebar() {
       <div className="fixed inset-y-0 right-0 z-30 w-16 group-hover:w-64 transition-[width] duration-200 ease-out overflow-y-auto overflow-x-hidden border-l border-black bg-background group-hover:shadow-2xl px-2 py-4 space-y-6">
       <NavGroup title="מכירות">
         <NavItem to="/my-day" icon={Sparkles} label="היום שלי" active={pathname === "/my-day"} />
+        <NavItem to="/crm/leads" icon={Target} label="לידים" active={pathname === "/crm/leads"} />
         <NavItem to="/my-quotes" icon={FileStack} label="ההצעות שלי" active={pathname === "/my-quotes"} />
       </NavGroup>
       <NavGroup title="תפעול">

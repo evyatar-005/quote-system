@@ -91,4 +91,30 @@ export const crmLeads = {
   monthlyStats() {
     return request('/api/crm/leads/stats/monthly');
   },
+  activity(id) {
+    return request(`/api/crm/leads/${id}/activity`);
+  },
+  addNote(id, text) {
+    return request(`/api/crm/leads/${id}/notes`, { method: 'POST', body: { text } });
+  },
+  // Real monday status columns + values (with counts) for one campaign's board.
+  mondayFilters(campaignId) {
+    return request(`/api/crm/lead-filters${buildQuery({ campaign_id: campaignId })}`);
+  },
+};
+
+// One row per monday board (monday_board_map maps board → campaign 1:1), so
+// this doubles as the board filter on the leads page.
+export const crmCampaignList = {
+  list() {
+    return request('/api/crm/campaigns');
+  },
+};
+
+// Manager-only (requireAdmin) — feeds the assignee dropdown on the leads page
+// and the workload pills on the campaigns overview.
+export const crmAgents = {
+  workload() {
+    return request('/api/crm/agents/workload');
+  },
 };

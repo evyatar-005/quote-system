@@ -118,4 +118,4 @@ function enqueueText(db, { conversationId, toE164: toRaw, toPhone, body, sentBy,
   return r.messageId;
 }
 
-module.exports = { enqueue, enqueueText, suppressionReason };
+module.exports = { enqueue, enqueueText, suppressionReason, resolveConversation };

@@ -3,6 +3,7 @@
 // board pulls, with friendly titles. See CLAUDE.md CRM plan Phase 5 §7.
 
 const { getDocumentStatus } = require('./leadOutcome');
+const { DOCUMENT_TYPE } = require('../morning/mappings');
 
 const SYSTEM_PREFIXES = ['pulse_log', 'pulse_updated', 'subitems', 'formula', 'auto_number', 'creation_log', 'last_updated'];
 const ROLE_TITLES = { name: 'שם', phone: 'טלפון', email: 'אימייל', follow_up: 'תאריך פולואפ', quote_file: 'קובץ הצעה' };
@@ -91,6 +92,65 @@ function lastHandled(db, customerId, leadId) {
   return { username: row.username, full_name: user?.full_name || row.username, at: row.at };
 }
 
+// "Is this a returning customer?" — the question the workspace could never
+// answer. A customer row is created silently at import (findOrCreateCustomer
+// in mondaySync.js keys on phone, email as fallback), so the link to a past
+// purchase already EXISTS in the data; it was simply never surfaced where the
+// agent works, and an agent would open a brand-new lead with no hint that the
+// same person bought a sign from us last year.
+//
+// "Bought from us" = a Morning ORDER document (DOCUMENT_TYPE.order) exists on
+// one of the customer's quotes. That is the exact same signal that flips a
+// lead to 'won' below and that the campaign analytics call "closed", so the
+// three can never disagree.
+//
+// Everything here is DERIVED at read time — no `is_returning` column, nothing
+// to keep in sync, and no write path that a monday pull could fight with.
+function customerHistory(db, customerId, currentLeadId) {
+  if (!customerId) return null;
+
+  const purchases = db.prepare(`
+    SELECT COUNT(DISTINCT q.id) AS n,
+           MIN(md.created_at) AS first_at,
+           MAX(md.created_at) AS last_at,
+           SUM(q.price_with_vat) AS total
+    FROM signshop_quotes q
+    JOIN morning_documents_map md ON md.quote_id = q.id AND md.morning_document_type = ?
+    WHERE q.customer_id = ? AND (q.lead_id IS NULL OR q.lead_id != ?)
+  `).get(DOCUMENT_TYPE.order, customerId, currentLeadId) || {};
+
+  // Prior enquiries from the same person on any campaign — useful even before
+  // a single order exists, and the honest answer to "did we talk to them
+  // already?". Excludes the lead being viewed.
+  const otherLeads = db.prepare(`
+    SELECT l.id, l.status, l.created_at, l.source_created_at, l.closed_at,
+           cam.name AS campaign_name
+    FROM crm_leads l
+    LEFT JOIN crm_campaigns cam ON cam.id = l.campaign_id
+    WHERE l.customer_id = ? AND l.id != ?
+    ORDER BY COALESCE(l.source_created_at, l.created_at) DESC
+    LIMIT 20
+  `).all(customerId, currentLeadId);
+
+  const quoteCount = db.prepare(
+    `SELECT COUNT(*) AS n FROM signshop_quotes WHERE customer_id = ? AND (lead_id IS NULL OR lead_id != ?)`
+  ).get(customerId, currentLeadId).n;
+
+  return {
+    purchases: purchases.n || 0,
+    first_purchase_at: purchases.first_at || null,
+    last_purchase_at: purchases.last_at || null,
+    total_purchased: purchases.total || 0,
+    prior_quotes: quoteCount,
+    prior_leads: otherLeads.length,
+    other_leads: otherLeads,
+    // The one flag the UI keys its banner off. Deliberately NOT "has any prior
+    // lead" — every customer with two campaign enquiries would qualify and the
+    // banner would mean nothing.
+    is_returning_buyer: (purchases.n || 0) > 0,
+  };
+}
+
 function buildLeadContext(db, leadId) {
   let lead = db.prepare(`SELECT * FROM crm_leads WHERE id = ?`).get(leadId);
   if (!lead) return null;
@@ -118,6 +178,7 @@ function buildLeadContext(db, leadId) {
     last_handled: lastHandled(db, lead.customer_id, leadId),
     monday: buildMondayFields(db, leadId),
     document_status: documentStatus,
+    customer_history: customerHistory(db, lead.customer_id, leadId),
   };
 }
 

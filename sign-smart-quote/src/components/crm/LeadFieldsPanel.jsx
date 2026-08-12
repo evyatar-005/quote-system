@@ -34,17 +34,18 @@ export default function LeadFieldsPanel({ context, leadId, onUpdated }) {
   const system = fields.filter((f) => f.system);
 
   return (
-    <div className="border border-black rounded-xl bg-white flex flex-col min-h-[65vh]">
+    // h-full + a short floor: the workspace stacks this above the Drive panel in
+    // a fixed-height column, so the panel fills its share and scrolls its own
+    // fields instead of setting the column's height from its content.
+    <div className="border border-black rounded-xl bg-white flex flex-col h-full min-h-[200px]">
+      {/* Name and campaign are NOT repeated here — LeadWorkspacePanel's header
+          already names the lead right above this column, and the WhatsApp thread
+          names it a third time. What's left is the contact detail worth acting
+          on (click-to-call, email) plus who touched it last. */}
       <div className="px-4 py-3 border-b border-slate-200 space-y-1">
-        <div className="font-semibold text-sm truncate">{customer?.display_name}</div>
         {customer?.email && (
           <div className="text-xs text-slate-500 flex items-center gap-1 truncate">
             <Mail className="w-3 h-3 shrink-0" /> {customer.email}
-          </div>
-        )}
-        {campaign?.name && (
-          <div className="text-xs text-slate-500 flex items-center gap-1">
-            <Tag className="w-3 h-3" /> {campaign.name}
           </div>
         )}
         <LastHandledLine lastHandled={last_handled} />

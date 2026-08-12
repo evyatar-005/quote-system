@@ -35,7 +35,10 @@ const NEXT_CLAIMABLE_SQL = `
          AND (cl.expires_at IS NULL OR cl.expires_at > CURRENT_TIMESTAMP)
   WHERE l.assigned_to IS NULL
     AND cl.lead_id IS NULL
-    AND l.status = 'new'
+    -- 'contacted' as well as 'new': a lead someone already spoke to and then
+    -- released is still live work, and after the release above it has no owner
+    -- left to reach it. Closed outcomes (won/lost/disqualified/quoted) stay out.
+    AND l.status IN ('new','contacted')
     AND ( NOT EXISTS (SELECT 1 FROM crm_agent_campaigns WHERE username = @me)
           OR l.campaign_id IN (SELECT campaign_id FROM crm_agent_campaigns WHERE username = @me) )
   ORDER BY COALESCE(l.source_created_at, l.created_at) ASC, l.id ASC
@@ -107,6 +110,26 @@ function claimNext(db, username) {
   return { leadId, slots: { used: slotCount(db, username), max: maxClaimed } };
 }
 
+// "מלא תיבה" — top the agent up to max_claimed_leads in one click instead of
+// N presses of "משוך ליד". Deliberately a LOOP over claimNext rather than a
+// batch SQL: each pull must stay its own transaction so a mid-way empty pool
+// (or another agent racing us for the last lead) keeps the leads already
+// claimed instead of rolling the whole fill back.
+function claimFill(db, username) {
+  const maxClaimed = crmSettingsRow(db).max_claimed_leads || 4;
+  const leadIds = [];
+  let reason = null;
+  while (slotCount(db, username) < maxClaimed) {
+    try {
+      leadIds.push(claimNext(db, username).leadId);
+    } catch (err) {
+      reason = err.code || 'error';
+      break;
+    }
+  }
+  return { leadIds, claimed: leadIds.length, reason, slots: { used: slotCount(db, username), max: maxClaimed } };
+}
+
 // The ONE extension point for "when does a lead free its slot" (user
 // requirement: "we'll build more later" — adding a rule is one line here).
 const RELEASE_ON_STATUS = { quoted: 'quoted', won: 'won', lost: 'lost', disqualified: 'disqualified' };
@@ -125,6 +148,17 @@ function releaseClaim(db, leadId, reason) {
   if (!claim) return null;
   const tx = db.transaction(() => {
     db.prepare(`DELETE FROM crm_lead_claims WHERE lead_id = ?`).run(leadId);
+    // An EXPLICIT "שחרר ליד" gives the lead up entirely, so ownership has to go
+    // with the slot — otherwise the lead is an orphan: no claim (invisible in
+    // "הלידים שלי", which is claim-based) and assigned_to set (invisible to the
+    // pool query, which requires assigned_to IS NULL), so nobody could ever
+    // reach it again short of an admin's "החזר לבריכה". Every OTHER reason
+    // (follow_up_set, quoted, won, ...) frees only the slot and keeps the lead
+    // with its agent on purpose — that's the ownership/slot split this file
+    // opens with.
+    if (reason === 'released') {
+      db.prepare(`UPDATE crm_leads SET assigned_to = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(leadId);
+    }
     db.prepare(
       `UPDATE crm_lead_handling SET ended_at = CURRENT_TIMESTAMP, end_reason = ?,
          duration_sec = CAST((julianday(CURRENT_TIMESTAMP) - julianday(started_at)) * 86400 AS INTEGER)
@@ -136,4 +170,4 @@ function releaseClaim(db, leadId, reason) {
   return claim.username;
 }
 
-module.exports = { claimNext, releaseClaim, releaseReason, slotCount, crmSettingsRow };
+module.exports = { claimNext, claimFill, releaseClaim, releaseReason, slotCount, crmSettingsRow };

@@ -44,7 +44,11 @@ export default function DriveMaterialsPanel({ leadId }) {
   };
 
   return (
-    <div className="border border-black rounded-xl bg-white flex flex-col min-h-[65vh]">
+    // Short floor, not 65vh: below xl this panel wraps onto its own row under
+    // the workspace grid, where a screen-tall box of (usually) a handful of
+    // files was mostly empty space. h-full still fills the cell when it sits as
+    // the third column beside the conversation.
+    <div className="border border-black rounded-xl bg-white flex flex-col h-full min-h-[200px]">
       <div className="px-3 py-2 border-b border-slate-200 flex items-center gap-2">
         {stack.length > 1 && (
           <button onClick={goBack} className="text-slate-400 hover:text-primary">

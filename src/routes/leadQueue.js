@@ -5,9 +5,9 @@
 //
 // deps: { requireAuth, requireAdmin }
 
-const { claimNext, releaseClaim, slotCount, crmSettingsRow } = require('../services/crm/leadClaims');
+const { claimNext, claimFill, releaseClaim, slotCount, crmSettingsRow } = require('../services/crm/leadClaims');
 const { buildLeadContext } = require('../services/crm/leadContext');
-const { enqueue } = require('../services/channels/whatsapp/outbox');
+const { enqueue, resolveConversation } = require('../services/channels/whatsapp/outbox');
 const { updateItemColumn } = require('../services/crm/mondaySync');
 
 module.exports = function registerLeadQueue(app, db, deps) {
@@ -22,6 +22,40 @@ module.exports = function registerLeadQueue(app, db, deps) {
     }
   });
 
+  // Tops the agent's box up to max_claimed_leads in one call. Never errors on a
+  // short pool — it returns however many it got plus the reason it stopped, so
+  // the UI can say "נמשכו 2, אין עוד לידים בתור" rather than showing a failure.
+  app.post('/api/crm/leads/claim-fill', requireAuth, (req, res) => {
+    res.json(claimFill(db, req.user.username));
+  });
+
+  // Opens (find-or-create) the WhatsApp thread for a lead's customer. Until
+  // this existed a conversation row was only ever born from an INBOUND message
+  // or an outbound send, so a lead who has never written had no thread at all
+  // and the workspace showed a dead empty box — precisely the "טרם יצרת קשר"
+  // leads, which are most of the queue. Creating the row up front costs nothing
+  // (it holds no messages) and lets the agent see and use the normal WhatsApp
+  // composer to send the FIRST message.
+  app.post('/api/crm/leads/:id/conversation', requireAuth, (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    const lead = db.prepare(`SELECT * FROM crm_leads WHERE id = ?`).get(id);
+    if (!lead) return res.status(404).json({ error: 'ליד לא נמצא' });
+    const customer = db.prepare(`SELECT * FROM customers WHERE id = ?`).get(lead.customer_id);
+    if (!customer?.phone_e164) return res.status(400).json({ error: 'ללקוח אין מספר טלפון' });
+
+    const conversationId = resolveConversation(db, {
+      customerId: customer.id, phoneE164: customer.phone_e164,
+    });
+    // Bind it to the lead + agent the same way claimNext does, so the shared
+    // inbox shows lead context and the thread lands with its owner.
+    db.prepare(
+      `UPDATE crm_conversations SET lead_id = COALESCE(lead_id, @lead_id),
+              assigned_to = COALESCE(assigned_to, @me)
+        WHERE id = @id`
+    ).run({ id: conversationId, lead_id: id, me: req.user.username });
+    res.json({ conversation_id: conversationId });
+  });
+
   app.get('/api/crm/leads/:id/context', requireAuth, (req, res) => {
     const context = buildLeadContext(db, parseInt(req.params.id, 10));
     if (!context) return res.status(404).json({ error: 'ליד לא נמצא' });
@@ -32,15 +66,19 @@ module.exports = function registerLeadQueue(app, db, deps) {
   // trimmed version of my-day's "my_leads" query, no other joins. A
   // separate endpoint (not router state from MyDay.jsx) so navigation
   // between leads still works after a direct page refresh on a lead's URL.
+  // Scoped by OWNERSHIP, matching my-day exactly: ‹ prev/next › has to walk
+  // the same set the queue shows, including leads parked on a follow-up that
+  // no longer hold a slot.
   app.get('/api/crm/my-claimed-leads', requireAuth, (req, res) => {
     res.json(db.prepare(`
       SELECT l.id, c.display_name, c.phone_e164, cl.acquired_at AS claimed_at
-      FROM crm_lead_claims cl
-      JOIN crm_leads l ON l.id = cl.lead_id
+      FROM crm_leads l
+      LEFT JOIN crm_lead_claims cl ON cl.lead_id = l.id
+             AND cl.username = @me AND (cl.expires_at IS NULL OR cl.expires_at > CURRENT_TIMESTAMP)
       JOIN customers c ON c.id = l.customer_id
-      WHERE cl.username = ? AND (cl.expires_at IS NULL OR cl.expires_at > CURRENT_TIMESTAMP)
-      ORDER BY cl.acquired_at ASC
-    `).all(req.user.username));
+      WHERE l.assigned_to = @me AND l.status NOT IN ('won','lost','disqualified')
+      ORDER BY cl.acquired_at ASC, l.updated_at DESC
+    `).all({ me: req.user.username }));
   });
 
   // Edit a single monday.com field straight from the workspace (currently
