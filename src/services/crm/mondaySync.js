@@ -106,14 +106,23 @@ async function pullBoard(db, boardMap, ownerUsername) {
   const touchItemMap = db.prepare(`UPDATE monday_item_map SET last_pulled_at = CURRENT_TIMESTAMP, raw_json = ? WHERE id = ?`);
   const findLeadByExt = db.prepare(`SELECT * FROM crm_leads WHERE source = 'monday' AND external_ref = ?`);
   const insertLead = db.prepare(
-    `INSERT INTO crm_leads (customer_id, campaign_id, source, external_ref, status, title, assigned_to, follow_up_date)
-     VALUES (@customer_id, @campaign_id, 'monday', @external_ref, 'new', @title, @assigned_to, @follow_up_date)`
+    `INSERT INTO crm_leads (customer_id, campaign_id, source, external_ref, status, title, assigned_to, follow_up_date, follow_up_source)
+     VALUES (@customer_id, @campaign_id, 'monday', @external_ref, 'new', @title, @assigned_to, @follow_up_date, @follow_up_source)`
   );
   // Follow-up dates keep moving on the board, so unlike the rest of the lead
   // (frozen at first pull) this one is refreshed on every poll for leads that
   // are still open — it drives the "פולואאפים להיום" column on My Day.
+  //
+  // BUT never over an agent's own schedule (follow_up_source = 'agent', set
+  // by PUT /api/crm/leads/:id/follow-up): monday's value is usually
+  // date-only (see followUp below) and often simply empty on boards where
+  // follow-up isn't actually used there, and this poll runs every 60s — an
+  // agent who scheduled a callback for 14:30 would otherwise see it silently
+  // rounded to midnight, or erased outright, within a minute.
   const updateFollowUp = db.prepare(
-    `UPDATE crm_leads SET follow_up_date = ? WHERE id = ? AND status NOT IN ('won','lost','disqualified')`
+    `UPDATE crm_leads SET follow_up_date = ?, follow_up_source = 'monday'
+      WHERE id = ? AND status NOT IN ('won','lost','disqualified')
+        AND follow_up_source IS NOT 'agent'`
   );
 
   let created = 0;
@@ -122,10 +131,15 @@ async function pullBoard(db, boardMap, ownerUsername) {
       const name = columnMap.name ? columnText(item.column_values, columnMap.name) : item.name;
       const phone = columnMap.phone ? columnText(item.column_values, columnMap.phone) : null;
       const email = columnMap.email ? columnText(item.column_values, columnMap.email) : null;
-      // monday date columns come back as 'YYYY-MM-DD' (sometimes with a time) —
-      // keep just the date part so it compares cleanly against date('now').
-      const followUp = columnMap.follow_up
-        ? (columnText(item.column_values, columnMap.follow_up) || '').slice(0, 10) || null
+      // monday date columns come back as 'YYYY-MM-DD', or 'YYYY-MM-DD HH:MM'
+      // when the column has time-tracking turned on — keep the time when
+      // it's actually there instead of always truncating to the date, so a
+      // callback time set on the board survives the sync. Anything that
+      // doesn't match either shape (unexpected format) falls back to the
+      // first 10 characters rather than failing closed.
+      const rawFollowUp = columnMap.follow_up ? columnText(item.column_values, columnMap.follow_up) : null;
+      const followUp = rawFollowUp
+        ? ((/^\d{4}-\d{2}-\d{2}(?: \d{2}:\d{2})?/.exec(rawFollowUp) || [])[0] || rawFollowUp.slice(0, 10)) || null
         : null;
 
       const existingMap = findItemMap.get(boardMap.board_id, item.id);
@@ -148,6 +162,7 @@ async function pullBoard(db, boardMap, ownerUsername) {
           title: item.name,
           assigned_to: ownerUsername,
           follow_up_date: followUp,
+          follow_up_source: followUp ? 'monday' : null,
         });
         lead = { id: lastInsertRowid };
         created += 1;

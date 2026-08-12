@@ -302,12 +302,24 @@ for (const col of [
   // crm_leads.created_at is worthless for queue ordering — the existing 525
   // rows all landed inside 4 minutes of one import.
   'ALTER TABLE crm_leads ADD COLUMN source_created_at TEXT',
+  // 'agent' | 'monday' | NULL — see schema.sql. Backfilled below: every
+  // existing follow_up_date got there through mondaySync (the only writer
+  // until this column existed), so it's safe to default those to 'monday'.
+  'ALTER TABLE crm_leads ADD COLUMN follow_up_source TEXT',
   'ALTER TABLE monday_item_map ADD COLUMN monday_created_at TEXT',
   // Cached [{id,title,type}] from the board, so the lead workspace can put a
   // friendly Hebrew title on every raw_json column_value. raw_json stores
   // only column IDs — titles exist nowhere in our DB today.
   'ALTER TABLE monday_board_map ADD COLUMN columns_json TEXT',
 ]) { try { db.exec(col); } catch (_) {} }
+
+// One-time backfill of follow_up_source for leads that already had a
+// follow_up_date before this column existed — see its ALTER above.
+try {
+  db.exec(`UPDATE crm_leads SET follow_up_source = 'monday' WHERE follow_up_source IS NULL AND follow_up_date IS NOT NULL`);
+} catch (err) {
+  console.error('[db] crm_leads.follow_up_source backfill failed:', err.message);
+}
 
 // Covering index for the pull-queue's hot path (see leadClaims.js nextClaimable).
 try {

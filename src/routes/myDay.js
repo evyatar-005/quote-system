@@ -100,7 +100,10 @@ module.exports = function registerMyDay(app, db, deps) {
     const lead = db.prepare(`SELECT * FROM crm_leads WHERE id = ?`).get(id);
     if (!lead) return res.status(404).json({ error: 'ליד לא נמצא' });
     const date = req.body?.date || null;
-    db.prepare(`UPDATE crm_leads SET follow_up_date = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(date, id);
+    // follow_up_source = 'agent' (even when clearing, date=null) is what stops
+    // mondaySync's poll from silently overwriting/erasing this the next time
+    // it runs — see updateFollowUp in mondaySync.js.
+    db.prepare(`UPDATE crm_leads SET follow_up_date = ?, follow_up_source = 'agent', updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(date, id);
     res.json(db.prepare(`SELECT * FROM crm_leads WHERE id = ?`).get(id));
   });
 };

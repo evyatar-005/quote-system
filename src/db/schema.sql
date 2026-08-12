@@ -575,7 +575,12 @@ CREATE TABLE IF NOT EXISTS crm_leads (
   first_touch_by TEXT,
   closed_at      TEXT,
   created_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  updated_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  -- Who last set follow_up_date — 'agent' (our UI, PUT .../follow-up) or
+  -- 'monday' (mondaySync's poll). The poller must never overwrite an agent's
+  -- own schedule with monday's (usually date-only, sometimes empty) value —
+  -- see mondaySync.js's updateFollowUp.
+  follow_up_source TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_crm_leads_customer ON crm_leads(customer_id);
 CREATE INDEX IF NOT EXISTS idx_crm_leads_status   ON crm_leads(status);
