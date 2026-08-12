@@ -61,7 +61,11 @@ export default function TrendChart({ series, title = "מגמה לאורך זמן
                 contentStyle={TOOLTIP_STYLE}
                 formatter={(v, n) => [money ? fmtMoney(v) : fmtInt(v), n]}
               />
-              <Legend wrapperStyle={{ fontSize: 11, direction: "rtl" }} />
+              {/* No direction:"rtl" here — the chart's outer div is dir="ltr"
+                  (needed so axes/tooltips lay out correctly), and RTL-ing just
+                  the legend flips its item order against the bars' actual
+                  left-to-right draw order, so the swatches stop matching. */}
+              <Legend wrapperStyle={{ fontSize: 11 }} />
 
               {metric === "volume" && <Bar dataKey="leads" name="לידים" fill="#C9A84C" radius={[3, 3, 0, 0]} />}
               {metric === "volume" && <Bar dataKey="quoted" name="הצעות" fill="#3FA9A0" radius={[3, 3, 0, 0]} />}

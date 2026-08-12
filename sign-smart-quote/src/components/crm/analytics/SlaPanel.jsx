@@ -46,7 +46,9 @@ export default function SlaPanel({ sla, overdueMinutes }) {
                   contentStyle={TOOLTIP_STYLE}
                   formatter={(v, n) => [n === "% סגירה" ? fmtPct(v) : fmtInt(v), n]}
                 />
-                <Legend wrapperStyle={{ fontSize: 11, direction: "rtl" }} />
+                {/* No direction:"rtl" — see TrendChart.jsx for why that flips
+                    the legend order against the LTR chart body. */}
+                <Legend wrapperStyle={{ fontSize: 11 }} />
                 <Bar yAxisId="left" dataKey="n" name="לידים" fill="#4A7FB5" radius={[3, 3, 0, 0]} />
                 {/* connectNulls: an empty bucket has no win rate at all, so
                     the line bridges it rather than diving to 0%. */}
