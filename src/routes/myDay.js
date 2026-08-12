@@ -119,16 +119,23 @@ module.exports = function registerMyDay(app, db, deps) {
       LIMIT 100
     `).all({ me });
 
-    // 4. Quotes this agent sent that are still awaiting a manager decision.
+    // 4. Quotes THIS person sent that are still awaiting a manager decision.
+    // Always scoped to @me, admin included — "היום שלי" is a personal work
+    // screen (myLeads and dueFollowUps above are already unconditionally
+    // @me-only), not a company-wide review queue. An admin who also submits
+    // quotes still only wants to see their OWN pending ones here; the fleet-wide
+    // view lives at /quotes.
     const pendingQuotes = db.prepare(`
       SELECT id, quote_number, client_name, price_with_vat, status, created_at
       FROM signshop_quotes
-      WHERE status = 'sent' ${isAdmin ? '' : ' AND created_by = @me '}
+      WHERE status = 'sent' AND created_by = @me
       ORDER BY created_at DESC
       LIMIT 20
     `).all({ me });
 
-    // 4b. The agent's own to-do on the quotes side: approved by a manager but
+    // 4b. Always scoped to @me too, admin included — same reasoning as
+    // pendingQuotes above.
+    // The agent's own to-do on the quotes side: approved by a manager but
     // NOT yet issued to the customer. "Issued" isn't a column — it's the
     // existence of a Morning document for the quote (morning_documents_map),
     // the same source leadOutcome.js derives document state from. Waiting for a
@@ -178,7 +185,7 @@ module.exports = function registerMyDay(app, db, deps) {
           WHERE ro2.root_number = ro.root_number
             AND EXISTS (SELECT 1 FROM morning_documents_map m WHERE m.quote_id = c.id)
         )
-        ${isAdmin ? '' : ' AND q.created_by = @me '}
+        AND q.created_by = @me
       ORDER BY q.created_at DESC
       LIMIT 20
     `).all({ me });
