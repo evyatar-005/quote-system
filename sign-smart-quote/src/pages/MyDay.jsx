@@ -4,7 +4,6 @@ import { useAuth } from "@/lib/AuthContext";
 import { myDay } from "@/api/myDayClient";
 import ManagerSidebar from "@/components/layout/ManagerSidebar";
 import AgentSidebar from "@/components/layout/AgentSidebar";
-import NotificationBell from "@/components/NotificationBell";
 import PullLeadButton from "@/components/crm/PullLeadButton";
 import FollowUpPopup from "@/components/crm/FollowUpPopup";
 import LeadWorkspacePanel from "@/components/crm/LeadWorkspacePanel";
@@ -74,7 +73,10 @@ export default function MyDay() {
               <h1 className="text-sm font-bold leading-tight">היום שלי</h1>
               {firstName && <span className="text-xs text-slate-500">{firstName}</span>}
             </div>
-            <NotificationBell />
+            {/* No bell on this screen: the lead rail IS the attention list, and
+                its contents (quotes ready to issue, payment/rejection notices)
+                used to sit behind the bell. The bell stays on the other screens
+                (CostsDashboard, AdminDashboard), which have no rail. */}
           </div>
         </div>
       </div>

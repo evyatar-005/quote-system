@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { ChevronDown, MoreHorizontal, XCircle, LogOut, Timer, FileCheck, Send, Loader2 } from "lucide-react";
 import { issueQuoteToMorning } from "@/api/morningClient";
+import RailNotifications from "@/components/crm/RailNotifications";
 import { crmLeads } from "@/api/crmClient";
 import { leadQueue } from "@/api/leadQueueClient";
 import { Button } from "@/components/ui/button";
@@ -88,6 +89,9 @@ export default function LeadRail({ leads, readyToIssue = [], openLeadId, onOpen,
             ))}
           </div>
         )}
+
+        {/* Last section: what used to live behind the bell in the header. */}
+        <RailNotifications />
       </div>
     </div>
   );
