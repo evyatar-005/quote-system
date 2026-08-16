@@ -66,14 +66,25 @@ function parseRecipients(raw) {
 }
 
 // The reporting window ending "today" — daily = just today, weekly = the
-// last 7 days (rolling, not calendar-week), monthly = the last 30 days
-// (rolling, not calendar-month) — simpler and unambiguous vs. calendar
-// months of varying length.
+// last full calendar week (Sunday..Saturday, matching the Israeli week —
+// NOT a rolling 7 days, since that drifts against how Morning itself
+// reports "this week" and only lines up when the schedule happens to fire
+// on a Sunday), monthly = the last 30 days (rolling, not calendar-month) —
+// simpler and unambiguous vs. calendar months of varying length.
 function computeDateRange(frequency, today) {
+  if (frequency === 'weekly') {
+    // Most recently completed Sunday..Saturday as of `today` (inclusive of
+    // today if today itself is Saturday). getDay(): 0=Sun..6=Sat.
+    const daysSinceSaturday = (today.getDay() + 1) % 7;
+    const saturday = new Date(today);
+    saturday.setDate(today.getDate() - daysSinceSaturday);
+    const sunday = new Date(saturday);
+    sunday.setDate(saturday.getDate() - 6);
+    return { fromDate: dateToStr(sunday), toDate: dateToStr(saturday) };
+  }
   const toDate = dateToStr(today);
   const from = new Date(today);
-  if (frequency === 'weekly') from.setDate(from.getDate() - 6);
-  else if (frequency === 'monthly') from.setDate(from.getDate() - 29);
+  if (frequency === 'monthly') from.setDate(from.getDate() - 29);
   return { fromDate: dateToStr(from), toDate };
 }
 

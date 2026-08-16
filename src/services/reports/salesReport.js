@@ -40,6 +40,9 @@ function safeParseJson(json, fallback) {
   try { return json ? JSON.parse(json) : fallback; } catch { return fallback; }
 }
 
+// 'YYYY-MM-DD HH:MM:SS' -> 'YYYY-MM-DD', for comparing against fromDate/toDate.
+const dateStr = (ts) => (ts || '').slice(0, 10);
+
 // Every priced line in a quote's saved calculation_data — parent items plus
 // their extra-size rows — mirrors linesOf() in the frontend's
 // quoteEconomics.js (kept independent since that file is browser-only:
@@ -77,12 +80,22 @@ const NOT_SUPERSEDED = (alias) => `
     WHERE r.parent_quote_number IS NOT NULL
       AND r.parent_quote_number = ${alias}.quote_number
   )`;
-function fetchClosedQuoteIds(db) {
-  return new Set(
-    db.prepare(`SELECT DISTINCT quote_id FROM morning_documents_map WHERE morning_document_type = ?`)
-      .all(MORNING_ORDER_TYPE)
-      .map((r) => r.quote_id)
-  );
+// Earliest order-document date per quote — a quote can be drafted days
+// before it actually turns into a Morning order, so the report period must
+// go by WHEN IT WAS ORDERED (this timestamp), never by the quote's original
+// created_at. Filtering by created_at instead misattributes an order to the
+// day its quote was first drafted, so "today's" report silently misses
+// orders that were only confirmed today from an older quote — the exact gap
+// that showed up between this report and Morning's own daily document list.
+function fetchOrderedDates(db) {
+  const map = new Map();
+  for (const row of db.prepare(
+    `SELECT quote_id, MIN(created_at) AS ordered_at FROM morning_documents_map
+     WHERE morning_document_type = ? GROUP BY quote_id`
+  ).all(MORNING_ORDER_TYPE)) {
+    map.set(row.quote_id, row.ordered_at);
+  }
+  return map;
 }
 
 // One row per agent with at least one actual ORDER (a quote that got a real
@@ -100,9 +113,12 @@ function fetchSalesByAgent(db, fromDate, toDate) {
       SUM(q.price_with_vat) AS totalWithVat
     FROM signshop_quotes q
     LEFT JOIN users u ON u.username = q.created_by
-    INNER JOIN (SELECT DISTINCT quote_id FROM morning_documents_map WHERE morning_document_type = ${MORNING_ORDER_TYPE}) closed
-      ON closed.quote_id = q.id
-    WHERE date(q.created_at) BETWEEN date(?) AND date(?)
+    INNER JOIN (
+      SELECT quote_id, MIN(created_at) AS ordered_at FROM morning_documents_map
+      WHERE morning_document_type = ${MORNING_ORDER_TYPE}
+      GROUP BY quote_id
+    ) closed ON closed.quote_id = q.id
+    WHERE date(closed.ordered_at) BETWEEN date(?) AND date(?)
       AND ${NOT_SUPERSEDED('q')}
     GROUP BY q.created_by
     ORDER BY totalBeforeVat DESC
@@ -116,12 +132,14 @@ function fetchSalesByAgent(db, fromDate, toDate) {
 // rows still counts once); revenue/units stay LINE-level, deliberately
 // excluding VAT/shipping/installation which don't live on a line.
 function fetchSalesByProduct(db, fromDate, toDate) {
-  const closedQuoteIds = fetchClosedQuoteIds(db);
+  const orderedDates = fetchOrderedDates(db);
   const quotes = db.prepare(`
     SELECT id, calculation_data FROM signshop_quotes q
-    WHERE date(q.created_at) BETWEEN date(?) AND date(?)
-      AND ${NOT_SUPERSEDED('q')}
-  `).all(fromDate, toDate).filter((q) => closedQuoteIds.has(q.id));
+    WHERE ${NOT_SUPERSEDED('q')}
+  `).all().filter((q) => {
+    const orderedAt = orderedDates.get(q.id);
+    return orderedAt && dateStr(orderedAt) >= fromDate && dateStr(orderedAt) <= toDate;
+  });
 
   const map = {};
   const get = (type) => map[type] || (map[type] = { type, name: productLabel(type), revenue: 0, units: 0, ordersCount: 0 });
