@@ -5,6 +5,7 @@
 // share one rate-limited pipe.
 
 const { toE164, toChatId } = require('../../crm/phone');
+const { isSessionOpen, SESSION_CLOSED_HE } = require('./sessionWindow');
 
 // Suppression is consulted ONLY for marketing sends (campaignId present or
 // marketing:true). A customer who opted out of the דיוור list must still be
@@ -37,10 +38,15 @@ function resolveConversation(db, { customerId, phoneE164, provider, campaignId, 
   const name = customerId
     ? db.prepare(`SELECT display_name FROM customers WHERE id = ?`).get(customerId)?.display_name
     : null;
+  // Every caller today passes provider=null, so before this fix this column
+  // lied on every outbound-first conversation as soon as a second provider
+  // existed. require() locally (not at module scope) since channels/index.js
+  // and this file don't otherwise need to know about each other's load order.
+  const { getActiveWhatsApp } = require('../../channels');
   const { lastInsertRowid } = db.prepare(
     `INSERT INTO crm_conversations (customer_id, channel, provider, channel_thread_id, subject, is_broadcast_only, source_campaign_id)
      VALUES (?, 'whatsapp', ?, ?, ?, ?, ?)`
-  ).run(customerId || null, provider || 'greenapi', chatId, name || null, broadcastOnly ? 1 : 0, campaignId || null);
+  ).run(customerId || null, provider || getActiveWhatsApp(db).name, chatId, name || null, broadcastOnly ? 1 : 0, campaignId || null);
   return lastInsertRowid;
 }
 
@@ -60,13 +66,16 @@ function enqueue(db, opts) {
   const {
     conversationId: convIn, customerId, toE164: toRaw, toPhone,
     kind = 'text', body, mediaUrl, mediaFilename, driveFileId,
+    templateId, templateParameters,
     sentBy, priority = 10, campaignId = null, recipientId = null,
     marketing = false, provider = null,
   } = opts;
 
   const to = toRaw || toE164(toPhone);
   if (!to) return { skipped: true, reason: 'no_phone' };
-  if (kind !== 'media' && kind !== 'drive' && !(body || '').toString().trim()) {
+  // A template's text is fixed by Meta's approval, not typed by us here — body
+  // is an optional display preview only, never required.
+  if (kind !== 'media' && kind !== 'drive' && kind !== 'template' && !(body || '').toString().trim()) {
     throw Object.assign(new Error('body required'), { status: 400 });
   }
   if (kind === 'media' && !mediaUrl) {
@@ -75,10 +84,27 @@ function enqueue(db, opts) {
   if (kind === 'drive' && !driveFileId) {
     throw Object.assign(new Error('driveFileId required for kind=drive'), { status: 400 });
   }
+  if (kind === 'template' && !templateId) {
+    throw Object.assign(new Error('templateId required for kind=template'), { status: 400 });
+  }
 
   if (marketing || campaignId) {
     const reason = suppressionReason(db, { phoneE164: to, customerId });
     if (reason) return { skipped: true, reason };
+  }
+
+  // The 24h customer-service window (Meta rule, not every provider's rule —
+  // see sessionWindow.js). A template is exempt: sending one is how the
+  // window gets opened in the first place. Checked here for fast feedback to
+  // whoever is composing; the adapter re-checks at send time regardless,
+  // since a window open now can close during the minutes a busy queue takes
+  // to drain it.
+  if (kind !== 'template') {
+    const { getActiveWhatsApp } = require('../../channels');
+    const active = getActiveWhatsApp(db);
+    if (active.capabilities(db).requiresSessionWindow && !isSessionOpen(db, toChatId(to)).open) {
+      return { skipped: true, reason: 'session_closed' };
+    }
   }
 
   const tx = db.transaction(() => {
@@ -90,12 +116,14 @@ function enqueue(db, opts) {
       `INSERT INTO crm_messages (conversation_id, direction, body, media_url, media_filename, message_type, status, sent_by, campaign_id)
        VALUES (?, 'out', ?, ?, ?, ?, 'queued', ?, ?)`
     ).run(conversationId, body || null, kind === 'drive' ? null : (mediaUrl || null), mediaFilename || null,
-      (kind === 'media' || kind === 'drive') ? 'document' : 'text', sentBy || null, campaignId);
+      kind === 'template' ? 'template' : (kind === 'media' || kind === 'drive') ? 'document' : 'text', sentBy || null, campaignId);
 
     const payload = kind === 'media'
       ? { kind: 'media', url: mediaUrl, filename: mediaFilename, caption: body }
       : kind === 'drive'
       ? { kind: 'drive', driveFileId, filename: mediaFilename, caption: body }
+      : kind === 'template'
+      ? { kind: 'template', templateId, parameters: templateParameters || [], mediaUrl: mediaUrl || null }
       : { kind: 'text', body };
 
     const { lastInsertRowid: queueId } = db.prepare(
@@ -114,7 +142,10 @@ function enqueue(db, opts) {
 // instead of returning {skipped}.
 function enqueueText(db, { conversationId, toE164: toRaw, toPhone, body, sentBy, priority = 10 }) {
   const r = enqueue(db, { conversationId, toE164: toRaw, toPhone, body, sentBy, priority, kind: 'text' });
-  if (r.skipped) throw Object.assign(new Error(`send skipped: ${r.reason}`), { status: 400 });
+  if (r.skipped) {
+    const message = r.reason === 'session_closed' ? SESSION_CLOSED_HE : `send skipped: ${r.reason}`;
+    throw Object.assign(new Error(message), { status: 400, code: r.reason });
+  }
   return r.messageId;
 }
 

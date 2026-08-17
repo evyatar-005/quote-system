@@ -60,6 +60,11 @@ export const inbox = {
   sendMessage(id, bodyText) {
     return request(`/api/inbox/conversations/${id}/messages`, { method: 'POST', body: { body: bodyText } });
   },
+  // A pre-approved template — the only send allowed with the 24h session
+  // window closed, and what reopens it.
+  sendTemplate(id, templateId, parameters) {
+    return request(`/api/inbox/conversations/${id}/messages`, { method: 'POST', body: { templateId, parameters: parameters || [] } });
+  },
   streamUrl() {
     return `/api/inbox/stream?token=${encodeURIComponent(getToken() || '')}`;
   },

@@ -3,6 +3,7 @@ import { Loader2, Lock, Unlock, Send, ShieldAlert, MessagesSquare, Check, CheckC
 import { useAuth } from "@/lib/AuthContext";
 import { inbox } from "@/api/inboxClient";
 import { templates } from "@/api/campaignsClient";
+import { listInforuTemplates } from "@/api/inforuClient";
 import { useCrmEvents } from "@/lib/crmRealtime";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -82,6 +83,7 @@ export default function ConversationThread({ conversationId, headerExtra, hideLe
   const [creatingLead, setCreatingLead] = useState(false);
   const [tpls, setTpls] = useState(null);
   const [tplOpen, setTplOpen] = useState(false);
+  const [sendingTemplate, setSendingTemplate] = useState(false);
   const heartbeatRef = useRef(null);
   const scrollRef = useRef(null);
   const textareaRef = useRef(null);
@@ -98,7 +100,13 @@ export default function ConversationThread({ conversationId, headerExtra, hideLe
     }
   }, []);
 
-  useEffect(() => { if (conversationId) loadThread(conversationId); else setThread(null); }, [conversationId, loadThread]);
+  useEffect(() => {
+    if (conversationId) loadThread(conversationId); else setThread(null);
+    // Switching conversations can switch between an open and a closed window
+    // (or a different template set entirely) — never carry a stale list over.
+    setTpls(null);
+    setTplOpen(false);
+  }, [conversationId, loadThread]);
 
   useCrmEvents(
     ["message.created", "message.received", "message.sent", "lock.claimed", "lock.released", "conversation.updated"],
@@ -194,20 +202,34 @@ export default function ConversationThread({ conversationId, headerExtra, hideLe
     }
   };
 
+  // The 24h WhatsApp session window (Meta rule — see sessionWindow.js on the
+  // server). Only a provider that lives under it (InforU) ever reports this
+  // false; GreenAPI's conversations always come back with it true/undefined,
+  // so nothing below changes GreenAPI's existing behaviour.
+  const windowClosed = thread?.conversation?.session_window_open === false;
+
   const openTemplates = async () => {
     if (tplOpen) return setTplOpen(false);
     setTplOpen(true);
     if (tpls) return;
     try {
-      // 'service' only — a marketing blast template has no business in a 1:1
-      // reply. `active` must be the string '1', that's what the route compares.
-      setTpls(await templates.list({ category: "service", active: "1" }));
-    } catch {
+      if (windowClosed) {
+        // A closed window can ONLY be reopened by a Meta-approved template —
+        // free-form quick replies (message_templates) don't apply here at all.
+        setTpls(await listInforuTemplates());
+      } else {
+        // 'service' only — a marketing blast template has no business in a 1:1
+        // reply. `active` must be the string '1', that's what the route compares.
+        setTpls(await templates.list({ category: "service", active: "1" }));
+      }
+    } catch (err) {
       setTpls([]);
+      if (windowClosed) toast.error(err.message || "טעינת התבניות המאושרות נכשלה");
     }
   };
 
   const pickTemplate = async (t) => {
+    if (windowClosed) return sendApprovedTemplate(t);
     try {
       const { rendered } = await templates.preview(t.body, thread?.conversation?.customer_id, true);
       // Append, never replace — the agent may have already typed half a line.
@@ -216,6 +238,23 @@ export default function ConversationThread({ conversationId, headerExtra, hideLe
       textareaRef.current?.focus();
     } catch (err) {
       toast.error(err.message || "טעינת התבנית נכשלה");
+    }
+  };
+
+  // Unlike a quick-reply template, an InforU template's text is fixed by
+  // Meta's approval — there's nothing to edit in a draft, so picking one
+  // sends it immediately. This is also what reopens the window.
+  const sendApprovedTemplate = async (t) => {
+    setSendingTemplate(true);
+    try {
+      await inbox.sendTemplate(conversationId, t.TemplateId, []);
+      toast.success("התבנית נשלחה");
+      setTplOpen(false);
+      loadThread(conversationId);
+    } catch (err) {
+      toast.error(err.message || "שליחת התבנית נכשלה");
+    } finally {
+      setSendingTemplate(false);
     }
   };
 
@@ -272,6 +311,11 @@ export default function ConversationThread({ conversationId, headerExtra, hideLe
               {thread.conversation.lead_id && (
                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-200 text-slate-600 shrink-0">
                   ליד #{thread.conversation.lead_id}
+                </span>
+              )}
+              {windowClosed && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-700 shrink-0">
+                  חלון סגור
                 </span>
               )}
             </div>
@@ -399,21 +443,22 @@ export default function ConversationThread({ conversationId, headerExtra, hideLe
               <div className="flex justify-center py-6"><Loader2 className="w-4 h-4 animate-spin text-slate-400" /></div>
             ) : tpls.length === 0 ? (
               <div className="text-xs text-center py-6 px-3" style={{ color: WA.meta }}>
-                אין תבניות מענה מהיר
+                {windowClosed ? "אין תבניות מאושרות בחשבון InforU" : "אין תבניות מענה מהיר"}
                 {user?.role === "admin" && <div className="mt-1">ניתן להגדיר אותן במסך הניהול</div>}
               </div>
             ) : (
               <div className="divide-y divide-slate-100">
                 {tpls.map((t) => (
                   <button
-                    key={t.id}
+                    key={windowClosed ? t.TemplateId : t.id}
                     type="button"
                     onClick={() => pickTemplate(t)}
-                    className="w-full text-right px-3 py-2 hover:bg-slate-50"
+                    disabled={sendingTemplate}
+                    className="w-full text-right px-3 py-2 hover:bg-slate-50 disabled:opacity-50"
                   >
-                    <div className="text-xs font-semibold truncate">{t.name}</div>
+                    <div className="text-xs font-semibold truncate">{windowClosed ? t.TemplateName : t.name}</div>
                     <div className="text-[11px] truncate" style={{ color: WA.meta }}>
-                      {(t.body || "").split("\n")[0]}
+                      {windowClosed ? t.MessageText : (t.body || "").split("\n")[0]}
                     </div>
                   </button>
                 ))}
@@ -425,7 +470,7 @@ export default function ConversationThread({ conversationId, headerExtra, hideLe
           type="button"
           onClick={openTemplates}
           disabled={!isMine}
-          title="תבניות מענה מהיר"
+          title={windowClosed ? "תבנית מאושרת (InforU)" : "תבניות מענה מהיר"}
           className="w-10 h-10 rounded-full flex items-center justify-center bg-white text-slate-500 shrink-0 disabled:opacity-40 hover:text-slate-700"
         >
           <Zap className="w-4 h-4" />
@@ -440,14 +485,18 @@ export default function ConversationThread({ conversationId, headerExtra, hideLe
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (!sending) send(); }
           }}
-          placeholder={isMine ? "הקלד/י הודעה" : "יש לקחת את השיחה כדי להשיב"}
-          disabled={!isMine || sending}
+          placeholder={
+            !isMine ? "יש לקחת את השיחה כדי להשיב"
+            : windowClosed ? "חלון 24 השעות סגור — בחר/י תבנית מאושרת"
+            : "הקלד/י הודעה"
+          }
+          disabled={!isMine || sending || windowClosed}
           className="flex-1 resize-none rounded-2xl px-4 py-2.5 text-sm bg-white outline-none max-h-32 disabled:bg-white/60 disabled:text-slate-400 placeholder:text-slate-400"
         />
         <button
           type="button"
           onClick={send}
-          disabled={!isMine || sending || !draft.trim()}
+          disabled={!isMine || sending || windowClosed || !draft.trim()}
           className="w-10 h-10 rounded-full flex items-center justify-center text-white shrink-0 disabled:opacity-40"
           style={{ background: WA.green }}
         >

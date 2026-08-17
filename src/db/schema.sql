@@ -349,6 +349,32 @@ CREATE TABLE IF NOT EXISTS greenapi_credentials (
   updated_at   TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
+-- InforU (official WhatsApp Business API, a Meta-approved BSP) credentials —
+-- one row, admin-only, same shape as greenapi_credentials.
+CREATE TABLE IF NOT EXISTS inforu_credentials (
+  id         INTEGER PRIMARY KEY,
+  username   TEXT,
+  api_token  TEXT,
+  base_url   TEXT,   -- NULL = https://capi.inforu.co.il
+  updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Raw PullData responses, written BEFORE anything is parsed out of them.
+-- InforU's inbound pull is DESTRUCTIVE: once pulled, a message is gone from
+-- their queue forever, so a parse bug must never be able to lose a customer's
+-- message. Rows are tiny and are never pruned.
+--
+-- NOTE: replaying a batch after fixing a bug creates DUPLICATE crm_messages —
+-- inbound carries no provider message id, so there is no idempotency key to
+-- dedupe on. Recovery is a deliberate manual operation, not automatic.
+CREATE TABLE IF NOT EXISTS inforu_pull_log (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  pull_type  TEXT NOT NULL,
+  raw_json   TEXT NOT NULL,
+  item_count INTEGER,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Audit trail of every automatic WhatsApp send attempt, success or failure.
 CREATE TABLE IF NOT EXISTS whatsapp_send_log (
   id                  INTEGER PRIMARY KEY AUTOINCREMENT,

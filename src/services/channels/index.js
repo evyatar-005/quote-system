@@ -4,8 +4,9 @@
 // switching providers is a crm_settings row update, not a code change.
 
 const greenapi = require('./whatsapp/greenapi');
+const inforu = require('./whatsapp/inforu');
 
-const WHATSAPP_PROVIDERS = { greenapi };
+const WHATSAPP_PROVIDERS = { greenapi, inforu };
 
 function getActiveWhatsApp(db) {
   const settings = db.prepare(`SELECT whatsapp_provider FROM crm_settings WHERE id = 1`).get();

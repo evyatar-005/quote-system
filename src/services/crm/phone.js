@@ -52,7 +52,15 @@ function toE164(raw) {
   return null;
 }
 
-/** E.164 → GreenAPI chatId format, e.g. "+972501234567" -> "972501234567@c.us". */
+/**
+ * E.164 → our conversation thread key, e.g. "+972501234567" -> "972501234567@c.us".
+ *
+ * The "@c.us" suffix started life as GreenAPI's chatId format, but it is now
+ * simply OUR key for crm_conversations.channel_thread_id (UNIQUE per channel)
+ * and every provider must produce it. An adapter that invents a different
+ * shape forks a second conversation alongside the customer's existing history
+ * — silently, and painful to unwind.
+ */
 function toChatId(raw) {
   const e164 = raw && raw.startsWith('+') ? raw : toE164(raw);
   if (!e164) return null;
@@ -67,9 +75,22 @@ function fromChatId(chatId) {
   return `+${digits}`;
 }
 
+/**
+ * E.164 → the local format InforU's API expects in its `Phone` field, e.g.
+ * "+972501234567" -> "0501234567". Their docs use the local Israeli form both
+ * on send and on inbound pull; a foreign number is passed as bare digits and
+ * left for them to interpret.
+ */
+function toInforuPhone(raw) {
+  const e164 = raw && raw.toString().startsWith('+') ? raw.toString() : toE164(raw);
+  if (!e164) return null;
+  const digits = e164.slice(1);
+  return digits.startsWith(IL_COUNTRY_CODE) ? `0${digits.slice(IL_COUNTRY_CODE.length)}` : digits;
+}
+
 /** Loose validity check — enough digits to plausibly be a phone number. */
 function isValidE164(value) {
   return typeof value === 'string' && /^\+\d{8,15}$/.test(value);
 }
 
-module.exports = { toE164, toChatId, fromChatId, isValidE164 };
+module.exports = { toE164, toChatId, fromChatId, toInforuPhone, isValidE164 };

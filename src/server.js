@@ -11,6 +11,7 @@ const registerNotifications = require('./routes/notifications');
 const registerMorning  = require('./routes/morning');
 const registerUpdate   = require('./routes/update');
 const registerGreenApi = require('./routes/greenapi');
+const registerInforu   = require('./routes/inforu');
 const registerMonday   = require('./routes/monday');
 const registerAttachments = require('./routes/attachments');
 const registerSmtp     = require('./routes/smtp');
@@ -335,6 +336,12 @@ for (const col of [
   // and WhatsApp shows them one business identity regardless. A manager can
   // still turn it off in CRM settings, and that choice survives restarts —
   // this default only applies the first time the column is created.
+  // InforU's inbound pull is DESTRUCTIVE — a pulled message is gone from
+  // their queue forever. Default 0 so a dev machine pointed at the production
+  // account can never silently steal half the customer's messages: exactly
+  // one process may ever have this on.
+  "ALTER TABLE crm_settings ADD COLUMN inforu_pull_enabled INTEGER NOT NULL DEFAULT 0",
+
   "ALTER TABLE crm_settings ADD COLUMN agent_signature_enabled  INTEGER NOT NULL DEFAULT 1",
   "ALTER TABLE crm_settings ADD COLUMN agent_signature_template TEXT NOT NULL DEFAULT '*{agent}* מפרינטלה:'",
 
@@ -457,6 +464,7 @@ registerNotifications(app, db, { requireAuth, requireAdmin });
 registerMorning(app, db, { requireAuth, requireAdmin });
 registerUpdate(app, db, { requireAuth, requireAdmin });
 registerGreenApi(app, db, { requireAuth, requireAdmin });
+registerInforu(app, db, { requireAuth, requireAdmin });
 registerMonday(app, db, { requireAuth, requireAdmin });
 registerAttachments(app, db, { requireAuth });
 registerSmtp(app, db, { requireAuth, requireAdmin });

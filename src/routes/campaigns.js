@@ -10,6 +10,21 @@ const { render, usedVariables, unknownVariables, hasOptOutLine } = require('../s
 const { previewAudience, resolveAudience } = require('../services/crm/audience');
 const { enqueue } = require('../services/channels/whatsapp/outbox');
 const { toE164 } = require('../services/crm/phone');
+const { getBulkWhatsApp } = require('../services/channels');
+
+// Bulk דיוור is structurally impossible on a provider that requires the 24h
+// session window: (a) most recipients have no open window and a template
+// can't carry the free-text {{placeholders}} + opt-out footer this feature is
+// built around, and (b) wa_campaigns.template_id is stored but never used —
+// there is no template-based campaign flow yet. Block with an explanation
+// rather than let every recipient silently fail one at a time.
+function blockIfSessionWindowRequired(db, res) {
+  if (getBulkWhatsApp(db).capabilities(db).requiresSessionWindow) {
+    res.status(400).json({ error: 'דיוור המוני דרך InforU מחייב תבנית מאושרת מראש — לא נתמך בשלב זה' });
+    return true;
+  }
+  return false;
+}
 
 module.exports = function registerCampaigns(app, db, deps) {
   const { requireAuth, requireAdmin, requireCampaigns } = deps;
@@ -230,6 +245,7 @@ module.exports = function registerCampaigns(app, db, deps) {
   // Requires a typed confirm_count matching total_count — a misclick guard,
   // not a security control (the real gate is requireCampaigns above it).
   app.post('/api/campaigns/:id/start', requireCampaigns, (req, res) => {
+    if (blockIfSessionWindowRequired(db, res)) return;
     const id = parseInt(req.params.id, 10);
     const campaign = db.prepare(`SELECT * FROM wa_campaigns WHERE id = ?`).get(id);
     if (!campaign) return res.status(404).json({ error: 'לא נמצא' });
@@ -269,6 +285,7 @@ module.exports = function registerCampaigns(app, db, deps) {
   });
 
   app.post('/api/campaigns/:id/resume', requireCampaigns, (req, res) => {
+    if (blockIfSessionWindowRequired(db, res)) return;
     const id = parseInt(req.params.id, 10);
     const campaign = db.prepare(`SELECT * FROM wa_campaigns WHERE id = ?`).get(id);
     if (!campaign || campaign.status !== 'paused') return res.status(409).json({ error: 'אפשר לחדש רק דיוור מושהה' });
@@ -304,6 +321,7 @@ module.exports = function registerCampaigns(app, db, deps) {
   // sender's OWN customer-shaped record for {{placeholders}} — never the
   // audience.
   app.post('/api/campaigns/:id/test-send', requireCampaigns, (req, res) => {
+    if (blockIfSessionWindowRequired(db, res)) return;
     const id = parseInt(req.params.id, 10);
     const campaign = db.prepare(`SELECT * FROM wa_campaigns WHERE id = ?`).get(id);
     if (!campaign) return res.status(404).json({ error: 'לא נמצא' });

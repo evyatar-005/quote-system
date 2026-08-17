@@ -29,6 +29,7 @@ import LightboxPriceTable from "../components/admin/LightboxPriceTable";
 import MinimumPricesSection from "../components/admin/MinimumPricesSection";
 import MorningSettingsSection from "../components/admin/MorningSettingsSection";
 import GreenApiSettingsSection from "../components/admin/GreenApiSettingsSection";
+import InforuSettingsSection from "../components/admin/InforuSettingsSection";
 import MondaySettingsSection from "../components/admin/MondaySettingsSection";
 import MondaySyncSection from "../components/admin/MondaySyncSection";
 import SmtpSettingsSection from "../components/admin/SmtpSettingsSection";
@@ -52,6 +53,7 @@ const SETTINGS_TABS = [
   { value: "users", label: "משתמשים", icon: Users, activeClass: "text-brand-purple" },
   { value: "morning", label: "מורנינג", icon: Receipt, activeClass: "text-brand-green" },
   { value: "greenapi", label: "GreenAPI", icon: MessageCircle, activeClass: "text-emerald-600" },
+  { value: "inforu", label: "InforU", icon: MessageCircle, activeClass: "text-emerald-600" },
   { value: "monday", label: "Monday", icon: LayoutGrid, activeClass: "text-orange-600" },
   { value: "smtp", label: "SMTP", icon: Mail, activeClass: "text-sky-600" },
   { value: "reports", label: "דוחות", icon: PieChart, activeClass: "text-indigo-600" },
@@ -311,6 +313,10 @@ export default function AdminDashboard() {
 
           <TabsContent value="greenapi" className="space-y-6 mt-0">
             <GreenApiSettingsSection />
+          </TabsContent>
+
+          <TabsContent value="inforu" className="space-y-6 mt-0">
+            <InforuSettingsSection />
           </TabsContent>
 
           <TabsContent value="monday" className="space-y-6 mt-0">

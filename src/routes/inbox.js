@@ -5,8 +5,10 @@
 //
 // deps: { requireAuth, requireAdmin }
 
-const { enqueueText } = require('../services/channels/whatsapp/outbox');
+const { enqueue, enqueueText } = require('../services/channels/whatsapp/outbox');
 const { fromChatId } = require('../services/crm/phone');
+const { isSessionOpen } = require('../services/channels/whatsapp/sessionWindow');
+const { getActiveWhatsApp } = require('../services/channels');
 const { publish, subscribe } = require('../services/crm/realtime');
 const { slotCount, crmSettingsRow } = require('../services/crm/leadClaims');
 
@@ -56,7 +58,7 @@ module.exports = function registerInbox(app, db, deps) {
   }
 
   function conversationWithLock(id) {
-    return db.prepare(
+    const row = db.prepare(
       `SELECT c.*, cu.display_name AS customer_name, cu.phone_e164 AS customer_phone,
               l.username AS lock_username, l.expires_at AS lock_expires_at,
               ld.status AS lead_status, ld.title AS lead_title
@@ -66,6 +68,15 @@ module.exports = function registerInbox(app, db, deps) {
        LEFT JOIN crm_leads ld ON ld.id = c.lead_id
        WHERE c.id = ?`
     ).get(id);
+    if (!row) return row;
+    // Only meaningful for a provider that lives under the WhatsApp 24h rule
+    // (InforU). GreenAPI reports the window as always-open so its composer
+    // behaves exactly as it always has.
+    const requiresWindow = getActiveWhatsApp(db).capabilities(db).requiresSessionWindow;
+    const win = requiresWindow ? isSessionOpen(db, row.channel_thread_id) : { open: true, expiresAt: null };
+    row.session_window_open = win.open;
+    row.session_expires_at = win.expiresAt;
+    return row;
   }
 
   // ── List / detail ──────────────────────────────────────────────────────
@@ -367,15 +378,29 @@ module.exports = function registerInbox(app, db, deps) {
     }
     const customer = conversation.customer_id ? db.prepare(`SELECT phone_e164 FROM customers WHERE id = ?`).get(conversation.customer_id) : null;
     const toE164 = customer?.phone_e164 || fromChatId(conversation.channel_thread_id);
+    const { templateId, parameters } = req.body || {};
     try {
-      const messageId = enqueueText(db, {
-        conversationId: id, toE164, body: withSignature(req.body?.body, req.user.username),
-        sentBy: req.user.username, priority: 10,
-      });
-      publish('message.created', { conversationId: id, messageId });
-      res.status(201).json(db.prepare(`SELECT * FROM crm_messages WHERE id = ?`).get(messageId));
+      let result;
+      if (templateId) {
+        // A pre-approved template's text is fixed by Meta — withSignature
+        // must NOT touch it, or the sent text stops matching what was
+        // approved. This is also the one send that's allowed with the 24h
+        // window closed; it's what reopens it.
+        result = enqueue(db, {
+          conversationId: id, toE164, kind: 'template', templateId, templateParameters: parameters || [],
+          sentBy: req.user.username, priority: 10,
+        });
+        if (result.skipped) return res.status(400).json({ error: `send skipped: ${result.reason}`, code: result.reason });
+      } else {
+        result = { messageId: enqueueText(db, {
+          conversationId: id, toE164, body: withSignature(req.body?.body, req.user.username),
+          sentBy: req.user.username, priority: 10,
+        }) };
+      }
+      publish('message.created', { conversationId: id, messageId: result.messageId });
+      res.status(201).json(db.prepare(`SELECT * FROM crm_messages WHERE id = ?`).get(result.messageId));
     } catch (err) {
-      res.status(err.status || 400).json({ error: err.message });
+      res.status(err.status || 400).json({ error: err.message, code: err.code });
     }
   });
 

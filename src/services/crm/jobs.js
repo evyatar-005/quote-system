@@ -8,16 +8,25 @@ const { getActiveWhatsApp, getBulkWhatsApp } = require('../channels');
 const { publish } = require('./realtime');
 const { downloadFile } = require('../google/driveClient');
 const { DOCUMENT_TYPE } = require('../morning/mappings');
+const inforuClient = require('../inforu/client');
+const { handleInboundEvent } = require('../channels/whatsapp/inbound');
 
 const POLL_TICK_MS = 60 * 1000;
 const QUEUE_TICK_MS = 5 * 1000;
 const IDLE_TICK_MS = 60 * 1000;
+const INFORU_PULL_TICK_MS = 10 * 1000;
 
 // Module-level pacing state for bulk (priority > 10) sends — deliberately
 // in-memory, not persisted: a restart resuming immediately (one un-jittered
 // send) is strictly safer than a persisted lock that could wedge the queue
 // forever. See CLAUDE.md CRM plan Phase 4 §10.
 let nextAllowedBulkSendAt = 0;
+
+// Reentrancy guard for the InforU pull tick — a 10s interval CAN overlap a
+// slow HTTP round-trip. Without this, two concurrent pulls would split one
+// batch across two ticks and the second could run against a half-written DB.
+// Module-level and in-memory on purpose, same reasoning as nextAllowedBulkSendAt.
+let inforuPulling = false;
 
 function startCrmJobs(db) {
   setInterval(() => {
@@ -31,7 +40,58 @@ function startCrmJobs(db) {
     try { idleSweeperTick(db); } catch (err) { console.error('[crm jobs] idleSweeper tick failed:', err.message); }
     try { leadOutcomeSweepTick(db); } catch (err) { console.error('[crm jobs] leadOutcomeSweep tick failed:', err.message); }
   }, IDLE_TICK_MS);
-  console.log('[crm jobs] started (monday poller/pusher 60s, wa queue drainer 5s, idle sweeper 60s)');
+  setInterval(() => {
+    inforuPullTick(db).catch(err => console.error('[crm jobs] inforuPull tick failed:', err.message));
+  }, INFORU_PULL_TICK_MS);
+  console.log('[crm jobs] started (monday poller/pusher 60s, wa queue drainer 5s, idle sweeper 60s, inforu pull 10s)');
+}
+
+// Pulls inbound WhatsApp messages from InforU. THIS READ IS DESTRUCTIVE — a
+// pulled message is gone from InforU's queue forever, so:
+//  - the raw response is persisted to inforu_pull_log BEFORE any parsing, so
+//    a bug in normalizePullItem can never lose a customer's message;
+//  - each item is handled in its own try/catch, so one malformed item can't
+//    drop the other 499 in the same batch;
+//  - triple-gated (inforu_pull_enabled + active provider is inforu +
+//    configured) so a dev machine can never silently steal messages meant
+//    for production — see the column's comment in server.js.
+async function inforuPullTick(db) {
+  if (inforuPulling) return;
+  const s = crmSettingsRow(db);
+  if (!s.inforu_pull_enabled) return;
+  const provider = getActiveWhatsApp(db);
+  if (provider.name !== 'inforu' || !provider.isConfigured(db)) return;
+
+  inforuPulling = true;
+  try {
+    const BATCH_SIZE = 500;
+    // Loop until the queue is drained or we hit a safety cap — 5 * 500 = 2500
+    // messages/tick, and 5 requests comfortably fits InforU's rate limit.
+    for (let i = 0; i < 5; i++) {
+      const data = await inforuClient.pullData(db, { type: 'IncomingMessagesWhatsapp', batchSize: BATCH_SIZE });
+      const list = (data && data.List) || [];
+      db.prepare(`INSERT INTO inforu_pull_log (pull_type, raw_json, item_count) VALUES (?, ?, ?)`)
+        .run('IncomingMessagesWhatsapp', JSON.stringify(data), list.length);
+      if (!list.length) break;
+
+      for (const item of list) {
+        try {
+          const event = provider.normalizePullItem(item);
+          if (!event) {
+            console.error('[crm jobs] inforuPull: could not normalize item (bad phone?) — raw kept in inforu_pull_log:', JSON.stringify(item).slice(0, 200));
+            continue;
+          }
+          const result = handleInboundEvent(db, 'inforu', event);
+          if (result) publish('message.received', result);
+        } catch (err) {
+          console.error('[crm jobs] inforuPull: item failed, continuing with the rest of the batch:', err.message);
+        }
+      }
+      if (data.Count < BATCH_SIZE) break;
+    }
+  } finally {
+    inforuPulling = false;
+  }
 }
 
 function crmSettingsRow(db) {
@@ -143,14 +203,14 @@ async function waQueueDrainerTick(db) {
   let result;
   try {
     if (payload.kind === 'media') {
-      result = await provider.sendMedia(db, { toE164: row.to_e164, url: payload.url, filename: payload.filename, caption: payload.caption });
+      result = await provider.sendMedia(db, { toE164: row.to_e164, url: payload.url, filename: payload.filename, caption: payload.caption, messageId: row.message_id });
     } else if (payload.kind === 'drive') {
       // Download server-side, then upload straight to WhatsApp — the
       // customer gets a real file, we never expose a public URL for it.
       const file = await downloadFile(db, payload.driveFileId);
       result = await provider.sendMediaUpload(db, {
         toE164: row.to_e164, fileBuffer: file.buffer, mimeType: file.mimeType,
-        filename: payload.filename || file.filename, caption: payload.caption,
+        filename: payload.filename || file.filename, caption: payload.caption, messageId: row.message_id,
       });
       if (result.ok && result.urlFile && row.message_id) {
         // Internal only — the URL never reaches the customer, it just lets
@@ -158,8 +218,21 @@ async function waQueueDrainerTick(db) {
         db.prepare(`UPDATE crm_messages SET media_url = ?, media_filename = ? WHERE id = ?`)
           .run(result.urlFile, payload.filename || file.filename, row.message_id);
       }
+    } else if (payload.kind === 'template') {
+      // Approved templates are the only send InforU allows outside the 24h
+      // window — see sessionWindow.js. Not every provider supports them
+      // (GreenAPI never will: it has no concept of a Meta-approved template),
+      // so this guards the same way outbox.enqueue's session gate does.
+      if (!provider.capabilities(db).supportsTemplates || typeof provider.sendTemplate !== 'function') {
+        result = { ok: false, error: `ספק ${provider.name} אינו תומך בתבניות מאושרות`, retryable: false };
+      } else {
+        result = await provider.sendTemplate(db, {
+          toE164: row.to_e164, templateId: payload.templateId, parameters: payload.parameters,
+          mediaUrl: payload.mediaUrl, messageId: row.message_id,
+        });
+      }
     } else {
-      result = await provider.sendText(db, { toE164: row.to_e164, body: payload.body });
+      result = await provider.sendText(db, { toE164: row.to_e164, body: payload.body, messageId: row.message_id });
     }
   } catch (err) {
     result = { ok: false, error: err.message, retryable: true };
