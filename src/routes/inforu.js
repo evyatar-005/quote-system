@@ -62,9 +62,22 @@ module.exports = function registerInforu(app, db, deps) {
         `SELECT created_at, item_count, raw_json FROM inforu_pull_log
           WHERE item_count > 0 ORDER BY id DESC LIMIT 1`
       ).get();
+      // The most recent response whatever it contained. When every pull comes
+      // back empty this is the only remaining evidence: it distinguishes a
+      // genuinely empty queue ({"List":[],"Count":0}) from InforU answering
+      // something else entirely — an unrecognised Type, for instance, which a
+      // provider typically reports as an empty success rather than an error,
+      // and which would look exactly like "no messages" from here.
+      const lastAny = db.prepare(
+        `SELECT created_at, item_count, raw_json FROM inforu_pull_log ORDER BY id DESC LIMIT 1`
+      ).get();
       return {
         total_pulls: totals ? totals.pulls : 0,
         total_items_ever: totals ? totals.items : 0,
+        pull_type_sent: 'IncomingMessagesWhatsapp',
+        last_raw: lastAny
+          ? { at: lastAny.created_at, count: lastAny.item_count, raw: (lastAny.raw_json || '').slice(0, 2000) }
+          : null,
         last_pull_with_items: lastWithItems
           ? {
               at: lastWithItems.created_at,

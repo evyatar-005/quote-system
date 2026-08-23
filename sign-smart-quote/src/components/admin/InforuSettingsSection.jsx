@@ -254,6 +254,21 @@ export default function InforuSettingsSection() {
                     נכנסות למספר מוגדרות להיכנס לתור המשיכה (ולא נשלחות ל-callback אחר).
                   </div>
                 )}
+                {/* When nothing ever arrives, the exact request/response pair is
+                    the only thing left to show InforU support. */}
+                {pullStatus.last_raw && (
+                  <details className="text-[11px]">
+                    <summary className="cursor-pointer text-slate-600">הצג את הבקשה והתשובה האחרונה מ-InforU (למסירה לתמיכה)</summary>
+                    <div className="mt-1 space-y-1">
+                      <div className="text-[10px] text-muted-foreground">
+                        נשלח: <code dir="ltr">POST /api/v2/PullData · Type: {pullStatus.pull_type_sent}</code>
+                      </div>
+                      <pre className="bg-white border border-slate-200 rounded p-2 overflow-auto max-h-52 text-[10px] whitespace-pre-wrap break-all" dir="ltr">
+                        {pullStatus.last_raw.raw || "(ריק)"}
+                      </pre>
+                    </div>
+                  </details>
+                )}
                 {pullStatus.last_pull_with_items && (
                   <details className="text-[11px]">
                     <summary className="cursor-pointer text-slate-600">
