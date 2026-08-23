@@ -8,7 +8,7 @@ import {
   Copy,
   Download,
   PackagePlus,
-  Send,
+  CreditCard,
   X,
   BarChart3,
   ArrowRight,
@@ -24,7 +24,7 @@ import QuoteDetailsModal from "@/components/QuoteDetailsModal";
 import DocumentIssuedModal from "@/components/DocumentIssuedModal";
 import {
   MORNING_ORDER_TYPE, MORNING_TYPE_LABELS, toLocalDateStr, DATE_PRESETS, computeDateRange, formatDocNumber,
-  ORIGIN_LABELS, ORIGIN_COLORS, originOf, STATUS_LABELS, STATUS_COLORS, DOC_STATUS_LABELS, DOC_STATUS_COLORS, docStatusKey,
+  ORIGIN_LABELS, ORIGIN_COLORS, originOf, STATUS_LABELS, STATUS_COLORS,
 } from "@/lib/quoteLabels";
 import { latestRevisionsOnly, reconstructBuilderState } from "@/lib/quoteEconomics";
 import { useAuth } from "@/lib/AuthContext";
@@ -499,18 +499,22 @@ export default function MyQuotes() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm border-collapse">
                 <thead>
-                  {/* Vertical dividers (border-l, dropped on the last/leftmost
-                      column under RTL) alongside the header's own bottom
-                      border — a grid, not just stacked rows, same as
-                      Morning's own tables. Every column but לקוח is centered
+                  {/* Column order mirrors Morning's own document table
+                      (right-to-left): תאריך, סוג מסמך, מס' מסמך, לקוח, סטטוס,
+                      סכום, מסמך, פעולות — split into two columns instead of
+                      one combined "מורנינג" column. Vertical dividers
+                      (border-l, dropped on the last/leftmost column under
+                      RTL) alongside the header's own bottom border — a grid,
+                      not just stacked rows. Every column but לקוח is centered
                       so its data lines up under its header instead of
                       hugging one edge. */}
                   <tr className="bg-slate-50 border-b border-black text-xs text-slate-500">
-                    <th className="text-right font-medium px-4 py-3 border-l border-slate-200">לקוח</th>
                     <th className="text-center font-medium px-4 py-3 border-l border-slate-200">תאריך</th>
-                    <th className="text-center font-medium px-4 py-3 border-l border-slate-200">מורנינג</th>
-                    <th className="text-center font-medium px-4 py-3 border-l border-slate-200">סכום</th>
+                    <th className="text-center font-medium px-4 py-3 border-l border-slate-200">סוג מסמך</th>
+                    <th className="text-center font-medium px-4 py-3 border-l border-slate-200">מס&apos; מסמך</th>
+                    <th className="text-right font-medium px-4 py-3 border-l border-slate-200">לקוח</th>
                     <th className="text-center font-medium px-4 py-3 border-l border-slate-200">סטטוס</th>
+                    <th className="text-center font-medium px-4 py-3 border-l border-slate-200">סכום</th>
                     <th className="text-center font-medium px-4 py-3 border-l border-slate-200">מסמך</th>
                     <th className="text-center font-medium px-4 py-3">פעולות</th>
                   </tr>
@@ -532,7 +536,6 @@ export default function MyQuotes() {
                     // THIS quote, never borrowed from the parent — only the
                     // document open/download actions fall back.
                     const alreadyOrder = ownDoc && ownDoc.morning_document_type === MORNING_ORDER_TYPE;
-                    const ownDocStatus = docStatusKey(ownDoc);
                     // "Replaces" is only meaningful in terms of Morning's own
                     // numbering — our internal quote_number isn't shown
                     // anywhere in this table, so naming it here would be a
@@ -551,9 +554,38 @@ export default function MyQuotes() {
                     // outline-filled for the payment link, black-on-amber
                     // fill for the money action (issuing the order) so it
                     // reads as the primary action on the row.
-                    const actionBtn = "h-8 w-8 shrink-0 flex items-center justify-center rounded-lg border transition-colors disabled:opacity-50";
+                    const actionBtn = "h-8 w-8 shrink-0 flex items-center justify-center rounded-lg border-0 outline-none ring-0 focus:outline-none focus:ring-0 transition-opacity hover:opacity-75 disabled:opacity-50";
                     return (
                       <tr key={q.id} className="align-top hover:bg-slate-50/60 transition-colors">
+                        <td className="px-4 py-3 whitespace-nowrap text-slate-500 text-center border-l border-slate-100">
+                          <span className="flex items-center justify-center gap-1">
+                            <Calendar className="w-3 h-3" />
+                            {new Date(q.created_date).toLocaleDateString("he-IL")}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-slate-500 text-center border-l border-slate-100">
+                          {morningDoc ? (
+                            MORNING_TYPE_LABELS[morningDoc.morning_document_type] || "מסמך"
+                          ) : (
+                            // A flat "טרם הונפק" in the same neutral gray as
+                            // טיוטה — this column is only about whether/what
+                            // Morning issued, never the internal review
+                            // status (that's the סטטוס column's job alone
+                            // now that the two are split into separate
+                            // columns).
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">
+                              טרם הונפק
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-slate-500 text-center border-l border-slate-100">
+                          {morningDoc && (
+                            <>
+                              #{formatDocNumber(morningDoc.morning_document_number || morningDoc.morning_document_id)}
+                              {docIsFromParent && <div className="text-xs text-slate-400">מהצעה המקורית</div>}
+                            </>
+                          )}
+                        </td>
                         <td className="px-4 py-3 border-l border-slate-100">
                           <div className="font-semibold text-foreground">{q.client_name}</div>
                           <div className="flex items-center gap-1.5 flex-wrap mt-1">
@@ -565,67 +597,34 @@ export default function MyQuotes() {
                                 {sellers[q.created_by] || q.created_by}
                               </span>
                             )}
-                            {/* Which of the three kinds this row is. A duplicate and
-                                a manager revision both REPLACE the quote they name,
-                                so the agent can see at a glance that an older row of
-                                theirs is no longer the live version of the deal. */}
-                            <span
-                              className={`text-xs px-2 py-0.5 rounded-full ${ORIGIN_COLORS[originOf(q)]}`}
-                              title={ORIGIN_LABELS[originOf(q)]}
-                            >
-                              {ORIGIN_LABELS[originOf(q)]}
-                              {parentMorningRef && ` — מחליפה את ${parentMorningRef}`}
-                            </span>
+                            {/* Which of the three kinds this row is — shown only
+                                for a duplicate/revision. A plain new quote's
+                                type already reads from the סוג מסמך column now,
+                                so repeating "הצעת מחיר" here would just be the
+                                same word twice under one row. */}
+                            {originOf(q) !== "new" && (
+                              <span
+                                className={`text-xs px-2 py-0.5 rounded-full ${ORIGIN_COLORS[originOf(q)]}`}
+                                title={ORIGIN_LABELS[originOf(q)]}
+                              >
+                                {ORIGIN_LABELS[originOf(q)]}
+                                {parentMorningRef && ` — מחליפה את ${parentMorningRef}`}
+                              </span>
+                            )}
                           </div>
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-slate-500 text-center border-l border-slate-100">
-                          <span className="flex items-center justify-center gap-1">
-                            <Calendar className="w-3 h-3" />
-                            {new Date(q.created_date).toLocaleDateString("he-IL")}
+                        <td className="px-4 py-3 whitespace-nowrap text-center border-l border-slate-100">
+                          {/* Purely the internal review lifecycle — the doc
+                              type/number columns already say what Morning has
+                              on this quote, so this never needs to borrow
+                              DOC_STATUS_LABELS to say it again. */}
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLORS[q.status || "draft"]}`}>
+                            {STATUS_LABELS[q.status || "draft"]}
                           </span>
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-slate-500 text-center border-l border-slate-100">
-                          {morningDoc ? (
-                            <>
-                              {MORNING_TYPE_LABELS[morningDoc.morning_document_type] || "מסמך"} #
-                              {formatDocNumber(morningDoc.morning_document_number || morningDoc.morning_document_id)}
-                              {docIsFromParent && <div className="text-xs text-slate-400">מהצעה המקורית</div>}
-                            </>
-                          ) : (
-                            // No invented "לא הונפק — ..." wording here — when
-                            // there's no Morning document, this shows the exact
-                            // same status pill (label + fixed color) as the
-                            // סטטוס column, from the single shared vocabulary
-                            // in quoteLabels.js. Two columns must never show
-                            // two different words for the same status.
-                            <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLORS[q.status || "draft"]}`}>
-                              {STATUS_LABELS[q.status || "draft"]}
-                            </span>
-                          )}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-center border-l border-slate-100">
                           <div className="font-bold text-primary tabular-nums">{fmt(q.price_with_vat)}</div>
                           <div className="text-xs text-slate-400">כולל מע״מ</div>
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-center border-l border-slate-100">
-                          {/* Doc status (issued quote/order in Morning) is no longer
-                              tied to the manager's internal review decision — an
-                              agent doesn't care that a manager clicked approve,
-                              only whether the quote actually became a real
-                              document in Morning. So this badge shows the doc
-                              status when there is one; every other status
-                              (draft/pending review/reviewed/rejected) still
-                              reads straight off q.status via the shared
-                              STATUS_LABELS/STATUS_COLORS from quoteLabels. */}
-                          {ownDocStatus ? (
-                            <span className={`text-xs px-2 py-0.5 rounded-full ${DOC_STATUS_COLORS[ownDocStatus]}`}>
-                              {DOC_STATUS_LABELS[ownDocStatus]}
-                            </span>
-                          ) : (
-                            <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLORS[q.status || "draft"]}`}>
-                              {STATUS_LABELS[q.status || "draft"]}
-                            </span>
-                          )}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-center border-l border-slate-100">
                           {morningDoc?.document_url && (
@@ -634,9 +633,9 @@ export default function MyQuotes() {
                               target="_blank"
                               rel="noreferrer"
                               title={`הורד מסמך מורנינג${docIsFromParent ? " (מקורי)" : ""}`}
-                              className={`${actionBtn} border-black text-slate-600 hover:border-slate-500 hover:bg-slate-50 mx-auto`}
+                              className={`${actionBtn} text-slate-600 hover:bg-slate-100 mx-auto`}
                             >
-                              <Download className="w-3.5 h-3.5" />
+                              <Download className="w-4 h-4" />
                             </a>
                           )}
                         </td>
@@ -653,16 +652,16 @@ export default function MyQuotes() {
                                 }
                               }}
                               title={isAdmin ? "פתיחת ממשק העלויות והרווחיות המלא לעריכה" : morningDoc?.document_url ? "תצוגה מקדימה של מסמך המורנינג" : "טרם הונפק מסמך — מוצגת התצוגה הפנימית"}
-                              className={`${actionBtn} border-black text-slate-600 hover:border-slate-500 hover:bg-slate-50`}
+                              className={`${actionBtn} text-slate-600 hover:bg-slate-100`}
                             >
-                              <Eye className="w-3.5 h-3.5" />
+                              <Eye className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => duplicateQuote(q)}
                               title="שכפל"
-                              className={`${actionBtn} border-black text-slate-600 hover:border-slate-500 hover:bg-slate-50`}
+                              className={`${actionBtn} text-slate-600 hover:bg-slate-100`}
                             >
-                              <Copy className="w-3.5 h-3.5" />
+                              <Copy className="w-4 h-4" />
                             </button>
                             {/* Standalone payment link — a completely independent Morning
                                 operation (see createPaymentForm in sync.js), always
@@ -675,18 +674,18 @@ export default function MyQuotes() {
                               onClick={() => handlePullPaymentLink(q)}
                               disabled={issuingIds.has(q.id)}
                               title="שלח קישור תשלום"
-                              className={`${actionBtn} border-amber-400 text-amber-700 bg-amber-50 hover:bg-amber-100`}
+                              className={`${actionBtn} text-amber-700 bg-amber-50 hover:bg-amber-100`}
                             >
-                              {issuingIds.has(q.id) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                              {issuingIds.has(q.id) ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
                             </button>
                             {!ownDoc && (
                               <button
                                 onClick={() => handleIssueQuoteDoc(q)}
                                 disabled={issuingIds.has(q.id)}
                                 title="הנפק הצעת מחיר"
-                                className={`${actionBtn} border-black text-slate-600 hover:border-slate-500 hover:bg-slate-50`}
+                                className={`${actionBtn} text-slate-600 hover:bg-slate-100`}
                               >
-                                {issuingIds.has(q.id) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
+                                {issuingIds.has(q.id) ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
                               </button>
                             )}
                             {!alreadyOrder && (
@@ -694,9 +693,9 @@ export default function MyQuotes() {
                                 onClick={() => handleIssueOrder(q)}
                                 disabled={issuingIds.has(q.id)}
                                 title="הנפק הזמנת עבודה"
-                                className={`${actionBtn} border-amber-500 bg-amber-500 text-white hover:bg-amber-600`}
+                                className={`${actionBtn} bg-amber-500 text-white hover:bg-amber-600`}
                               >
-                                {issuingIds.has(q.id) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PackagePlus className="w-3.5 h-3.5" />}
+                                {issuingIds.has(q.id) ? <Loader2 className="w-4 h-4 animate-spin" /> : <PackagePlus className="w-4 h-4" />}
                               </button>
                             )}
                           </div>

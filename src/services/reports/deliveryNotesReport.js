@@ -83,14 +83,21 @@ const FREQUENCY_LABELS = { daily: 'יומי', weekly: 'שבועי', monthly: 'ח
 // `cfg` is a scheduled_reports row when called from the scheduler; the
 // manual "send now" endpoint instead passes the freshly-saved config (same
 // shape) so a test send always reflects whatever's on screen, not stale DB
-// state from before the admin's last edit.
+// state from before the admin's last edit. An on-demand generation (the
+// "דוחות" tab's manual generator, /api/reports/generate) instead passes an
+// explicit fromDate/toDate with no frequency at all — that period wins over
+// computeDateRange whenever it's present, so a manually-picked range is
+// never silently overridden by "today"/"this week".
 async function sendReport(db, cfg) {
   const recipients = parseRecipients(cfg.recipients);
   if (!recipients.length) return { sent: false };
 
-  const { fromDate, toDate } = computeDateRange(cfg.frequency, new Date());
+  const { fromDate, toDate } = cfg.fromDate && cfg.toDate
+    ? { fromDate: cfg.fromDate, toDate: cfg.toDate }
+    : computeDateRange(cfg.frequency, new Date());
   const items = await fetchClosedDeliveryNotes(db, fromDate, toDate);
-  const { subject, html, text } = buildEmail(items, FREQUENCY_LABELS[cfg.frequency] || cfg.frequency, fromDate, toDate);
+  const periodLabel = FREQUENCY_LABELS[cfg.frequency] || cfg.frequency || 'ידני';
+  const { subject, html, text } = buildEmail(items, periodLabel, fromDate, toDate);
   await mail.sendMail(db, { to: recipients.join(', '), subject, html, text });
   console.log(`[deliveryNotesReport] sent ${items.length} delivery note(s) for ${fromDate}..${toDate} to ${recipients.join(', ')}`);
   return { sent: true, count: items.length };

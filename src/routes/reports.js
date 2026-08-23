@@ -82,5 +82,28 @@ module.exports = function registerReports(app, db, deps) {
     }
   });
 
+  // ── POST /api/reports/generate/:type ───────────────────────────────────────
+  // On-demand report — no schedule involved at all: the admin picks a report
+  // type, a date range, and recipients right in the "דוחות" tab and gets it
+  // sent immediately. Independent of runAndRecord (nothing to record against —
+  // there's no schedule row), independent of computeDateRange (the caller's
+  // fromDate/toDate is used as-is).
+  app.post('/api/reports/generate/:type', requireAdmin, async (req, res) => {
+    const { type } = req.params;
+    const runner = REPORT_RUNNERS[type];
+    if (!runner) return res.status(404).json({ error: `unknown report type "${type}"` });
+    const { recipients, fromDate, toDate } = req.body || {};
+    if (!fromDate || !toDate) return res.status(400).json({ error: 'יש לבחור טווח תאריכים' });
+    try {
+      const result = await runner.sendReport(db, { recipients, fromDate, toDate });
+      if (!result.sent) return res.status(400).json({ error: 'יש להזין נמענים לדוח' });
+      console.log(`[POST /api/reports/generate/${type}] sent ${fromDate}..${toDate} to ${recipients}`);
+      res.json({ ok: true, count: result.count });
+    } catch (err) {
+      console.error(`[POST /api/reports/generate/${type}] failed:`, err.message);
+      res.status(400).json({ error: err.message });
+    }
+  });
+
   return { REPORT_RUNNERS };
 };

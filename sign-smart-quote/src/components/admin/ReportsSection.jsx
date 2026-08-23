@@ -3,6 +3,7 @@ import { Loader2, Truck, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 import { getReportsConfig } from "@/api/reportsClient";
 import ReportCard from "./reports/ReportCard";
+import ManualReportGenerator from "./reports/ManualReportGenerator";
 
 // Every report type this app knows about, in display order. Adding a new
 // report is: a new module under src/services/reports/, one line in
@@ -49,6 +50,7 @@ export default function ReportsSection() {
 
   return (
     <div className="space-y-4">
+      <ManualReportGenerator reportDefs={REPORT_DEFS} />
       <div>
         <h3 className="text-lg font-bold text-slate-800">דוחות מתוזמנים</h3>
         <p className="text-sm text-muted-foreground mt-0.5">

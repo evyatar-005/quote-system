@@ -342,14 +342,20 @@ async function sendReport(db, cfg) {
 
   // The report's own period always matches the schedule that triggered it —
   // a daily schedule reports on today, a monthly one on the last 30 days,
-  // etc. (computeDateRange), never a fixed window independent of frequency.
-  const { fromDate, toDate } = computeDateRange(cfg.frequency, new Date());
+  // etc. (computeDateRange). An on-demand generation (the "דוחות" tab's
+  // manual generator) instead passes an explicit fromDate/toDate with no
+  // frequency — that wins whenever present, so a manually-picked range is
+  // never silently overridden.
+  const { fromDate, toDate } = cfg.fromDate && cfg.toDate
+    ? { fromDate: cfg.fromDate, toDate: cfg.toDate }
+    : computeDateRange(cfg.frequency, new Date());
   const excludeQuoteIds = await fetchCancelledOrderQuoteIds(db, fromDate, toDate);
   const morningOnlyOrders = await fetchMorningOnlyOrders(db, fromDate, toDate);
   const localAgentRows = fetchSalesByAgent(db, fromDate, toDate, excludeQuoteIds);
   const localProductRows = fetchSalesByProduct(db, fromDate, toDate, excludeQuoteIds);
   const { agentRows, productRows } = mergeMorningOnlyOrders(localAgentRows, localProductRows, morningOnlyOrders);
-  const { subject, html, text } = buildEmail(agentRows, productRows, FREQUENCY_LABELS[cfg.frequency] || cfg.frequency, fromDate, toDate);
+  const periodLabel = FREQUENCY_LABELS[cfg.frequency] || cfg.frequency || 'ידני';
+  const { subject, html, text } = buildEmail(agentRows, productRows, periodLabel, fromDate, toDate);
   await mail.sendMail(db, { to: recipients.join(', '), subject, html, text });
   console.log(`[salesReport] sent sales for ${agentRows.length} agent(s)/${productRows.length} product(s), ${fromDate}..${toDate}, to ${recipients.join(', ')}`);
   return { sent: true, count: agentRows.reduce((sum, r) => sum + r.ordersCount, 0) };

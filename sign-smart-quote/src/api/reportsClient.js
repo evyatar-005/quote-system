@@ -82,3 +82,8 @@ export function deleteSchedule(reportType, id) {
 export function sendReportTest(reportType, id) {
   return request(`/api/reports/test/${reportType}/${id}`, { method: 'POST' });
 }
+
+/** On-demand report, no schedule involved: { recipients, fromDate, toDate }. Throws on failure. */
+export function generateReport(reportType, { recipients, fromDate, toDate }) {
+  return request(`/api/reports/generate/${reportType}`, { method: 'POST', body: { recipients, fromDate, toDate } });
+}
