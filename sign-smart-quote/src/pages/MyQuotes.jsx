@@ -31,16 +31,6 @@ import { useAuth } from "@/lib/AuthContext";
 const fmt = (val) =>
   val != null ? `₪ ${Number(val).toLocaleString("he-IL", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : "—";
 
-// Shown instead of the "מורנינג: ..." line when nothing was ever issued —
-// so a quote with no document reads as "not issued yet, here's why", not as
-// a blank line that looks like a loading glitch.
-const NOT_ISSUED_LABELS = {
-  draft: "לא הונפק — טיוטה",
-  sent: "לא הונפק — נוצר לבדיקת הנחה",
-  approved: "לא הונפק — ממתין להנפקה",
-  rejected: "לא הונפק — נדחה",
-};
-
 const TABS = [
   { key: "all", label: "כל ההצעות" },
   { key: "orders", label: "ההזמנות שלי" },
@@ -586,7 +576,15 @@ export default function MyQuotes() {
                               {docIsFromParent && <div className="text-xs text-slate-400">מהצעה המקורית</div>}
                             </>
                           ) : (
-                            <span className="text-slate-400">{NOT_ISSUED_LABELS[q.status || "draft"]}</span>
+                            // No invented "לא הונפק — ..." wording here — when
+                            // there's no Morning document, this shows the exact
+                            // same status pill (label + fixed color) as the
+                            // סטטוס column, from the single shared vocabulary
+                            // in quoteLabels.js. Two columns must never show
+                            // two different words for the same status.
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLORS[q.status || "draft"]}`}>
+                              {STATUS_LABELS[q.status || "draft"]}
+                            </span>
                           )}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap">
