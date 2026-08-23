@@ -41,6 +41,9 @@ function verifyPassword(password, stored) {
 
 function publicUser(u) {
   if (!u) return null;
+  // canAccessCrm mirrors the server-side gate exactly (see server.js): the
+  // flag alone, with no role bypass — so a revoked מנהל מכירות loses the CRM
+  // group from their sidebar too, instead of seeing links that 403.
   return { id: u.id, username: u.username, full_name: u.full_name, email: u.email, role: u.role, mustChangePassword: !!u.must_change_password, canViewCosts: !!u.can_view_costs, canSendCampaigns: !!u.can_send_campaigns, canAccessCrm: !!u.can_access_crm };
 }
 
@@ -304,9 +307,9 @@ module.exports = function registerAuth(app, db) {
   });
 
   // ── Admin user management ─────────────────────────────────────────────────────
-  const allUsers    = db.prepare(`SELECT id, username, full_name, email, role, can_view_costs, can_send_campaigns FROM users ORDER BY id`);
-  const insertUser  = db.prepare(`INSERT INTO users (username, password_hash, full_name, email, role, must_change_password) VALUES (?, ?, ?, ?, ?, 1)`);
-  const updateUser  = db.prepare(`UPDATE users SET full_name = ?, email = ?, role = ?, can_view_costs = ?, can_send_campaigns = ? WHERE id = ?`);
+  const allUsers    = db.prepare(`SELECT id, username, full_name, email, role, can_view_costs, can_send_campaigns, can_access_crm FROM users ORDER BY id`);
+  const insertUser  = db.prepare(`INSERT INTO users (username, password_hash, full_name, email, role, can_access_crm, must_change_password) VALUES (?, ?, ?, ?, ?, ?, 1)`);
+  const updateUser  = db.prepare(`UPDATE users SET full_name = ?, email = ?, role = ?, can_view_costs = ?, can_send_campaigns = ?, can_access_crm = ? WHERE id = ?`);
   const updatePassword = db.prepare(`UPDATE users SET password_hash = ?, must_change_password = 1 WHERE id = ?`);
   const deleteUserStmt = db.prepare(`DELETE FROM users WHERE id = ?`);
   const ROLES = new Set(['admin', 'agent', 'operations']);
@@ -342,7 +345,11 @@ module.exports = function registerAuth(app, db) {
     // New accounts always start with must_change_password = 1 (see insertUser) —
     // the admin-set password here is only ever meant to get the new user to their
     // first real login.
-    const { lastInsertRowid } = insertUser.run(username.trim(), hashPassword(password), full_name, normalizedEmail, role);
+    // A new מנהל מכירות starts with the CRM open — the whole role runs on it,
+    // and a manager who silently can't see it is the exact confusion this
+    // permission caused before it had a toggle. Anyone else starts closed.
+    // Either way it's just the starting value; הגדרות משתמשים owns it after.
+    const { lastInsertRowid } = insertUser.run(username.trim(), hashPassword(password), full_name, normalizedEmail, role, role === 'admin' ? 1 : 0);
     const created = userById.get(lastInsertRowid);
     console.log(`[POST /api/admin/users] id=${created.id} "${created.username}" (${created.role})`);
     res.status(201).json({ user: publicUser(created) });
@@ -370,7 +377,10 @@ module.exports = function registerAuth(app, db) {
     }
     const canViewCosts = req.body.can_view_costs !== undefined ? (req.body.can_view_costs ? 1 : 0) : existing.can_view_costs;
     const canSendCampaigns = req.body.can_send_campaigns !== undefined ? (req.body.can_send_campaigns ? 1 : 0) : existing.can_send_campaigns;
-    updateUser.run(full_name, email, role, canViewCosts, canSendCampaigns, id);
+    // Deliberately not re-derived from `role`: changing someone's role must not
+    // silently hand back CRM access that was revoked on purpose.
+    const canAccessCrm = req.body.can_access_crm !== undefined ? (req.body.can_access_crm ? 1 : 0) : existing.can_access_crm;
+    updateUser.run(full_name, email, role, canViewCosts, canSendCampaigns, canAccessCrm, id);
     const updated = userById.get(id);
     console.log(`[PUT /api/admin/users/${id}] role="${updated.role}"`);
     res.json({ user: publicUser(updated) });

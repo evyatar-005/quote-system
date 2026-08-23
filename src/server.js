@@ -266,20 +266,31 @@ try {
 } catch (_) {}
 
 // Third slice of the granular permission model: who may reach the CRM at all.
-// Default 0 for EVERYONE including admins (unlike can_view_costs/can_send_campaigns,
-// which grandfather admins) — the CRM is being rolled out to one person first, so
-// "closed unless explicitly opened" is the whole point. Grant is by email, the
-// login identity, and re-asserted on every boot so a fresh deploy or a restored
-// database can't lock the owner out of their own system.
+// Decided ONLY by the per-user flag — the admin role does NOT pass implicitly
+// at request time the way requireOperations lets it through. That's what makes
+// the "גישה ל-CRM" toggle in הגדרות משתמשים the single authority: turning it
+// off actually turns it off, for a מנהל מכירות too.
+//
+// Every existing מנהל מכירות is granted ONCE, never re-asserted on boot — a
+// grant that ran on every restart would silently undo whatever was revoked
+// from that screen. can_send_campaigns gets this for free (its UPDATE sits
+// inside the try whose ALTER throws after the first run), but can_access_crm
+// already exists in production, so its ALTER can't be the guard. The marker
+// on crm_settings is.
 const CRM_OWNER_EMAIL = 'evyatar@fibonacci.co.il';
 try { db.exec('ALTER TABLE users ADD COLUMN can_access_crm INTEGER NOT NULL DEFAULT 0'); } catch (_) {}
+try { db.exec('ALTER TABLE crm_settings ADD COLUMN crm_admin_grant_done INTEGER NOT NULL DEFAULT 0'); } catch (_) {}
 try {
-  const { changes } = db.prepare(
-    `UPDATE users SET can_access_crm = 1 WHERE lower(email) = ?`
-  ).run(CRM_OWNER_EMAIL);
-  console.log(`[auth] CRM access granted to ${CRM_OWNER_EMAIL} (${changes} account${changes === 1 ? '' : 's'} matched)`);
+  const marker = db.prepare(`SELECT crm_admin_grant_done AS done FROM crm_settings WHERE id = 1`).get();
+  if (!marker || !marker.done) {
+    const { changes } = db.prepare(
+      `UPDATE users SET can_access_crm = 1 WHERE role = 'admin' OR lower(email) = ?`
+    ).run(CRM_OWNER_EMAIL);
+    db.prepare(`UPDATE crm_settings SET crm_admin_grant_done = 1 WHERE id = 1`).run();
+    console.log(`[auth] CRM access granted to every מנהל מכירות — one-time, ${changes} account${changes === 1 ? '' : 's'}, revocable from הגדרות משתמשים`);
+  }
 } catch (err) {
-  console.error('[auth] CRM owner grant failed:', err.message);
+  console.error('[auth] CRM access grant failed:', err.message);
 }
 
 // crm_settings already existed (Phase 1 CREATE TABLE IF NOT EXISTS), so these
@@ -491,6 +502,8 @@ app.use((req, res, next) => {
   if (CRM_PUBLIC_PATHS.some((p) => path.startsWith(p))) return next();
   const user = userFromRequest(req);
   if (!user) return res.status(401).json({ error: 'unauthorized' });
+  // The flag alone decides — no role bypass, so revoking it from הגדרות
+  // משתמשים is real for every account, מנהל מכירות included.
   if (!user.can_access_crm) {
     return res.status(403).json({ error: 'להרשאת כניסה פנה לאביתר', code: 'crm_forbidden' });
   }
