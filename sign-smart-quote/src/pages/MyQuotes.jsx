@@ -536,12 +536,21 @@ export default function MyQuotes() {
                     // document open/download actions fall back.
                     const alreadyOrder = ownDoc && ownDoc.morning_document_type === MORNING_ORDER_TYPE;
                     const ownDocStatus = docStatusKey(ownDoc);
+                    // "Replaces" is only meaningful in terms of Morning's own
+                    // numbering — our internal quote_number isn't shown
+                    // anywhere in this table, so naming it here would be a
+                    // dangling reference to a number the agent never sees.
+                    // If the replaced quote never got its own Morning
+                    // document, there's nothing to name — the origin badge
+                    // alone still says it's a duplicate/revision.
+                    const parentMorningRef = parentDoc
+                      ? `${MORNING_TYPE_LABELS[parentDoc.morning_document_type] || "מסמך"} #${formatDocNumber(parentDoc.morning_document_number || parentDoc.morning_document_id)}`
+                      : null;
                     return (
                       <tr key={q.id} className="align-top hover:bg-slate-50/60 transition-colors">
                         <td className="px-4 py-3">
                           <div className="font-semibold text-foreground">{q.client_name}</div>
                           <div className="flex items-center gap-1.5 flex-wrap mt-1">
-                            <span className="text-xs text-slate-400 font-mono">{q.quote_number}</span>
                             {/* Only shown once the scope is widened past "just me" —
                                 a manager looking at their own quotes doesn't need
                                 to be told every row is theirs. */}
@@ -559,7 +568,7 @@ export default function MyQuotes() {
                               title={ORIGIN_LABELS[originOf(q)]}
                             >
                               {ORIGIN_LABELS[originOf(q)]}
-                              {q.parent_quote_number && ` — מחליפה את ${q.parent_quote_number}`}
+                              {parentMorningRef && ` — מחליפה את ${parentMorningRef}`}
                             </span>
                           </div>
                         </td>
