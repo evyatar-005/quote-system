@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Search, Loader2, Target, Phone, MessageCircle, AlertTriangle, CalendarClock, Sparkles } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 import { crmLeads, crmAgents, crmCampaignList } from "@/api/crmClient";
@@ -538,8 +538,8 @@ export default function CrmLeads() {
 
 function LeadRow({ l, isAdmin }) {
   const stop = (e) => { e.preventDefault(); e.stopPropagation(); };
+  const navigate = useNavigate();
   const followUp = followUpLabel(l.follow_up_date);
-  const waNumber = l.customer_phone ? l.customer_phone.replace(/\D/g, "") : null;
 
   return (
     <Link
@@ -590,16 +590,19 @@ function LeadRow({ l, isAdmin }) {
               <a href={`tel:${l.customer_phone}`} onClick={stop} title="חיוג" className="text-slate-400 hover:text-primary">
                 <Phone className="w-3 h-3" />
               </a>
-              <a
-                href={`https://wa.me/${waNumber}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                title="וואטסאפ"
+              {/* Opened wa.me — WhatsApp Web in a new tab, outside the system:
+                  nothing logged, no thread, invisible to the next agent. Goes
+                  to the lead's own workspace instead, which opens (or creates)
+                  the conversation and shows it beside the lead's context. Same
+                  fix already applied to the customers list. */}
+              <button
+                type="button"
+                onClick={(e) => { stop(e); navigate(`/crm/leads/${l.id}/workspace`); }}
+                title="פתח שיחת וואטסאפ במערכת"
                 className="text-emerald-600 hover:text-emerald-700"
               >
                 <MessageCircle className="w-3 h-3" />
-              </a>
+              </button>
             </>
           )}
         </div>
