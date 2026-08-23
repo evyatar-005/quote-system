@@ -24,6 +24,25 @@ export default function InforuSettingsSection() {
   const [baseUrl, setBaseUrl] = useState("");
   const [pullEnabled, setPullEnabled] = useState(false);
   const [savingPull, setSavingPull] = useState(false);
+  const [pullStatus, setPullStatus] = useState(null);
+
+  // Inbound is a background poll, so its state changes without anything on
+  // this screen being touched — it has to refresh itself or it shows a stale
+  // "working fine" long after it stopped.
+  const refreshStatus = useCallback(async () => {
+    try {
+      const cfg = await getInforuConfig();
+      setPullStatus(cfg.pull_status || null);
+      setPullEnabled(!!cfg.pull_enabled);
+    } catch {
+      // leave the last known status on screen rather than blanking it
+    }
+  }, []);
+
+  useEffect(() => {
+    const t = setInterval(refreshStatus, 15000);
+    return () => clearInterval(t);
+  }, [refreshStatus]);
 
   const [activeProvider, setActiveProvider] = useState("greenapi");
   const [switchingProvider, setSwitchingProvider] = useState(false);
@@ -56,6 +75,7 @@ export default function InforuSettingsSection() {
         setTokenMasked(cfg.api_token_masked || "");
         setBaseUrl(cfg.base_url || "");
         setPullEnabled(!!cfg.pull_enabled);
+        setPullStatus(cfg.pull_status || null);
       } catch {
         toast.error("שגיאה בטעינת הגדרות InforU");
       }
@@ -184,6 +204,45 @@ export default function InforuSettingsSection() {
             </p>
           </div>
         </div>
+
+        {/* Live state of the inbound poll. Without this the only symptom of a
+            broken pull is "the inbox is quiet", which looks exactly like a
+            genuinely quiet inbox. */}
+        {pullStatus && (
+          <div className="rounded-xl border border-black p-3 space-y-1.5 bg-slate-50">
+            <div className="text-sm font-semibold text-slate-600">מצב קליטת הודעות נכנסות</div>
+
+            {!pullStatus.gates_pass ? (
+              <div className="text-xs text-red-600 font-medium">
+                ⚠ הודעות נכנסות אינן נקלטות כרגע —{" "}
+                {!pullStatus.provider_is_active
+                  ? "InforU אינו הספק הפעיל (ראה ״ספק פעיל״ למטה)"
+                  : !pullEnabled
+                  ? "מתג המשיכה כבוי"
+                  : "חסרים פרטי התחברות (שם משתמש/טוקן)"}
+              </div>
+            ) : pullStatus.last_error ? (
+              <>
+                <div className="text-xs text-red-600 font-medium">⚠ המשיכה האחרונה נכשלה — זו התשובה של InforU:</div>
+                <div className="text-[11px] font-mono bg-white border border-red-200 rounded p-2 text-red-700 break-all" dir="ltr">
+                  {pullStatus.last_error}
+                </div>
+                <div className="text-[11px] text-muted-foreground">
+                  אם מדובר בהרשאה — יש לפנות לתמיכת InforU ולבקש להפעיל PullData לחשבון.
+                </div>
+              </>
+            ) : pullStatus.last_pull_at ? (
+              <div className="text-xs text-emerald-700">
+                ✓ פעיל. משיכה אחרונה: {new Date(pullStatus.last_pull_at.replace(" ", "T") + "Z").toLocaleString("he-IL")}
+                {pullStatus.last_count != null && ` · ${pullStatus.last_count} הודעות נמשכו`}
+              </div>
+            ) : (
+              <div className="text-xs text-amber-600">
+                ההגדרות תקינות, אך טרם בוצעה משיכה. המשיכה רצה כל 10 שניות — יש לרענן בעוד רגע.
+              </div>
+            )}
+          </div>
+        )}
 
         <Button onClick={handleSave} disabled={saving} className="gap-2">
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}

@@ -63,6 +63,7 @@ async function inforuPullTick(db) {
   if (provider.name !== 'inforu' || !provider.isConfigured(db)) return;
 
   inforuPulling = true;
+  let totalPulled = 0;
   try {
     const BATCH_SIZE = 500;
     // Loop until the queue is drained or we hit a safety cap — 5 * 500 = 2500
@@ -87,10 +88,37 @@ async function inforuPullTick(db) {
           console.error('[crm jobs] inforuPull: item failed, continuing with the rest of the batch:', err.message);
         }
       }
+      totalPulled += list.length;
       if (data.Count < BATCH_SIZE) break;
     }
+    // Reached only when every request in the loop came back clean, so this is
+    // the one place that can honestly clear a previous error.
+    recordPullOutcome(db, { error: null, count: totalPulled });
+  } catch (err) {
+    // Re-thrown for the caller's console log, but persisted FIRST — this is
+    // the InforU StatusDescription ("permission not enabled", bad credentials,
+    // a rejected account) that the admin screen needs and that used to exist
+    // only in a terminal nobody reads.
+    recordPullOutcome(db, { error: err.message, count: totalPulled });
+    throw err;
   } finally {
     inforuPulling = false;
+  }
+}
+
+// Never let bookkeeping take the poller down: a failure to write the status is
+// strictly less important than the pull itself continuing to run.
+function recordPullOutcome(db, { error, count }) {
+  try {
+    db.prepare(
+      `UPDATE crm_settings
+          SET inforu_last_pull_at = CURRENT_TIMESTAMP,
+              inforu_last_pull_error = ?,
+              inforu_last_pull_count = ?
+        WHERE id = 1`
+    ).run(error ? String(error).slice(0, 500) : null, count);
+  } catch (err) {
+    console.error('[crm jobs] inforuPull: could not record pull status:', err.message);
   }
 }
 

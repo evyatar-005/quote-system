@@ -13,13 +13,32 @@ module.exports = function registerInforu(app, db, deps) {
 
   app.get('/api/inforu/config', requireAdmin, (req, res) => {
     const row = credRow.get();
-    const settings = db.prepare(`SELECT inforu_pull_enabled FROM crm_settings WHERE id = 1`).get();
+    const settings = db.prepare(
+      `SELECT inforu_pull_enabled, whatsapp_provider,
+              inforu_last_pull_at, inforu_last_pull_error, inforu_last_pull_count
+         FROM crm_settings WHERE id = 1`
+    ).get();
+    const configured = !!(row && row.username && row.api_token);
+    const pullEnabled = !!(settings && settings.inforu_pull_enabled);
+    const isActive = (settings && settings.whatsapp_provider) === 'inforu';
+
+    // The inbound poll is gated on all three of these (see jobs.js
+    // inforuPullTick). Any one of them off means messages are silently NOT
+    // arriving — the screen has to be able to say which, because from the
+    // inbox all three look identical: an empty conversation.
     res.json({
-      configured: !!(row && row.username && row.api_token),
+      configured,
       username: (row && row.username) || '',
       api_token_masked: row && row.api_token ? '••••' + row.api_token.slice(-4) : '',
       base_url: (row && row.base_url) || '',
-      pull_enabled: !!(settings && settings.inforu_pull_enabled),
+      pull_enabled: pullEnabled,
+      pull_status: {
+        provider_is_active: isActive,
+        gates_pass: pullEnabled && isActive && configured,
+        last_pull_at: (settings && settings.inforu_last_pull_at) || null,
+        last_error: (settings && settings.inforu_last_pull_error) || null,
+        last_count: settings ? settings.inforu_last_pull_count : null,
+      },
     });
   });
 

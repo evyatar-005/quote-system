@@ -358,6 +358,17 @@ for (const col of [
   // one process may ever have this on.
   "ALTER TABLE crm_settings ADD COLUMN inforu_pull_enabled INTEGER NOT NULL DEFAULT 0",
 
+  // Outcome of the last inbound pull, so the admin screen can show whether it
+  // is actually working. Until these existed the poll was a black box: an
+  // InforU rejection (StatusDescription — "permission not enabled" and the
+  // like) went to console.error on the server and nowhere else, so a silently
+  // failing pull was indistinguishable from a quiet inbox. Inbound is the one
+  // half of the integration that cannot report its own failure — a send tells
+  // the agent immediately, a pull that never runs tells nobody.
+  "ALTER TABLE crm_settings ADD COLUMN inforu_last_pull_at TEXT",
+  "ALTER TABLE crm_settings ADD COLUMN inforu_last_pull_error TEXT",
+  "ALTER TABLE crm_settings ADD COLUMN inforu_last_pull_count INTEGER",
+
   "ALTER TABLE crm_settings ADD COLUMN agent_signature_enabled  INTEGER NOT NULL DEFAULT 1",
   "ALTER TABLE crm_settings ADD COLUMN agent_signature_template TEXT NOT NULL DEFAULT '*{agent}* מפרינטלה:'",
 
