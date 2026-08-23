@@ -357,11 +357,7 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
   // what the agent saw on screen. Empty fields are skipped entirely — a line
   // never shows "0 אלמנטים" or a dangling "תוספות:".
   //
-  // `itemLabel` is the agent's custom name for the item (the pencil field). Its
-  // tooltip promises it "יופיע בהצעת המחיר", and agents use it for real
-  // production notes ("לשלב PVC לבן עם צביעה בתנור ראל 705"), so it has to
-  // reach Morning — the auto "מוצר N" default is filtered out by the caller.
-  const buildSpecLines = (formData, itemLabel, title) => {
+  const buildSpecLines = (formData, heading) => {
     const lines = [];
 
     // Dimensions · thickness · elements — the compact "measurements" line.
@@ -401,23 +397,18 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
     if (coloredShelfQty > 0) shelves.push(coloredShelfQty === 1 ? "מדף צבעוני אחד ללא חיתוך צורני" : `${coloredShelfQty} מדפים צבעוניים ללא חיתוך צורני`);
     if (shelves.length) lines.push(shelves.join(", "));
 
-    // The agent's own notes go last, on one "הערה:" line — the item name first,
-    // then the line's free text. Deduped against each other and against the
-    // title: for free_product the lineLabel IS the product name (the
-    // description's first line), and agents often repeat the same note in both
+    // The agent's own free text goes last, on one "הערה:" line — deduped
+    // against the heading: for free_product the lineLabel IS the product name
+    // (already the heading), and agents often repeat the same note in both
     // fields; either way it should only ever print once.
     //
     // The "הערה:" prefix isn't decoration. Morning's PDF honours the newlines,
     // but its web preview (and WhatsApp) collapse them into spaces — without a
     // marker the note runs straight into the spec and reads as part of it.
     // Every other line already self-labels ("עובי", "תוספות:"); this one didn't.
-    const notes = [];
-    if (itemLabel?.trim()) notes.push(itemLabel.trim());
-    if (formData?.lineLabel?.trim() && formData?.productType !== "free_product") {
-      notes.push(formData.lineLabel.trim());
+    if (formData?.lineLabel?.trim() && formData?.productType !== "free_product" && formData.lineLabel.trim() !== heading) {
+      lines.push(`הערה: ${formData.lineLabel.trim()}`);
     }
-    const uniqueNotes = [...new Set(notes)].filter((note) => note !== title);
-    if (uniqueNotes.length) lines.push(`הערה: ${uniqueNotes.join(" · ")}`);
 
     return lines;
   };
@@ -431,8 +422,18 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
   const lineTitle = (formData, fallback) =>
     formData?.result?.kapaDescription || formData?.result?.rollupDescription || formData?.result?.glassDescription || fallback;
 
-  const lineDescription = (title, formData, itemLabel) =>
-    [title, ...buildSpecLines(formData, itemLabel, title)].join("\n");
+  // `itemLabel` is the agent's custom name for the item (the pencil field). Its
+  // tooltip promises it "יופיע בהצעת המחיר", and agents use it for real
+  // production notes ("לשלב PVC לבן עם צביעה בתנור ראל 705"), so it has to
+  // reach Morning. It's appended right onto the title line — directly under
+  // the מק"ט in the Morning document — rather than buried in the "הערה:" line
+  // at the bottom with the free-text note, since it's the item's own name,
+  // not a side comment about it. The auto "מוצר N" default is filtered out by
+  // the caller, so this only ever fires for a name the agent actually typed.
+  const lineDescription = (title, formData, itemLabel) => {
+    const heading = itemLabel?.trim() && itemLabel.trim() !== title ? `${title} — ${itemLabel.trim()}` : title;
+    return [heading, ...buildSpecLines(formData, heading)].join("\n");
+  };
 
   // Fixed-price catalog families (kapa/rollup/glass) carry their own per-row
   // SKU on the calc result; everything else uses its static מק"ט from the
