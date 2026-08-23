@@ -232,10 +232,41 @@ export default function InforuSettingsSection() {
                 </div>
               </>
             ) : pullStatus.last_pull_at ? (
-              <div className="text-xs text-emerald-700">
-                ✓ פעיל. משיכה אחרונה: {new Date(pullStatus.last_pull_at.replace(" ", "T") + "Z").toLocaleString("he-IL")}
-                {pullStatus.last_count != null && ` · ${pullStatus.last_count} הודעות נמשכו`}
-              </div>
+              <>
+                <div className="text-xs text-emerald-700">
+                  ✓ פעיל. משיכה אחרונה: {new Date(pullStatus.last_pull_at.replace(" ", "T") + "Z").toLocaleString("he-IL")}
+                  {pullStatus.last_count != null && ` · ${pullStatus.last_count} הודעות נמשכו`}
+                </div>
+                {/* "0 נמשכו" alone can't tell an empty queue from messages we
+                    received and then dropped — both look identical, and the
+                    pull is destructive so the message is gone either way. The
+                    running total is what separates the two. */}
+                <div className="text-[11px] text-muted-foreground">
+                  סה״כ מאז ההפעלה: {pullStatus.total_pulls ?? 0} משיכות ·{" "}
+                  <span className={pullStatus.total_items_ever > 0 ? "text-slate-700 font-semibold" : ""}>
+                    {pullStatus.total_items_ever ?? 0} הודעות התקבלו מ-InforU בסך הכל
+                  </span>
+                </div>
+                {pullStatus.total_items_ever === 0 && (
+                  <div className="text-[11px] text-amber-700">
+                    מעולם לא התקבלה אף הודעה. החיבור תקין — כלומר ההודעות של הלקוחות
+                    לא מגיעות לתור של InforU מלכתחילה. יש לבדוק מול InforU האם הודעות
+                    נכנסות למספר מוגדרות להיכנס לתור המשיכה (ולא נשלחות ל-callback אחר).
+                  </div>
+                )}
+                {pullStatus.last_pull_with_items && (
+                  <details className="text-[11px]">
+                    <summary className="cursor-pointer text-slate-600">
+                      ⚠ התקבלו הודעות אך ייתכן שלא נשמרו — המשיכה האחרונה עם תוכן
+                      ({pullStatus.last_pull_with_items.count} פריטים,{" "}
+                      {new Date(pullStatus.last_pull_with_items.at.replace(" ", "T") + "Z").toLocaleString("he-IL")})
+                    </summary>
+                    <pre className="mt-1 bg-white border border-slate-200 rounded p-2 overflow-auto max-h-52 text-[10px] whitespace-pre-wrap break-all" dir="ltr">
+                      {pullStatus.last_pull_with_items.raw}
+                    </pre>
+                  </details>
+                )}
+              </>
             ) : (
               <div className="text-xs text-amber-600">
                 ההגדרות תקינות, אך טרם בוצעה משיכה. המשיכה רצה כל 10 שניות — יש לרענן בעוד רגע.

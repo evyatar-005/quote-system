@@ -38,9 +38,45 @@ module.exports = function registerInforu(app, db, deps) {
         last_pull_at: (settings && settings.inforu_last_pull_at) || null,
         last_error: (settings && settings.inforu_last_pull_error) || null,
         last_count: settings ? settings.inforu_last_pull_count : null,
+        ...pullHistory(),
       },
     });
   });
+
+  // A pull that succeeds and returns an empty queue is indistinguishable, from
+  // the settings screen, from one that pulled a customer's messages and then
+  // lost them in normalizePullItem/handleInboundEvent — both end at "0 הודעות
+  // נמשכו", because per-item failures only reach console.error and the pull is
+  // DESTRUCTIVE, so the message is already gone from InforU either way.
+  //
+  // inforu_pull_log exists precisely for this: the raw response is written
+  // BEFORE any parsing. This reads it back, which is the difference between
+  // "InforU never had the message" and "we received it and dropped it" — and
+  // in the second case the message text is still recoverable from raw_json.
+  function pullHistory() {
+    try {
+      const totals = db.prepare(
+        `SELECT COUNT(*) AS pulls, COALESCE(SUM(item_count), 0) AS items FROM inforu_pull_log`
+      ).get();
+      const lastWithItems = db.prepare(
+        `SELECT created_at, item_count, raw_json FROM inforu_pull_log
+          WHERE item_count > 0 ORDER BY id DESC LIMIT 1`
+      ).get();
+      return {
+        total_pulls: totals ? totals.pulls : 0,
+        total_items_ever: totals ? totals.items : 0,
+        last_pull_with_items: lastWithItems
+          ? {
+              at: lastWithItems.created_at,
+              count: lastWithItems.item_count,
+              raw: (lastWithItems.raw_json || '').slice(0, 4000),
+            }
+          : null,
+      };
+    } catch (err) {
+      return { pull_history_error: err.message };
+    }
+  }
 
   app.put('/api/inforu/config', requireAdmin, (req, res) => {
     const { username, api_token, base_url, pull_enabled } = req.body || {};
