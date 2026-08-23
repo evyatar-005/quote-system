@@ -422,17 +422,12 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
   const lineTitle = (formData, fallback) =>
     formData?.result?.kapaDescription || formData?.result?.rollupDescription || formData?.result?.glassDescription || fallback;
 
-  // `itemLabel` is the agent's custom name for the item (the pencil field). Its
-  // tooltip promises it "יופיע בהצעת המחיר", and agents use it for real
-  // production notes ("לשלב PVC לבן עם צביעה בתנור ראל 705"), so it has to
-  // reach Morning. It's appended right onto the title line — directly under
-  // the מק"ט in the Morning document — rather than buried in the "הערה:" line
-  // at the bottom with the free-text note, since it's the item's own name,
-  // not a side comment about it. The auto "מוצר N" default is filtered out by
-  // the caller, so this only ever fires for a name the agent actually typed.
-  const lineDescription = (title, formData, itemLabel) => {
-    const heading = itemLabel?.trim() && itemLabel.trim() !== title ? `${title} — ${itemLabel.trim()}` : title;
-    return [heading, ...buildSpecLines(formData, heading)].join("\n");
+  // `itemLabel` is the agent's custom name for the item (the pencil field). It
+  // already reaches Morning via the מק"ט column (see lineSku below), so it's
+  // no longer repeated here in the description heading — showing it in both
+  // columns read as the product name appearing twice on the document.
+  const lineDescription = (title, formData) => {
+    return [title, ...buildSpecLines(formData, title)].join("\n");
   };
 
   // Fixed-price catalog families (kapa/rollup/glass) carry their own per-row
@@ -470,7 +465,6 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
         description: lineDescription(
           isFree ? (formData.lineLabel || "מוצר חופשי") : lineTitle(formData, PRODUCT_NAMES[formData.productType] || formData.productType),
           formData,
-          itemLabel,
         ),
         freeText: formData.lineLabel || "",
         quantity: parseInt(formData.quantity) || 1,
