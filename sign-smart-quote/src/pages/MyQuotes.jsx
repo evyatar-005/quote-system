@@ -512,7 +512,7 @@ export default function MyQuotes() {
                     <th className="text-center font-medium px-4 py-3 border-l border-slate-200">תאריך</th>
                     <th className="text-center font-medium px-4 py-3 border-l border-slate-200">סוג מסמך</th>
                     <th className="text-center font-medium px-4 py-3 border-l border-slate-200">מס&apos; מסמך</th>
-                    <th className="text-right font-medium px-4 py-3 border-l border-slate-200">לקוח</th>
+                    <th className="text-center font-medium px-4 py-3 border-l border-slate-200">לקוח</th>
                     <th className="text-center font-medium px-4 py-3 border-l border-slate-200">סטטוס</th>
                     <th className="text-center font-medium px-4 py-3 border-l border-slate-200">סכום</th>
                     <th className="text-center font-medium px-4 py-3 border-l border-slate-200">מסמך</th>
@@ -556,7 +556,7 @@ export default function MyQuotes() {
                     // reads as the primary action on the row.
                     const actionBtn = "h-8 w-8 shrink-0 flex items-center justify-center rounded-lg border-0 outline-none ring-0 focus:outline-none focus:ring-0 transition-opacity hover:opacity-75 disabled:opacity-50";
                     return (
-                      <tr key={q.id} className="align-top hover:bg-slate-50/60 transition-colors">
+                      <tr key={q.id} className="align-top hover:bg-slate-100/80 transition-colors">
                         <td className="px-4 py-3 whitespace-nowrap text-slate-500 text-center border-l border-slate-100">
                           <span className="flex items-center justify-center gap-1">
                             <Calendar className="w-3 h-3" />
@@ -586,32 +586,18 @@ export default function MyQuotes() {
                             </>
                           )}
                         </td>
-                        <td className="px-4 py-3 border-l border-slate-100">
+                        <td className="px-4 py-3 border-l border-slate-100 text-center">
                           <div className="font-semibold text-foreground">{q.client_name}</div>
-                          <div className="flex items-center gap-1.5 flex-wrap mt-1">
-                            {/* Only shown once the scope is widened past "just me" —
-                                a manager looking at their own quotes doesn't need
-                                to be told every row is theirs. */}
-                            {agentScope && q.created_by && (
+                          {/* Only shown once the scope is widened past "just me" —
+                              a manager looking at their own quotes doesn't need
+                              to be told every row is theirs. */}
+                          {agentScope && q.created_by && (
+                            <div className="mt-1">
                               <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
                                 {sellers[q.created_by] || q.created_by}
                               </span>
-                            )}
-                            {/* Which of the three kinds this row is — shown only
-                                for a duplicate/revision. A plain new quote's
-                                type already reads from the סוג מסמך column now,
-                                so repeating "הצעת מחיר" here would just be the
-                                same word twice under one row. */}
-                            {originOf(q) !== "new" && (
-                              <span
-                                className={`text-xs px-2 py-0.5 rounded-full ${ORIGIN_COLORS[originOf(q)]}`}
-                                title={ORIGIN_LABELS[originOf(q)]}
-                              >
-                                {ORIGIN_LABELS[originOf(q)]}
-                                {parentMorningRef && ` — מחליפה את ${parentMorningRef}`}
-                              </span>
-                            )}
-                          </div>
+                            </div>
+                          )}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-center border-l border-slate-100">
                           {/* Purely the internal review lifecycle — the doc
@@ -621,6 +607,25 @@ export default function MyQuotes() {
                           <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLORS[q.status || "draft"]}`}>
                             {STATUS_LABELS[q.status || "draft"]}
                           </span>
+                          {/* Which of the three kinds this row is — shown only
+                              for a duplicate/revision, right under the status
+                              it actually describes (not under the client name,
+                              which is about who the customer is, not the
+                              quote's lifecycle). A plain new quote's type
+                              already reads from the סוג מסמך column, so
+                              repeating "הצעת מחיר" here would just be the same
+                              word twice on one row. */}
+                          {originOf(q) !== "new" && (
+                            <div className="mt-1">
+                              <span
+                                className={`text-xs px-2 py-0.5 rounded-full ${ORIGIN_COLORS[originOf(q)]}`}
+                                title={ORIGIN_LABELS[originOf(q)]}
+                              >
+                                {ORIGIN_LABELS[originOf(q)]}
+                                {parentMorningRef && ` — מחליפה את ${parentMorningRef}`}
+                              </span>
+                            </div>
+                          )}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-center border-l border-slate-100">
                           <div className="font-bold text-primary tabular-nums">{fmt(q.price_with_vat)}</div>
