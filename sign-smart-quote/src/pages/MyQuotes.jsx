@@ -599,15 +599,15 @@ export default function MyQuotes() {
                       </div>
                       <button
                         onClick={() => {
-                          if (morningDoc?.document_url) {
-                            setPreviewDoc(morningDoc.document_url);
-                          } else if (isAdmin) {
+                          if (isAdmin) {
                             setSelectedQuote(q);
+                          } else if (morningDoc?.document_url) {
+                            setPreviewDoc(morningDoc.document_url);
                           } else {
                             openQuoteDocument(q);
                           }
                         }}
-                        title={morningDoc?.document_url ? "תצוגה מקדימה של מסמך המורנינג" : isAdmin ? "טרם הונפק מסמך — פתיחת ממשק העלויות המלא לעריכה" : "טרם הונפק מסמך — מוצגת התצוגה הפנימית"}
+                        title={isAdmin ? "פתיחת ממשק העלויות והרווחיות המלא לעריכה" : morningDoc?.document_url ? "תצוגה מקדימה של מסמך המורנינג" : "טרם הונפק מסמך — מוצגת התצוגה הפנימית"}
                         className="text-xs px-3 py-1.5 rounded-lg border border-black text-slate-600 hover:border-slate-500 hover:bg-slate-50 transition-colors"
                       >
                         פתח
