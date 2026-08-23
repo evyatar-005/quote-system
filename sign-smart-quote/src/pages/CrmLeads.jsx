@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Search, Loader2, Target, Phone, MessageCircle, AlertTriangle, CalendarClock, Sparkles } from "lucide-react";
+import { Search, Loader2, Target, Phone, MessageCircle, AlertTriangle, CalendarClock, Sparkles, SlidersHorizontal } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 import { crmLeads, crmAgents, crmCampaignList } from "@/api/crmClient";
 import { relativeTime } from "@/lib/leadPriority";
@@ -12,6 +12,7 @@ import {
 import {
   Tooltip, TooltipTrigger, TooltipContent, TooltipProvider,
 } from "@/components/ui/tooltip";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import ManagerSidebar from "@/components/layout/ManagerSidebar";
 import AgentSidebar from "@/components/layout/AgentSidebar";
 import printellaLogo from "@/assets/printella-logo.png";
@@ -47,7 +48,6 @@ const SORTS = [
   { key: "last_activity", label: "פעילות אחרונה" },
   { key: "created", label: "נוצר לאחרונה" },
   { key: "follow_up", label: "פולואפ קרוב" },
-  { key: "value", label: "ערך גבוה" },
   { key: "status", label: "סטטוס" },
 ];
 
@@ -105,6 +105,17 @@ const FILTERS = [
     key: "mine", label: "שלי", params: { assigned_to: "me" },
     hint: "לידים שאתה הנציג המשויך שלהם — גם אם אינך מחזיק בהם משבצת עבודה כרגע.",
   },
+];
+
+// Groups for the filter dropdown. Ordered by what a manager opens the screen
+// for: the two service-debt filters first, then the follow-up calendar, then
+// assignment. Keys not listed here simply don't render, so adding a FILTER
+// entry without placing it is visible immediately rather than silently lost.
+const CHIP_GROUPS = [
+  { label: "כללי", keys: ["open", "all", "stuck"] },
+  { label: "ממתינים לנו", keys: ["awaiting", "awaiting_overdue"] },
+  { label: "פולואפ", keys: ["overdue", "today", "tomorrow", "week", "no_followup"] },
+  { label: "שיוך", keys: ["unassigned", "mine"] },
 ];
 
 // An unanswered message can sit for days — "ממתין 4320 דק׳" is unreadable,
@@ -225,6 +236,10 @@ export default function CrmLeads() {
   };
 
   const chips = useMemo(() => FILTERS.filter((f) => isAdmin || !f.adminOnly), [isAdmin]);
+  const activeChip = useMemo(() => chips.find((f) => f.key === filter), [chips, filter]);
+  // Hidden filters need a visible count, or a campaign left selected quietly
+  // shrinks every list with nothing on screen explaining why.
+  const extraFilterCount = [campaign, assignee, mondayPick].filter(Boolean).length;
 
   const params = useMemo(() => {
     const chip = chips.find((f) => f.key === filter) || chips[0];
@@ -407,95 +422,166 @@ export default function CrmLeads() {
                 className="pr-9"
               />
             </div>
-            {/* Campaign comes FIRST: it picks the monday board, and only then
-                does a real status list exist — every board has its own label
-                bank, so there is no cross-board status vocabulary to offer. */}
-            <Select value={campaign || "any"} onValueChange={(v) => setCampaign(v === "any" ? "" : v)}>
-              <SelectTrigger dir="rtl" className="w-[200px]"><SelectValue placeholder="קמפיין" /></SelectTrigger>
-              <SelectContent dir="rtl">
-                <SelectItem value="any">כל הקמפיינים</SelectItem>
-                {campaigns.map((c) => (
-                  <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            {campaign && mondayCols.length > 0 ? (
-              // Real monday values for this board, grouped by their column and
-              // labelled with how many leads actually carry each one.
-              <Select value={mondayPick || "any"} onValueChange={(v) => setMondayPick(v === "any" ? "" : v)}>
-                <SelectTrigger dir="rtl" className="w-[250px]"><SelectValue placeholder="סטטוס במנדיי" /></SelectTrigger>
-                <SelectContent dir="rtl" className="max-h-[360px]">
-                  <SelectItem value="any">כל הסטטוסים</SelectItem>
-                  {mondayCols.map((col) => (
-                    <SelectGroup key={col.column_id}>
-                      <SelectLabel className="text-[11px] text-slate-400">{col.title}</SelectLabel>
-                      {col.values.map((v) => (
-                        <SelectItem key={`${col.column_id}|${v.label}`} value={`${col.column_id}|${v.label}`}>
-                          {v.label} <span className="text-slate-400">({v.n})</span>
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : (
-              // No campaign picked — fall back to the system's own 6 statuses,
-              // the only vocabulary shared by every board.
-              <Select value={status || "any"} onValueChange={(v) => setStatus(v === "any" ? "" : v)}>
-                <SelectTrigger dir="rtl" className="w-[190px]"><SelectValue placeholder="סטטוס" /></SelectTrigger>
-                <SelectContent dir="rtl">
-                  <SelectItem value="any">כל הסטטוסים</SelectItem>
-                  {Object.entries(STATUS_LABELS).map(([k, label]) => (
-                    <SelectItem key={k} value={k}>{label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-            {isAdmin && (
-              <Select value={assignee || "any"} onValueChange={(v) => setAssignee(v === "any" ? "" : v)}>
-                <SelectTrigger dir="rtl" className="w-[180px]"><SelectValue placeholder="נציג" /></SelectTrigger>
-                <SelectContent dir="rtl">
-                  <SelectItem value="any">כל הנציגים</SelectItem>
-                  <SelectItem value="unassigned">טרם שויך לנציג</SelectItem>
-                  {agents.map((a) => (
-                    <SelectItem key={a.username} value={a.username}>{a.full_name || a.username}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
+            {/* Sort is the only always-visible control besides search and the
+                filter below: it is not a filter, it never hides rows, and it is
+                useful in every view. Campaign / agent / monday-status moved
+                into "עוד מסננים" — each is reached occasionally, and together
+                they made a seven-control bar that buried the table. */}
             <Select value={sort} onValueChange={setSort}>
               <SelectTrigger dir="rtl" className="w-[180px]"><SelectValue /></SelectTrigger>
               <SelectContent dir="rtl">
                 {SORTS.map((s) => <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>)}
               </SelectContent>
             </Select>
+
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-1.5 h-10">
+                  <SlidersHorizontal className="w-4 h-4" />
+                  עוד מסננים
+                  {/* A count, because these are now hidden: a campaign left
+                      selected would otherwise silently shrink every list with
+                      nothing on screen to explain why. */}
+                  {extraFilterCount > 0 && (
+                    <span className="text-[10px] font-bold rounded-full bg-primary text-primary-foreground px-1.5 py-0.5">
+                      {extraFilterCount}
+                    </span>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent dir="rtl" align="start" className="w-[300px] space-y-3">
+                {/* Campaign comes FIRST: it picks the monday board, and only
+                    then does a real status list exist — every board has its own
+                    label bank, so there is no cross-board status vocabulary. */}
+                <div className="space-y-1.5">
+                  <label className="text-xs text-slate-500">קמפיין</label>
+                  <Select value={campaign || "any"} onValueChange={(v) => setCampaign(v === "any" ? "" : v)}>
+                    <SelectTrigger dir="rtl"><SelectValue placeholder="קמפיין" /></SelectTrigger>
+                    <SelectContent dir="rtl">
+                      <SelectItem value="any">כל הקמפיינים</SelectItem>
+                      {campaigns.map((c) => (
+                        <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {campaign && mondayCols.length > 0 && (
+                  <div className="space-y-1.5">
+                    <label className="text-xs text-slate-500">סטטוס במנדיי</label>
+                    <Select value={mondayPick || "any"} onValueChange={(v) => setMondayPick(v === "any" ? "" : v)}>
+                      <SelectTrigger dir="rtl"><SelectValue placeholder="סטטוס במנדיי" /></SelectTrigger>
+                      <SelectContent dir="rtl" className="max-h-[360px]">
+                        <SelectItem value="any">כל הסטטוסים</SelectItem>
+                        {mondayCols.map((col) => (
+                          <SelectGroup key={col.column_id}>
+                            <SelectLabel className="text-[11px] text-slate-400">{col.title}</SelectLabel>
+                            {col.values.map((v) => (
+                              <SelectItem key={`${col.column_id}|${v.label}`} value={`${col.column_id}|${v.label}`}>
+                                {v.label} <span className="text-slate-400">({v.n})</span>
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {isAdmin && (
+                  <div className="space-y-1.5">
+                    <label className="text-xs text-slate-500">נציג</label>
+                    <Select value={assignee || "any"} onValueChange={(v) => setAssignee(v === "any" ? "" : v)}>
+                      <SelectTrigger dir="rtl"><SelectValue placeholder="נציג" /></SelectTrigger>
+                      <SelectContent dir="rtl">
+                        <SelectItem value="any">כל הנציגים</SelectItem>
+                        <SelectItem value="unassigned">טרם שויך לנציג</SelectItem>
+                        {agents.map((a) => (
+                          <SelectItem key={a.username} value={a.username}>{a.full_name || a.username}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {extraFilterCount > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => { setCampaign(""); setAssignee(""); setMondayPick(""); }}
+                  >
+                    נקה מסננים
+                  </Button>
+                )}
+              </PopoverContent>
+            </Popover>
           </div>
 
-          <div ref={listRef} className="flex flex-wrap items-center gap-2 scroll-mt-24">
-            {/* delayDuration 200 so hovering across the row to reach a chip
-                doesn't flash a tooltip for each one on the way. */}
-            <TooltipProvider delayDuration={200}>
-              {chips.map((f) => (
-                <Tooltip key={f.key}>
+          {/* Twelve chips in a wrapping row pushed the table below the fold and
+              gave every filter the same visual weight, so the two a manager
+              actually opens on ("פולואפ באיחור", "בהמתנה לתשובה") were no
+              easier to find than "ללא פולואפ". They are one grouped dropdown
+              now; the tiles above are the fast path to the urgent ones. */}
+          <div ref={listRef} className="flex flex-wrap items-center gap-3 scroll-mt-24">
+            {/* One control for "which leads am I looking at". The 6 lead
+                statuses were a second dropdown next to this one, which is the
+                same question asked twice — picking a status is just another way
+                to narrow the list. Values are prefixed so the two vocabularies
+                can share one <Select> without colliding: f: = a named server
+                query, s: = a lead status. Picking a status drops the named
+                filter to "all", otherwise "פתוחים" + "זכינו" would contradict
+                each other and always return nothing. */}
+            <Select
+              value={status ? `s:${status}` : `f:${filter}`}
+              onValueChange={(v) => {
+                if (v.startsWith("s:")) { setStatus(v.slice(2)); setFilter("all"); }
+                else { setFilter(v.slice(2)); setStatus(""); }
+              }}
+            >
+              <SelectTrigger dir="rtl" className="w-[220px]"><SelectValue /></SelectTrigger>
+              <SelectContent dir="rtl" className="max-h-[420px]">
+                {CHIP_GROUPS.map((group) => {
+                  const items = group.keys
+                    .map((k) => chips.find((c) => c.key === k))
+                    .filter(Boolean);
+                  if (!items.length) return null;
+                  return (
+                    <SelectGroup key={group.label}>
+                      <SelectLabel className="text-[11px] text-slate-400">{group.label}</SelectLabel>
+                      {items.map((f) => (
+                        <SelectItem key={f.key} value={`f:${f.key}`}>{f.label}</SelectItem>
+                      ))}
+                    </SelectGroup>
+                  );
+                })}
+                <SelectGroup>
+                  <SelectLabel className="text-[11px] text-slate-400">סטטוס הליד</SelectLabel>
+                  {Object.entries(STATUS_LABELS).map(([k, label]) => (
+                    <SelectItem key={k} value={`s:${k}`}>{label}</SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+
+            {/* The chosen filter's rule, spelled out. It used to be a tooltip
+                per chip; inside a dropdown there is nowhere to hover, and these
+                rules ("תקועים" especially) are not guessable. */}
+            {activeChip?.hint && (
+              <TooltipProvider delayDuration={200}>
+                <Tooltip>
                   <TooltipTrigger asChild>
-                    <button
-                      onClick={() => setFilter(f.key)}
-                      className={`text-xs rounded-full px-3 py-1 border transition-colors ${
-                        filter === f.key
-                          ? "bg-primary text-primary-foreground border-primary font-semibold"
-                          : "bg-white text-slate-600 border-slate-300 hover:bg-slate-50"
-                      }`}
-                    >
-                      {f.label}
-                    </button>
+                    <span className="text-[11px] text-slate-400 max-w-[420px] truncate cursor-help">
+                      {activeChip.hint}
+                    </span>
                   </TooltipTrigger>
                   <TooltipContent dir="rtl" side="bottom" className="max-w-[320px] text-xs leading-relaxed">
-                    {f.hint}
+                    {activeChip.hint}
                   </TooltipContent>
                 </Tooltip>
-              ))}
-            </TooltipProvider>
+              </TooltipProvider>
+            )}
+
             {!loading && <span className="text-xs text-slate-400 mr-auto">נמצאו {total} לידים</span>}
           </div>
 
@@ -509,13 +595,12 @@ export default function CrmLeads() {
           ) : (
             <>
               <div className={`border border-black rounded-xl divide-y divide-slate-200 overflow-hidden bg-white transition-opacity ${busy ? "opacity-50" : ""}`}>
-                <div className="hidden xl:grid grid-cols-[minmax(0,2fr)_120px_140px_140px_120px_100px_minmax(0,1fr)] gap-4 px-4 py-2 bg-slate-50 text-[11px] font-semibold text-slate-500">
+                <div className="hidden xl:grid grid-cols-[minmax(0,2fr)_120px_140px_140px_120px_minmax(0,1fr)] gap-4 px-4 py-2 bg-slate-50 text-[11px] font-semibold text-slate-500">
                   <span>לקוח</span>
                   <span>סטטוס</span>
                   <span>{isAdmin ? "סוכן מטפל" : "בטיפול"}</span>
                   <span>פעילות אחרונה</span>
                   <span>פולואפ</span>
-                  <span>ערך</span>
                   <span>קמפיין</span>
                 </div>
                 {leads.map((l) => <LeadRow key={l.id} l={l} isAdmin={isAdmin} />)}
@@ -544,7 +629,7 @@ function LeadRow({ l, isAdmin }) {
   return (
     <Link
       to={`/crm/leads/${l.id}/workspace`}
-      className="grid grid-cols-1 xl:grid-cols-[minmax(0,2fr)_120px_140px_140px_120px_100px_minmax(0,1fr)] gap-2 xl:gap-4 xl:items-center px-4 py-3 hover:bg-slate-50 transition-colors"
+      className="grid grid-cols-1 xl:grid-cols-[minmax(0,2fr)_120px_140px_140px_120px_minmax(0,1fr)] gap-2 xl:gap-4 xl:items-center px-4 py-3 hover:bg-slate-50 transition-colors"
     >
       <div className="min-w-0">
         <div className="flex items-center gap-2">
@@ -635,12 +720,6 @@ function LeadRow({ l, isAdmin }) {
             <span dir="ltr">{followUp.txt}</span>
           </span>
         ) : <span className="text-slate-300 hidden xl:inline">—</span>}
-      </div>
-
-      <div className="text-xs text-slate-600">
-        {l.value_estimate != null
-          ? `₪ ${Number(l.value_estimate).toLocaleString("he-IL")}`
-          : <span className="text-slate-300 hidden xl:inline">—</span>}
       </div>
 
       <div className="text-xs text-slate-400 truncate">{l.campaign_name || "—"}</div>
