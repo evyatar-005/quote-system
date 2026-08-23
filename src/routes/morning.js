@@ -203,6 +203,14 @@ module.exports = function registerMorning(app, db, deps) {
     res.json(sync.getLatestDocuments(db, ids));
   });
 
+  // ── GET /api/morning/quotes/payment-status?ids=1,2,3 ──────────────────────
+  // Batched latest-payment-status lookup for the quotes list — same shape/
+  // purpose as /quotes/documents above, keyed by quote_id.
+  app.get('/api/morning/quotes/payment-status', requireAuth, (req, res) => {
+    const ids = (req.query.ids || '').split(',').map(s => parseInt(s, 10)).filter(Number.isInteger);
+    res.json(sync.getLatestPaymentStatuses(db, ids));
+  });
+
   // ── GET /api/morning/direct-activity?fromDate=&toDate= ────────────────────
   // Quotes and orders issued straight from Morning, with no quote in this
   // system behind them. The analytics screen renders these as a synthetic

@@ -391,6 +391,23 @@ function getLatestDocuments(db, quoteIds) {
   return byQuoteId;
 }
 
+// Latest payment-link status per quote — powers a persistent "שולם"/"טרם
+// שולם" column in the quotes list, instead of the payment_received
+// notification being the only place a payment ever shows (that notification
+// is transient and easy to lose once cleared).
+function getLatestPaymentStatuses(db, quoteIds) {
+  if (!Array.isArray(quoteIds) || quoteIds.length === 0) return {};
+  const placeholders = quoteIds.map(() => '?').join(',');
+  const rows = db.prepare(
+    `SELECT * FROM morning_payment_requests
+     WHERE quote_id IN (${placeholders})
+     AND id IN (SELECT MAX(id) FROM morning_payment_requests WHERE quote_id IN (${placeholders}) GROUP BY quote_id)`
+  ).all(...quoteIds, ...quoteIds);
+  const byQuoteId = {};
+  for (const row of rows) byQuoteId[row.quote_id] = row;
+  return byQuoteId;
+}
+
 function getHistory(db, quoteId) {
   return {
     documents: db.prepare(`SELECT * FROM morning_documents_map WHERE quote_id = ? ORDER BY id`).all(quoteId),
@@ -429,4 +446,4 @@ async function closeSupersededQuoteDocument(db, parentQuoteId) {
   }
 }
 
-module.exports = { ensureMorningClient, createOrConvertDocument, createPaymentForm, handlePaymentReceived, getHistory, buildIncomeRows, searchClients, createClient, getLatestDocuments, closeSupersededQuoteDocument };
+module.exports = { ensureMorningClient, createOrConvertDocument, createPaymentForm, handlePaymentReceived, getHistory, buildIncomeRows, searchClients, createClient, getLatestDocuments, getLatestPaymentStatuses, closeSupersededQuoteDocument };

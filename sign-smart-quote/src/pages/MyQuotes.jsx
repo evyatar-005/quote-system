@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
-import { convertMorningDocument, createPaymentLink, getLatestMorningDocuments } from "@/api/morningClient";
+import { convertMorningDocument, createPaymentLink, getLatestMorningDocuments, getLatestPaymentStatuses } from "@/api/morningClient";
 import QuoteDocument from "@/components/calculator/QuoteDocument";
 import QuoteDetailsModal from "@/components/QuoteDetailsModal";
 import DocumentIssuedModal from "@/components/DocumentIssuedModal";
@@ -45,6 +45,7 @@ export default function MyQuotes() {
   const [quotes, setQuotes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [morningDocs, setMorningDocs] = useState({});
+  const [paymentStatuses, setPaymentStatuses] = useState({});
   // Manager-only: who this list is scoped to. "" (default) = just me, exactly
   // like every non-admin sees; a username scopes to that one agent; "__all__"
   // drops the scope entirely. Never persisted — a manager opening this screen
@@ -85,6 +86,11 @@ export default function MyQuotes() {
         setMorningDocs(await getLatestMorningDocuments(data.map((q) => q.id)));
       } catch {
         // Morning not configured / unreachable — the list still works without it.
+      }
+      try {
+        setPaymentStatuses(await getLatestPaymentStatuses(data.map((q) => q.id)));
+      } catch {
+        // Same as above — the payment column just shows "—" for everyone.
       }
     }
     setLoading(false);
@@ -516,6 +522,7 @@ export default function MyQuotes() {
                     <th className="text-center font-medium px-4 py-3 border-l border-slate-200">מס&apos; מסמך</th>
                     <th className="text-center font-medium px-4 py-3 border-l border-slate-200">לקוח</th>
                     <th className="text-center font-medium px-4 py-3 border-l border-slate-200">סטטוס</th>
+                    <th className="text-center font-medium px-4 py-3 border-l border-slate-200">תשלום</th>
                     <th className="text-center font-medium px-4 py-3 border-l border-slate-200">סכום</th>
                     <th className="text-center font-medium px-4 py-3 border-l border-slate-200">מסמך</th>
                     <th className="text-center font-medium px-4 py-3">פעולות</th>
@@ -543,6 +550,7 @@ export default function MyQuotes() {
                     // THIS quote, never borrowed from the parent — only the
                     // document open/download actions fall back.
                     const alreadyOrder = ownDoc && ownDoc.morning_document_type === MORNING_ORDER_TYPE;
+                    const paymentStatus = paymentStatuses[q.id];
                     // "Replaces" is only meaningful in terms of Morning's own
                     // numbering — our internal quote_number isn't shown
                     // anywhere in this table, so naming it here would be a
@@ -644,6 +652,31 @@ export default function MyQuotes() {
                                 {ORIGIN_LABELS[originOf(q)]}
                               </span>
                             </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-center border-l border-slate-100">
+                          {paymentStatus?.status === "paid" ? (
+                            <div className="flex flex-col items-center gap-0.5">
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600">שולם</span>
+                              {paymentStatus.receipt_url ? (
+                                <a
+                                  href={paymentStatus.receipt_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-xs text-slate-400 hover:text-slate-600 underline"
+                                >
+                                  הורד קבלה
+                                </a>
+                              ) : (
+                                <span className="text-xs text-slate-400" title="הקבלה עדיין לא זוהתה במורנינג">
+                                  קבלה בהמתנה
+                                </span>
+                              )}
+                            </div>
+                          ) : paymentStatus?.status === "pending" ? (
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-600">ממתין לתשלום</span>
+                          ) : (
+                            <span className="text-xs text-slate-300">—</span>
                           )}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-center border-l border-slate-100">

@@ -132,6 +132,15 @@ export async function getLatestMorningDocuments(quoteIds) {
 }
 
 /**
+ * Latest payment-link status per quote id: { [quoteId]: { status, amount,
+ * paid_at, receipt_url, receipt_number } }. `status` is 'pending' or 'paid';
+ * a quote with no payment link at all is simply absent from the map.
+ */
+export async function getLatestPaymentStatuses(quoteIds) {
+  return request(`/api/morning/quotes/payment-status?ids=${quoteIds.join(',')}`);
+}
+
+/**
  * Quotes/orders issued straight from Morning, with no quote in this system
  * behind them: { quotesCount, ordersCount, ordersRevenue, orders[] }.
  * Revenue only — those documents carry no cost breakdown of ours, so there is
