@@ -23,6 +23,7 @@ export default function InforuSettingsSection() {
   const [tokenMasked, setTokenMasked] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [pullEnabled, setPullEnabled] = useState(false);
+  const [savingPull, setSavingPull] = useState(false);
 
   const [activeProvider, setActiveProvider] = useState("greenapi");
   const [switchingProvider, setSwitchingProvider] = useState(false);
@@ -67,6 +68,33 @@ export default function InforuSettingsSection() {
       setLoading(false);
     })();
   }, []);
+
+  // The toggle saves itself the moment it moves, and shows the value the
+  // SERVER came back with — not the one that was clicked.
+  //
+  // It used to be plain local state that only reached the server if you then
+  // remembered to press "שמור" in this card. This panel has a second, unrelated
+  // "שמור הגדרות" button at the top of the page, so switching the toggle and
+  // saving from there looked completely successful and silently discarded the
+  // change — the toggle was back to off after a refresh, with no error anywhere.
+  // A switch that needs a separate save is the bug; this removes the gap.
+  const togglePull = async (next) => {
+    const previous = pullEnabled;
+    setPullEnabled(next); // optimistic — reverted below if the server disagrees
+    setSavingPull(true);
+    try {
+      // pull_enabled ONLY: every credential field is keep-on-omit server-side,
+      // so this can never blank the username or token that are already stored.
+      const saved = await saveInforuConfig({ pull_enabled: next });
+      const actual = saved?.pull_enabled ?? next;
+      setPullEnabled(actual);
+      toast.success(actual ? "משיכת הודעות נכנסות הופעלה" : "משיכת הודעות נכנסות כובתה");
+    } catch (err) {
+      setPullEnabled(previous);
+      toast.error(err?.message || "שמירת המתג נכשלה");
+    }
+    setSavingPull(false);
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -147,8 +175,9 @@ export default function InforuSettingsSection() {
           </div>
           <div className="space-y-1.5 flex flex-col justify-center">
             <label className="text-sm font-semibold text-slate-600 flex items-center gap-2">
-              <Switch checked={pullEnabled} onCheckedChange={setPullEnabled} />
+              <Switch checked={pullEnabled} onCheckedChange={togglePull} disabled={savingPull} />
               משיכת הודעות נכנסות
+              {savingPull && <Loader2 className="w-3.5 h-3.5 animate-spin text-slate-400" />}
             </label>
             <p className="text-xs text-muted-foreground">
               קריאה הרסנית מהתור של InforU — יש להדליק רק במופע אחד בכל רגע נתון, ורק אחרי שהתמיכה של InforU אישרה שהתור מופעל
