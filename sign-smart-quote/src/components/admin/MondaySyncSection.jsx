@@ -37,6 +37,18 @@ export default function MondaySyncSection() {
   const [editColumns, setEditColumns] = useState([]);
   const [editQuoteFileCol, setEditQuoteFileCol] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
+  // Status and follow-up could only ever be chosen while FIRST mapping a board.
+  // Once it was in the list there was no way back in — the only edit button
+  // covered the quote-file column — so a board mapped without them stayed
+  // permanently unable to push status or pull follow-up dates. All five boards
+  // here are in exactly that state. These make an existing map fully editable.
+  const [editStatusCol, setEditStatusCol] = useState("");
+  const [editStatusWon, setEditStatusWon] = useState("");
+  const [editStatusLost, setEditStatusLost] = useState("");
+  const [editStatusQuoted, setEditStatusQuoted] = useState("");
+  const [editFollowUpCol, setEditFollowUpCol] = useState("");
+  const [editPhoneCol, setEditPhoneCol] = useState("");
+  const [editEmailCol, setEditEmailCol] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -145,6 +157,15 @@ export default function MondaySyncSection() {
       setEditColumns(columns);
       const existing = JSON.parse(board.column_map || "{}");
       setEditQuoteFileCol(existing.quote_file || "");
+      setEditPhoneCol(existing.phone || "");
+      setEditEmailCol(existing.email || "");
+      setEditFollowUpCol(existing.follow_up || "");
+      setEditStatusCol(board.status_column_id || "");
+      let sv = {};
+      try { sv = JSON.parse(board.status_values || "{}"); } catch (_) { sv = {}; }
+      setEditStatusWon(sv.won || "");
+      setEditStatusLost(sv.lost || "");
+      setEditStatusQuoted(sv.quoted || "");
     } catch (err) {
       toast.error(err.message || "טעינת העמודות מהבורד נכשלה");
     }
@@ -154,7 +175,23 @@ export default function MondaySyncSection() {
     setSavingEdit(true);
     try {
       const existing = JSON.parse(board.column_map || "{}");
-      await mondaySync.updateBoardMap(board.id, { column_map: { ...existing, quote_file: editQuoteFileCol || undefined } });
+      // Spread `existing` first so any key this form doesn't expose (name, and
+      // anything added later) survives the round-trip instead of being dropped.
+      await mondaySync.updateBoardMap(board.id, {
+        column_map: {
+          ...existing,
+          quote_file: editQuoteFileCol || undefined,
+          phone: editPhoneCol || undefined,
+          email: editEmailCol || undefined,
+          follow_up: editFollowUpCol || undefined,
+        },
+        status_column_id: editStatusCol || null,
+        status_values: {
+          won: editStatusWon || undefined,
+          lost: editStatusLost || undefined,
+          quoted: editStatusQuoted || undefined,
+        },
+      });
       toast.success("המיפוי עודכן");
       setEditingId(null);
       load();
@@ -235,23 +272,52 @@ export default function MondaySyncSection() {
                   <div className="flex items-center gap-1 shrink-0">
                     <Button size="sm" variant="outline" onClick={() => pullNow(b.id)} className="gap-1"><RefreshCw className="w-3.5 h-3.5" />משוך</Button>
                     <Button size="sm" variant="outline" onClick={() => pushNow(b.id)} className="gap-1">דחוף סטטוס</Button>
-                    <Button size="sm" variant="outline" onClick={() => startEdit(b)}>ערוך מיפוי קובץ</Button>
+                    <Button size="sm" variant="outline" onClick={() => startEdit(b)}>ערוך מיפוי</Button>
                     <Button size="sm" variant="ghost" onClick={() => removeMap(b.id)}><Trash2 className="w-3.5 h-3.5 text-red-500" /></Button>
                   </div>
                 </div>
                 {editingId === b.id && (
-                  <div className="flex items-end gap-2 border-t border-slate-100 pt-2">
+                  <div className="border-t border-slate-100 pt-3 space-y-3">
                     {editColumns.length === 0 ? (
                       <Loader2 className="w-4 h-4 animate-spin text-slate-400" />
                     ) : (
                       <>
-                        <div className="flex-1">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                          <ColumnPicker label="עמודת טלפון" columns={editColumns} value={editPhoneCol} onChange={setEditPhoneCol} />
+                          <ColumnPicker label="עמודת אימייל" columns={editColumns} value={editEmailCol} onChange={setEditEmailCol} />
                           <ColumnPicker label="עמודת קובץ הצעת מחיר" columns={editColumns} value={editQuoteFileCol} onChange={setEditQuoteFileCol} />
+                          {/* Pull-side: what fills the lead's follow_up_date, which
+                              is what the "פולואפ באיחור" tile counts. Unmapped =
+                              the date on the board is never read at all. */}
+                          <ColumnPicker label="עמודת תאריך פולואפ" columns={editColumns} value={editFollowUpCol} onChange={setEditFollowUpCol} />
                         </div>
-                        <Button size="sm" onClick={() => saveEdit(b)} disabled={savingEdit}>
-                          {savingEdit ? <Loader2 className="w-4 h-4 animate-spin" /> : "שמור"}
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}>ביטול</Button>
+
+                        <div className="border-t border-slate-100 pt-3 space-y-3">
+                          <div className="text-xs font-semibold text-slate-600">
+                            דחיפת סטטוס חזרה ל-monday
+                          </div>
+                          <ColumnPicker label="עמודת הסטטוס בבורד" columns={editColumns} value={editStatusCol} onChange={setEditStatusCol} />
+                          {editStatusCol && (() => {
+                            const statusLabels = editColumns.find((c) => c.id === editStatusCol)?.labels || [];
+                            return (
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                <StatusValuePicker label='ערך הסטטוס עבור "זכינו"' labels={statusLabels} value={editStatusWon} onChange={setEditStatusWon} />
+                                <StatusValuePicker label='ערך הסטטוס עבור "אבדנו"' labels={statusLabels} value={editStatusLost} onChange={setEditStatusLost} />
+                                <StatusValuePicker label='ערך הסטטוס עבור "נשלחה הצעה"' labels={statusLabels} value={editStatusQuoted} onChange={setEditStatusQuoted} />
+                              </div>
+                            );
+                          })()}
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <Button size="sm" onClick={() => saveEdit(b)} disabled={savingEdit}>
+                            {savingEdit ? <Loader2 className="w-4 h-4 animate-spin" /> : "שמור"}
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}>ביטול</Button>
+                          <span className="text-[11px] text-muted-foreground">
+                            תאריכי פולואפ קיימים ייכנסו במשיכה הבאה — אפשר ללחוץ ״משוך״ מיד אחרי השמירה.
+                          </span>
+                        </div>
                       </>
                     )}
                   </div>
