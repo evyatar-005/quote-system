@@ -438,13 +438,18 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
   // Fixed-price catalog families (kapa/rollup/glass) carry their own per-row
   // SKU on the calc result; everything else uses its static מק"ט from the
   // picker (same code shown next to the product everywhere in the UI). Just
-  // the bare code — the product name already opens the description (`lineTitle`
-  // above), so repeating it in the מק"ט column would show it twice.
-  const lineSku = (formData) => {
+  // the bare code — the product category name already opens the description
+  // (`lineTitle` above), so repeating IT in the מק"ט column would show it
+  // twice. The agent's own item name (itemLabel) is different: Morning's
+  // מק"ט column is the one thing visible in narrow views/exports without
+  // opening the row, so it needs to carry the name too, not just the
+  // description heading.
+  const lineSku = (formData, itemLabel) => {
     if (formData?.productType === "free_product") return null;
     const code = formData?.result?.kapaSku || formData?.result?.rollupSku || formData?.result?.glassSku
       || PRODUCT_CODES[formData?.productType] || null;
-    return code || null;
+    if (!code) return null;
+    return itemLabel?.trim() ? `${code} · ${itemLabel.trim()}` : code;
   };
 
   const buildLineItems = () => {
@@ -459,7 +464,7 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
       // name the one item, and that note is just as real.
       const itemLabel = itemLabels[item.id]?.trim() || "";
       const isFree = formData.productType === "free_product";
-      const sku = lineSku(formData);
+      const sku = lineSku(formData, itemLabel);
       lines.push({
         groupLabel,
         description: lineDescription(
@@ -506,7 +511,7 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
           freeText: row.lineLabel || "",
           quantity: parseInt(row.quantity) || 1,
           unitPrice: row.result.sellingPricePerUnit ?? 0,
-          sku: lineSku(formData),
+          sku: lineSku(formData, itemLabel),
         });
       });
     });
