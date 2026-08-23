@@ -367,7 +367,12 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
     // Dimensions · thickness · elements — the compact "measurements" line.
     const head = [];
     if (formData?.widthM && formData?.heightM) head.push(`${formData.widthM}×${formData.heightM} מ׳`);
-    if (formData?.thicknessMm) head.push(`עובי ${formData.thicknessMm} מ"מ`);
+    // Lokobond and PVC carpet never show a thickness picker — thicknessMm on
+    // those is a fixed internal price-tier key, not a customer-facing spec.
+    const NO_THICKNESS_SPEC_TYPES = ["lokobond_diecut", "lokobond_plain", "pvc_carpet"];
+    if (formData?.thicknessMm && !NO_THICKNESS_SPEC_TYPES.includes(formData?.productType)) {
+      head.push(`עובי ${formData.thicknessMm} מ"מ`);
+    }
     const elements = parseInt(formData?.elements) || 0;
     if (elements > 0) head.push(elements === 1 ? "אלמנט אחד" : `${elements} אלמנטים`);
     if (head.length) lines.push(head.join(" · "));
