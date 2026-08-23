@@ -373,11 +373,6 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
     if (elements > 0) head.push(elements === 1 ? "אלמנט אחד" : `${elements} אלמנטים`);
     if (head.length) lines.push(head.join(" · "));
 
-    const extras = (formData?.extras || [])
-      .map((key) => EXTRAS_OPTIONS.find((o) => o.key === key)?.label)
-      .filter(Boolean);
-    if (extras.length) lines.push(`תוספות: ${extras.join(", ")}`);
-
     // Stickers only — region is meaningless (and not asked for) without installation.
     if (formData?.includeInstallation === "yes") {
       lines.push(`כולל התקנה${formData.region ? ` (${formData.region})` : ""}`);
@@ -447,6 +442,34 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
     return itemLabel?.trim() ? `${code} · ${itemLabel.trim()}` : code;
   };
 
+  // Priced extras (ספייסרים / צביעה / דבק דו-צדדי) as their own row right
+  // under the product they belong to — same pattern as the graphics-note row
+  // below, but carrying the real summed price of just those extras (pulled
+  // straight out of the per-extra sellingCost the pricing engine already
+  // computes, see extrasBreakdown in useCalculator.jsx) instead of ₪0. The
+  // product row's own unitPrice is reduced by the same per-unit amount so the
+  // line total is unchanged — this only moves where the cost is shown, not
+  // how much it is. Labor-only sub-rows (sellingCost: null) and shipping stay
+  // out — they were never part of the product's customer-facing unit price.
+  const extrasRowFor = (result, groupLabel, sku, quantity) => {
+    const priced = (result?.extrasBreakdown || []).filter(
+      (e) => typeof e.sellingCost === "number" && e.sellingCost > 0 && e.key !== "shipping"
+    );
+    if (!priced.length) return { row: null, total: 0 };
+    const total = priced.reduce((sum, e) => sum + e.sellingCost, 0);
+    return {
+      row: {
+        groupLabel,
+        description: priced.map((e) => `${e.label}: ₪${e.sellingCost}`).join("\n"),
+        freeText: "",
+        quantity,
+        unitPrice: total,
+        sku: sku ? `${sku} תוספות` : null,
+      },
+      total,
+    };
+  };
+
   const buildLineItems = () => {
     const lines = [];
     items.forEach((item, index) => {
@@ -460,6 +483,8 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
       const itemLabel = itemLabels[item.id]?.trim() || "";
       const isFree = formData.productType === "free_product";
       const sku = lineSku(formData, itemLabel);
+      const quantity = parseInt(formData.quantity) || 1;
+      const { row: extrasRow, total: extrasTotal } = extrasRowFor(formData.result, groupLabel, sku, quantity);
       lines.push({
         groupLabel,
         description: lineDescription(
@@ -467,10 +492,11 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
           formData,
         ),
         freeText: formData.lineLabel || "",
-        quantity: parseInt(formData.quantity) || 1,
-        unitPrice: formData.result?.sellingPricePerUnit ?? 0,
+        quantity,
+        unitPrice: (formData.result?.sellingPricePerUnit ?? 0) - extrasTotal,
         sku,
       });
+      if (extrasRow) lines.push(extrasRow);
       // Graphics notes as their own zero-price line, right under the product
       // they belong to — a real separate row in the Morning document (not
       // just an extra sentence inside the product's own description block),
@@ -491,6 +517,9 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
       }
       (formData.extraRows || []).forEach((row) => {
         if (!row.result) return;
+        const extraRowSku = lineSku(formData, itemLabel);
+        const extraRowQuantity = parseInt(row.quantity) || 1;
+        const { row: extraRowExtrasRow, total: extraRowExtrasTotal } = extrasRowFor(row.result, groupLabel, extraRowSku, extraRowQuantity);
         lines.push({
           groupLabel,
           // An extra row is the same configured product at a different size, so
@@ -500,13 +529,13 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
           description: lineDescription(
             `${PRODUCT_NAMES[formData.productType] || formData.productType} — מידה נוספת`,
             { ...formData, widthM: row.widthM, heightM: row.heightM, elements: row.elements || "", lineLabel: row.lineLabel },
-            itemLabel,
           ),
           freeText: row.lineLabel || "",
-          quantity: parseInt(row.quantity) || 1,
-          unitPrice: row.result.sellingPricePerUnit ?? 0,
-          sku: lineSku(formData, itemLabel),
+          quantity: extraRowQuantity,
+          unitPrice: (row.result.sellingPricePerUnit ?? 0) - extraRowExtrasTotal,
+          sku: extraRowSku,
         });
+        if (extraRowExtrasRow) lines.push(extraRowExtrasRow);
       });
     });
     // documentMinimumPrice (grandTotal) is a floor applied on top of the raw
