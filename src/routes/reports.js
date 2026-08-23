@@ -82,6 +82,25 @@ module.exports = function registerReports(app, db, deps) {
     }
   });
 
+  // ── POST /api/reports/preview/:type ────────────────────────────────────────
+  // Same data/render as generate, but never calls mail.sendMail — lets the
+  // manual generator show the admin what's about to go out before committing
+  // to actually sending it.
+  app.post('/api/reports/preview/:type', requireAdmin, async (req, res) => {
+    const { type } = req.params;
+    const runner = REPORT_RUNNERS[type];
+    if (!runner) return res.status(404).json({ error: `unknown report type "${type}"` });
+    const { fromDate, toDate } = req.body || {};
+    if (!fromDate || !toDate) return res.status(400).json({ error: 'יש לבחור טווח תאריכים' });
+    try {
+      const { subject, html, count } = await runner.buildReport(db, { fromDate, toDate });
+      res.json({ ok: true, subject, html, count });
+    } catch (err) {
+      console.error(`[POST /api/reports/preview/${type}] failed:`, err.message);
+      res.status(400).json({ error: err.message });
+    }
+  });
+
   // ── POST /api/reports/generate/:type ───────────────────────────────────────
   // On-demand report — no schedule involved at all: the admin picks a report
   // type, a date range, and recipients right in the "דוחות" tab and gets it

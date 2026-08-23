@@ -336,10 +336,10 @@ function mergeMorningOnlyOrders(agentRows, productRows, morningOnlyOrders) {
   return { agentRows: mergedAgentRows, productRows: mergedProductRows };
 }
 
-async function sendReport(db, cfg) {
-  const recipients = parseRecipients(cfg.recipients);
-  if (!recipients.length) return { sent: false };
-
+// Shared by sendReport and the "דוחות" tab's preview endpoint — fetches the
+// data and renders the email, but never sends anything, so a preview never
+// has a side effect.
+async function buildReport(db, cfg) {
   // The report's own period always matches the schedule that triggered it —
   // a daily schedule reports on today, a monthly one on the last 30 days,
   // etc. (computeDateRange). An on-demand generation (the "דוחות" tab's
@@ -355,10 +355,18 @@ async function sendReport(db, cfg) {
   const localProductRows = fetchSalesByProduct(db, fromDate, toDate, excludeQuoteIds);
   const { agentRows, productRows } = mergeMorningOnlyOrders(localAgentRows, localProductRows, morningOnlyOrders);
   const periodLabel = FREQUENCY_LABELS[cfg.frequency] || cfg.frequency || 'ידני';
-  const { subject, html, text } = buildEmail(agentRows, productRows, periodLabel, fromDate, toDate);
-  await mail.sendMail(db, { to: recipients.join(', '), subject, html, text });
-  console.log(`[salesReport] sent sales for ${agentRows.length} agent(s)/${productRows.length} product(s), ${fromDate}..${toDate}, to ${recipients.join(', ')}`);
-  return { sent: true, count: agentRows.reduce((sum, r) => sum + r.ordersCount, 0) };
+  const count = agentRows.reduce((sum, r) => sum + r.ordersCount, 0);
+  return { ...buildEmail(agentRows, productRows, periodLabel, fromDate, toDate), count };
 }
 
-module.exports = { REPORT_TYPE, sendReport, fetchSalesByAgent, fetchSalesByProduct, fetchCancelledOrderQuoteIds, fetchMorningOnlyOrders };
+async function sendReport(db, cfg) {
+  const recipients = parseRecipients(cfg.recipients);
+  if (!recipients.length) return { sent: false };
+
+  const { subject, html, text, count } = await buildReport(db, cfg);
+  await mail.sendMail(db, { to: recipients.join(', '), subject, html, text });
+  console.log(`[salesReport] sent sales report (${count} orders) to ${recipients.join(', ')}`);
+  return { sent: true, count };
+}
+
+module.exports = { REPORT_TYPE, sendReport, buildReport, fetchSalesByAgent, fetchSalesByProduct, fetchCancelledOrderQuoteIds, fetchMorningOnlyOrders };

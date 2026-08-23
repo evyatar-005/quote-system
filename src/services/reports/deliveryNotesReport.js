@@ -80,6 +80,18 @@ function buildEmail(items, frequencyLabel, fromDate, toDate) {
 
 const FREQUENCY_LABELS = { daily: 'יומי', weekly: 'שבועי', monthly: 'חודשי' };
 
+// Shared by sendReport and the "דוחות" tab's preview endpoint — fetches the
+// data and renders the email, but never sends anything, so a preview never
+// has a side effect.
+async function buildReport(db, cfg) {
+  const { fromDate, toDate } = cfg.fromDate && cfg.toDate
+    ? { fromDate: cfg.fromDate, toDate: cfg.toDate }
+    : computeDateRange(cfg.frequency, new Date());
+  const items = await fetchClosedDeliveryNotes(db, fromDate, toDate);
+  const periodLabel = FREQUENCY_LABELS[cfg.frequency] || cfg.frequency || 'ידני';
+  return { ...buildEmail(items, periodLabel, fromDate, toDate), count: items.length };
+}
+
 // `cfg` is a scheduled_reports row when called from the scheduler; the
 // manual "send now" endpoint instead passes the freshly-saved config (same
 // shape) so a test send always reflects whatever's on screen, not stale DB
@@ -92,15 +104,10 @@ async function sendReport(db, cfg) {
   const recipients = parseRecipients(cfg.recipients);
   if (!recipients.length) return { sent: false };
 
-  const { fromDate, toDate } = cfg.fromDate && cfg.toDate
-    ? { fromDate: cfg.fromDate, toDate: cfg.toDate }
-    : computeDateRange(cfg.frequency, new Date());
-  const items = await fetchClosedDeliveryNotes(db, fromDate, toDate);
-  const periodLabel = FREQUENCY_LABELS[cfg.frequency] || cfg.frequency || 'ידני';
-  const { subject, html, text } = buildEmail(items, periodLabel, fromDate, toDate);
+  const { subject, html, text, count } = await buildReport(db, cfg);
   await mail.sendMail(db, { to: recipients.join(', '), subject, html, text });
-  console.log(`[deliveryNotesReport] sent ${items.length} delivery note(s) for ${fromDate}..${toDate} to ${recipients.join(', ')}`);
-  return { sent: true, count: items.length };
+  console.log(`[deliveryNotesReport] sent ${count} delivery note(s) to ${recipients.join(', ')}`);
+  return { sent: true, count };
 }
 
-module.exports = { REPORT_TYPE, sendReport, fetchClosedDeliveryNotes };
+module.exports = { REPORT_TYPE, sendReport, buildReport, fetchClosedDeliveryNotes };

@@ -87,3 +87,8 @@ export function sendReportTest(reportType, id) {
 export function generateReport(reportType, { recipients, fromDate, toDate }) {
   return request(`/api/reports/generate/${reportType}`, { method: 'POST', body: { recipients, fromDate, toDate } });
 }
+
+/** Renders the report without sending it: { subject, html, count }. Throws on failure. */
+export function previewReport(reportType, { fromDate, toDate }) {
+  return request(`/api/reports/preview/${reportType}`, { method: 'POST', body: { fromDate, toDate } });
+}
