@@ -40,6 +40,7 @@ import UsersManagementSection from "../components/admin/UsersManagementSection";
 import CrmSettingsSection from "../components/admin/CrmSettingsSection";
 import AgentCampaignsSection from "../components/admin/AgentCampaignsSection";
 import DriveSettingsSection from "../components/admin/DriveSettingsSection";
+import QuickLinksSection from "../components/admin/QuickLinksSection";
 import { ShieldAlert, Users, Receipt, Info, MessageCircle, LayoutGrid, Scissors, PenTool, PieChart, ClipboardList, LineChart, MessagesSquare, Target, Send, Sparkles } from "lucide-react";
 
 // Formerly the horizontal TabsList atop the content area — now selected from
@@ -336,6 +337,7 @@ export default function AdminDashboard() {
             <CrmSettingsSection />
             <AgentCampaignsSection />
             <DriveSettingsSection />
+            <QuickLinksSection />
           </TabsContent>
 
           <TabsContent value="about" className="space-y-6 mt-0">

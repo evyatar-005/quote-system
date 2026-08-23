@@ -66,4 +66,37 @@ module.exports = function registerDrive(app, db, deps) {
       res.status(400).json({ error: err.message });
     }
   });
+
+  // Quick links (Instagram, website, catalog, ...) — shown next to the Drive
+  // browser in the same "חומרי שיווק" panel. Any CRM user reads the list
+  // (they need it to send), only admin edits it.
+  app.get('/api/drive/quick-links', requireAuth, (req, res) => {
+    res.json(db.prepare(`SELECT * FROM crm_quick_links ORDER BY sort_order ASC, id ASC`).all());
+  });
+
+  app.post('/api/drive/quick-links', requireAdmin, (req, res) => {
+    const { label, content } = req.body || {};
+    if (!label?.trim() || !content?.trim()) return res.status(400).json({ error: 'label ו-content נדרשים' });
+    const { maxOrder } = db.prepare(`SELECT COALESCE(MAX(sort_order), -1) AS maxOrder FROM crm_quick_links`).get();
+    const { lastInsertRowid } = db.prepare(
+      `INSERT INTO crm_quick_links (label, content, sort_order) VALUES (?, ?, ?)`
+    ).run(label.trim(), content.trim(), maxOrder + 1);
+    res.status(201).json(db.prepare(`SELECT * FROM crm_quick_links WHERE id = ?`).get(lastInsertRowid));
+  });
+
+  app.put('/api/drive/quick-links/:id', requireAdmin, (req, res) => {
+    const { label, content, sort_order } = req.body || {};
+    const row = db.prepare(`SELECT * FROM crm_quick_links WHERE id = ?`).get(req.params.id);
+    if (!row) return res.status(404).json({ error: 'לא נמצא' });
+    db.prepare(`UPDATE crm_quick_links SET label = ?, content = ?, sort_order = ? WHERE id = ?`).run(
+      label?.trim() || row.label, content?.trim() || row.content,
+      sort_order != null ? Number(sort_order) : row.sort_order, req.params.id
+    );
+    res.json(db.prepare(`SELECT * FROM crm_quick_links WHERE id = ?`).get(req.params.id));
+  });
+
+  app.delete('/api/drive/quick-links/:id', requireAdmin, (req, res) => {
+    db.prepare(`DELETE FROM crm_quick_links WHERE id = ?`).run(req.params.id);
+    res.json({ ok: true });
+  });
 };

@@ -32,3 +32,10 @@ export const drive = {
   test() { return request('/api/drive/test', { method: 'POST' }); },
   listFiles(folderId) { return request(`/api/drive/files${folderId ? `?folderId=${encodeURIComponent(folderId)}` : ''}`); },
 };
+
+export const quickLinks = {
+  list() { return request('/api/drive/quick-links'); },
+  create(data) { return request('/api/drive/quick-links', { method: 'POST', body: data }); },
+  update(id, data) { return request(`/api/drive/quick-links/${id}`, { method: 'PUT', body: data }); },
+  remove(id) { return request(`/api/drive/quick-links/${id}`, { method: 'DELETE' }); },
+};

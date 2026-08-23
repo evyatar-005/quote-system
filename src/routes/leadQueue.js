@@ -128,6 +128,33 @@ module.exports = function registerLeadQueue(app, db, deps) {
     }
   });
 
+  // Send an admin-configured quick link (Instagram, website, catalog, ...) as
+  // a plain WhatsApp text — same outbox queue as everything else, so it gets
+  // the same retry/opt-out/SSE handling as a manual message.
+  app.post('/api/crm/leads/:id/send-quick-link', requireAuth, (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    const { content } = req.body || {};
+    if (!content?.trim()) return res.status(400).json({ error: 'content required' });
+    const context = buildLeadContext(db, id);
+    if (!context) return res.status(404).json({ error: 'ליד לא נמצא' });
+    if (!context.customer?.phone_e164) return res.status(400).json({ error: 'ללקוח אין מספר טלפון' });
+    try {
+      const result = enqueue(db, {
+        conversationId: context.conversation_id || undefined,
+        customerId: context.customer.id,
+        toE164: context.customer.phone_e164,
+        kind: 'text',
+        body: content.trim(),
+        sentBy: req.user.username,
+        priority: 10,
+      });
+      if (result.skipped) return res.status(400).json({ error: `השליחה נחסמה: ${result.reason}` });
+      res.json({ ok: true, ...result });
+    } catch (err) {
+      res.status(err.status || 400).json({ error: err.message });
+    }
+  });
+
   app.post('/api/crm/leads/:id/release', requireAuth, (req, res) => {
     const id = parseInt(req.params.id, 10);
     const claim = db.prepare(`SELECT * FROM crm_lead_claims WHERE lead_id = ?`).get(id);

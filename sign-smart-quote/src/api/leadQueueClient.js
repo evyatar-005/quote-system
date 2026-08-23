@@ -46,6 +46,9 @@ export const leadQueue = {
   sendDriveFile(leadId, fileId, filename) {
     return request(`/api/crm/leads/${leadId}/send-drive-file`, { method: 'POST', body: { fileId, filename } });
   },
+  sendQuickLink(leadId, content) {
+    return request(`/api/crm/leads/${leadId}/send-quick-link`, { method: 'POST', body: { content } });
+  },
 
   pool(params = {}) {
     const qs = new URLSearchParams(params).toString();

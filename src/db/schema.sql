@@ -1000,6 +1000,18 @@ CREATE TABLE IF NOT EXISTS google_drive_credentials (
   updated_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Admin-managed "quick sends" — a link or short text (Instagram, website,
+-- catalog, ...) an agent can push to a lead's WhatsApp in one click, shown
+-- alongside the Drive file browser in the same "חומרי שיווק" panel.
+-- `content` is sent to the customer verbatim as a text message.
+CREATE TABLE IF NOT EXISTS crm_quick_links (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  label      TEXT NOT NULL,
+  content    TEXT NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS drive_file_cache (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   folder_id     TEXT NOT NULL,
