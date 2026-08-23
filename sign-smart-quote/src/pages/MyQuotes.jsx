@@ -14,6 +14,7 @@ import {
   ArrowRight,
   Search,
   ChevronDown,
+  Eye,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
@@ -498,14 +499,20 @@ export default function MyQuotes() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm border-collapse">
                 <thead>
+                  {/* Vertical dividers (border-l, dropped on the last/leftmost
+                      column under RTL) alongside the header's own bottom
+                      border — a grid, not just stacked rows, same as
+                      Morning's own tables. Every column but לקוח is centered
+                      so its data lines up under its header instead of
+                      hugging one edge. */}
                   <tr className="bg-slate-50 border-b border-black text-xs text-slate-500">
-                    <th className="text-right font-medium px-4 py-3">לקוח</th>
-                    <th className="text-right font-medium px-4 py-3">תאריך</th>
-                    <th className="text-right font-medium px-4 py-3">מורנינג</th>
-                    <th className="text-right font-medium px-4 py-3">סכום</th>
-                    <th className="text-right font-medium px-4 py-3">סטטוס</th>
-                    <th className="text-right font-medium px-4 py-3">מסמך</th>
-                    <th className="text-right font-medium px-4 py-3">פעולות</th>
+                    <th className="text-right font-medium px-4 py-3 border-l border-slate-200">לקוח</th>
+                    <th className="text-center font-medium px-4 py-3 border-l border-slate-200">תאריך</th>
+                    <th className="text-center font-medium px-4 py-3 border-l border-slate-200">מורנינג</th>
+                    <th className="text-center font-medium px-4 py-3 border-l border-slate-200">סכום</th>
+                    <th className="text-center font-medium px-4 py-3 border-l border-slate-200">סטטוס</th>
+                    <th className="text-center font-medium px-4 py-3 border-l border-slate-200">מסמך</th>
+                    <th className="text-center font-medium px-4 py-3">פעולות</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -536,9 +543,18 @@ export default function MyQuotes() {
                     const parentMorningRef = parentDoc
                       ? `${MORNING_TYPE_LABELS[parentDoc.morning_document_type] || "מסמך"} #${formatDocNumber(parentDoc.morning_document_number || parentDoc.morning_document_id)}`
                       : null;
+                    // Uniform h-8 w-8 square icon buttons for every row action
+                    // (Morning's own table style) — mixing text pills with
+                    // icon-only buttons read as inconsistent. Color is the
+                    // only thing that varies: neutral outline for the two
+                    // reversible/no-side-effect actions (פתח/שכפל), amber
+                    // outline-filled for the payment link, black-on-amber
+                    // fill for the money action (issuing the order) so it
+                    // reads as the primary action on the row.
+                    const actionBtn = "h-8 w-8 shrink-0 flex items-center justify-center rounded-lg border transition-colors disabled:opacity-50";
                     return (
                       <tr key={q.id} className="align-top hover:bg-slate-50/60 transition-colors">
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-3 border-l border-slate-100">
                           <div className="font-semibold text-foreground">{q.client_name}</div>
                           <div className="flex items-center gap-1.5 flex-wrap mt-1">
                             {/* Only shown once the scope is widened past "just me" —
@@ -562,13 +578,13 @@ export default function MyQuotes() {
                             </span>
                           </div>
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-slate-500">
-                          <span className="flex items-center gap-1">
+                        <td className="px-4 py-3 whitespace-nowrap text-slate-500 text-center border-l border-slate-100">
+                          <span className="flex items-center justify-center gap-1">
                             <Calendar className="w-3 h-3" />
                             {new Date(q.created_date).toLocaleDateString("he-IL")}
                           </span>
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-slate-500">
+                        <td className="px-4 py-3 whitespace-nowrap text-slate-500 text-center border-l border-slate-100">
                           {morningDoc ? (
                             <>
                               {MORNING_TYPE_LABELS[morningDoc.morning_document_type] || "מסמך"} #
@@ -587,11 +603,11 @@ export default function MyQuotes() {
                             </span>
                           )}
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
+                        <td className="px-4 py-3 whitespace-nowrap text-center border-l border-slate-100">
                           <div className="font-bold text-primary tabular-nums">{fmt(q.price_with_vat)}</div>
                           <div className="text-xs text-slate-400">כולל מע״מ</div>
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
+                        <td className="px-4 py-3 whitespace-nowrap text-center border-l border-slate-100">
                           {/* Doc status (issued quote/order in Morning) is no longer
                               tied to the manager's internal review decision — an
                               agent doesn't care that a manager clicked approve,
@@ -611,21 +627,21 @@ export default function MyQuotes() {
                             </span>
                           )}
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
+                        <td className="px-4 py-3 whitespace-nowrap text-center border-l border-slate-100">
                           {morningDoc?.document_url && (
                             <a
                               href={morningDoc.document_url}
                               target="_blank"
                               rel="noreferrer"
                               title={`הורד מסמך מורנינג${docIsFromParent ? " (מקורי)" : ""}`}
-                              className="inline-flex items-center gap-1 text-amber-600 hover:text-amber-700 hover:underline text-xs"
+                              className={`${actionBtn} border-black text-slate-600 hover:border-slate-500 hover:bg-slate-50 mx-auto`}
                             >
-                              <Download className="w-3.5 h-3.5" /> הורדה
+                              <Download className="w-3.5 h-3.5" />
                             </a>
                           )}
                         </td>
                         <td className="px-4 py-3">
-                          <div className="flex items-center gap-1.5 flex-wrap">
+                          <div className="flex items-center justify-center gap-1.5 flex-wrap">
                             <button
                               onClick={() => {
                                 if (isAdmin) {
@@ -637,15 +653,16 @@ export default function MyQuotes() {
                                 }
                               }}
                               title={isAdmin ? "פתיחת ממשק העלויות והרווחיות המלא לעריכה" : morningDoc?.document_url ? "תצוגה מקדימה של מסמך המורנינג" : "טרם הונפק מסמך — מוצגת התצוגה הפנימית"}
-                              className="text-xs px-3 py-1.5 rounded-lg border border-black text-slate-600 hover:border-slate-500 hover:bg-slate-50 transition-colors"
+                              className={`${actionBtn} border-black text-slate-600 hover:border-slate-500 hover:bg-slate-50`}
                             >
-                              פתח
+                              <Eye className="w-3.5 h-3.5" />
                             </button>
                             <button
                               onClick={() => duplicateQuote(q)}
-                              className="text-xs px-3 py-1.5 rounded-lg border border-black text-slate-600 hover:border-slate-500 hover:bg-slate-50 transition-colors"
+                              title="שכפל"
+                              className={`${actionBtn} border-black text-slate-600 hover:border-slate-500 hover:bg-slate-50`}
                             >
-                              שכפל
+                              <Copy className="w-3.5 h-3.5" />
                             </button>
                             {/* Standalone payment link — a completely independent Morning
                                 operation (see createPaymentForm in sync.js), always
@@ -658,7 +675,7 @@ export default function MyQuotes() {
                               onClick={() => handlePullPaymentLink(q)}
                               disabled={issuingIds.has(q.id)}
                               title="שלח קישור תשלום"
-                              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-amber-400 text-amber-700 bg-amber-50 hover:bg-amber-100 disabled:opacity-50 transition-colors"
+                              className={`${actionBtn} border-amber-400 text-amber-700 bg-amber-50 hover:bg-amber-100`}
                             >
                               {issuingIds.has(q.id) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
                             </button>
@@ -667,7 +684,7 @@ export default function MyQuotes() {
                                 onClick={() => handleIssueQuoteDoc(q)}
                                 disabled={issuingIds.has(q.id)}
                                 title="הנפק הצעת מחיר"
-                                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-black text-slate-600 hover:border-slate-500 hover:bg-slate-50 disabled:opacity-50 transition-colors"
+                                className={`${actionBtn} border-black text-slate-600 hover:border-slate-500 hover:bg-slate-50`}
                               >
                                 {issuingIds.has(q.id) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
                               </button>
@@ -677,7 +694,7 @@ export default function MyQuotes() {
                                 onClick={() => handleIssueOrder(q)}
                                 disabled={issuingIds.has(q.id)}
                                 title="הנפק הזמנת עבודה"
-                                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50 transition-colors"
+                                className={`${actionBtn} border-amber-500 bg-amber-500 text-white hover:bg-amber-600`}
                               >
                                 {issuingIds.has(q.id) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PackagePlus className="w-3.5 h-3.5" />}
                               </button>
