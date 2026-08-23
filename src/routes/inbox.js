@@ -378,7 +378,7 @@ module.exports = function registerInbox(app, db, deps) {
     }
     const customer = conversation.customer_id ? db.prepare(`SELECT phone_e164 FROM customers WHERE id = ?`).get(conversation.customer_id) : null;
     const toE164 = customer?.phone_e164 || fromChatId(conversation.channel_thread_id);
-    const { templateId, parameters } = req.body || {};
+    const { templateId, parameters, body: templateBody } = req.body || {};
     try {
       let result;
       if (templateId) {
@@ -386,8 +386,16 @@ module.exports = function registerInbox(app, db, deps) {
         // must NOT touch it, or the sent text stops matching what was
         // approved. This is also the one send that's allowed with the 24h
         // window closed; it's what reopens it.
+        //
+        // `body` here is display-only, straight from the client's template
+        // picker (ConversationThread.jsx) — it is NOT what actually gets
+        // sent to WhatsApp (that's templateId + parameters, resolved by the
+        // provider adapter). Without it crm_messages.body stays NULL and the
+        // sent bubble renders empty in the thread forever, even though the
+        // send itself succeeded.
         result = enqueue(db, {
           conversationId: id, toE164, kind: 'template', templateId, templateParameters: parameters || [],
+          body: templateBody || null,
           sentBy: req.user.username, priority: 10,
         });
         if (result.skipped) return res.status(400).json({ error: `send skipped: ${result.reason}`, code: result.reason });

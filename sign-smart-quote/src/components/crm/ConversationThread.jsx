@@ -247,7 +247,7 @@ export default function ConversationThread({ conversationId, headerExtra, hideLe
   const sendApprovedTemplate = async (t) => {
     setSendingTemplate(true);
     try {
-      await inbox.sendTemplate(conversationId, t.TemplateId, []);
+      await inbox.sendTemplate(conversationId, t.TemplateId, [], t.MessageText);
       toast.success("התבנית נשלחה");
       setTplOpen(false);
       loadThread(conversationId);

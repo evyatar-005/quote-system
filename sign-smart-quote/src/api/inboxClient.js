@@ -62,8 +62,12 @@ export const inbox = {
   },
   // A pre-approved template — the only send allowed with the 24h session
   // window closed, and what reopens it.
-  sendTemplate(id, templateId, parameters) {
-    return request(`/api/inbox/conversations/${id}/messages`, { method: 'POST', body: { templateId, parameters: parameters || [] } });
+  // `body` here is display-only — the pre-approved template text, so the
+  // sent message doesn't render as an empty bubble in the thread. It is
+  // never what actually goes to WhatsApp; the provider sends templateId +
+  // parameters, and Meta's approved copy is what the customer receives.
+  sendTemplate(id, templateId, parameters, body) {
+    return request(`/api/inbox/conversations/${id}/messages`, { method: 'POST', body: { templateId, parameters: parameters || [], body: body || null } });
   },
   streamUrl() {
     return `/api/inbox/stream?token=${encodeURIComponent(getToken() || '')}`;
