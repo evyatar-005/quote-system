@@ -34,6 +34,7 @@ const fmt = (val) =>
 
 const TABS = [
   { key: "all", label: "כל ההצעות" },
+  { key: "quotes", label: "הצעות מחיר בלבד" },
   { key: "orders", label: "ההזמנות שלי" },
 ];
 
@@ -333,6 +334,7 @@ export default function MyQuotes() {
   // counting revisions in analytics.
   const visibleQuotes = latestRevisionsOnly(quotes)
     .filter((q) => tab !== "orders" || morningDocs[q.id]?.morning_document_type === MORNING_ORDER_TYPE)
+    .filter((q) => tab !== "quotes" || morningDocs[q.id]?.morning_document_type !== MORNING_ORDER_TYPE)
     .filter((q) => {
       if (!dateRange.from && !dateRange.to) return true;
       const created = new Date(q.created_date);
@@ -490,7 +492,7 @@ export default function MyQuotes() {
           </div>
         ) : visibleQuotes.length === 0 ? (
           <div className="text-center py-20 text-slate-400 text-sm">
-            {tab === "orders" ? "עדיין אין הזמנות" : "עדיין לא נשמרו הצעות"}
+            {tab === "orders" ? "עדיין אין הזמנות" : tab === "quotes" ? "אין הצעות מחיר שלא הפכו להזמנה" : "עדיין לא נשמרו הצעות"}
           </div>
         ) : (
           <div className="rounded-2xl border border-black bg-white overflow-hidden">
