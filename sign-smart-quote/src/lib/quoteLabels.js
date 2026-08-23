@@ -6,14 +6,47 @@
 export const fmt = (val) =>
   val != null ? `₪ ${Number(val).toLocaleString("he-IL", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : "—";
 
-export const STATUS_LABELS = { draft: "טיוטה", sent: "נשלחה", approved: "אושרה", rejected: "נדחתה" };
+// Internal review lifecycle (signshop_quotes.status) — a manager either
+// hasn't looked at a sent quote yet, has, or rejected it. This is a
+// different axis from whether Morning ever issued a document for the quote
+// (see DOC_STATUS_LABELS/DOC_STATUS_COLORS below) — a quote can be
+// "טרם נבדקה" and already have an issued Morning quote document, since an
+// agent can issue straight from the calculator without manager review.
+export const STATUS_LABELS = {
+  draft: "טיוטה",
+  sent: "טרם נבדקה ע\"י מנהל מכירות",
+  approved: "נבדקה ע\"י מנהל מכירות",
+  rejected: "נדחתה ע\"י מנהל מכירות",
+};
 
 export const STATUS_COLORS = {
   draft: "bg-slate-100 text-slate-500",
-  sent: "bg-blue-50 text-blue-600",
-  approved: "bg-emerald-50 text-emerald-600",
+  sent: "bg-amber-50 text-amber-700",
+  approved: "bg-violet-50 text-violet-700",
   rejected: "bg-red-50 text-red-500",
 };
+
+// Whether Morning ever issued a real document for this quote — independent
+// of (and, in the UI, ranked above) the review lifecycle above: a quote with
+// an issued order matters more to whoever's looking than whether a manager
+// happened to review it along the way. `docStatusKey` below computes this
+// from a quote's own Morning document (never a parent's — see MyQuotes.jsx's
+// `ownDoc` handling), and callers show this badge INSTEAD OF the STATUS_*
+// one when it isn't null.
+export const DOC_STATUS_LABELS = { quote: "הונפקה הצעת מחיר", order: "הונפקה הזמנת עבודה" };
+export const DOC_STATUS_COLORS = {
+  quote: "bg-blue-50 text-blue-600",
+  order: "bg-emerald-50 text-emerald-600",
+};
+
+const MORNING_QUOTE_TYPE = 10;
+
+export function docStatusKey(morningDoc) {
+  if (!morningDoc) return null;
+  if (morningDoc.morning_document_type === MORNING_ORDER_TYPE) return "order";
+  if (morningDoc.morning_document_type === MORNING_QUOTE_TYPE) return "quote";
+  return null;
+}
 
 // Where a quote came from (signshop_quotes.origin) — a different axis from
 // `status` (draft/sent/approved/rejected), which is about its lifecycle. This

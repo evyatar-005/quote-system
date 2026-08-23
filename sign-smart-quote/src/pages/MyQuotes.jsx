@@ -21,22 +21,16 @@ import { convertMorningDocument, createPaymentLink, getLatestMorningDocuments } 
 import QuoteDocument from "@/components/calculator/QuoteDocument";
 import QuoteDetailsModal from "@/components/QuoteDetailsModal";
 import DocumentIssuedModal from "@/components/DocumentIssuedModal";
-import { MORNING_ORDER_TYPE, toLocalDateStr, DATE_PRESETS, computeDateRange, formatDocNumber, ORIGIN_LABELS, ORIGIN_COLORS, originOf } from "@/lib/quoteLabels";
+import {
+  MORNING_ORDER_TYPE, MORNING_TYPE_LABELS, toLocalDateStr, DATE_PRESETS, computeDateRange, formatDocNumber,
+  ORIGIN_LABELS, ORIGIN_COLORS, originOf, STATUS_LABELS, STATUS_COLORS, DOC_STATUS_LABELS, DOC_STATUS_COLORS, docStatusKey,
+} from "@/lib/quoteLabels";
 import { latestRevisionsOnly, reconstructBuilderState } from "@/lib/quoteEconomics";
 import { useAuth } from "@/lib/AuthContext";
 
 const fmt = (val) =>
   val != null ? `₪ ${Number(val).toLocaleString("he-IL", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : "—";
 
-const STATUS_LABELS = { draft: "טיוטה", sent: "נשלחה", approved: "אושרה", rejected: "נדחתה" };
-const STATUS_COLORS = {
-  draft: "bg-slate-100 text-slate-500",
-  sent: "bg-blue-50 text-blue-600",
-  approved: "bg-emerald-50 text-emerald-600",
-  rejected: "bg-red-50 text-red-500",
-};
-// Morning document type codes — see docs/morning-api-reference.md / src/services/morning/mappings.js
-const MORNING_TYPE_LABELS = { 10: "הצעת מחיר", 100: "הזמנה", 300: "חשבון עסקה", 305: "חשבונית מס" };
 // Shown instead of the "מורנינג: ..." line when nothing was ever issued —
 // so a quote with no document reads as "not issued yet, here's why", not as
 // a blank line that looks like a loading glitch.
@@ -521,9 +515,11 @@ export default function MyQuotes() {
               const parentDoc = parentQuote ? morningDocs[parentQuote.id] : null;
               const morningDoc = ownDoc || parentDoc;
               const docIsFromParent = !ownDoc && !!parentDoc;
-              // Order/"אושרה" status is about THIS quote, never borrowed from
-              // the parent — only the document open/download actions fall back.
+              // Doc status ("הונפקה הצעת מחיר"/"הונפקה הזמנת עבודה") is about
+              // THIS quote, never borrowed from the parent — only the
+              // document open/download actions fall back.
               const alreadyOrder = ownDoc && ownDoc.morning_document_type === MORNING_ORDER_TYPE;
+              const ownDocStatus = docStatusKey(ownDoc);
               return (
                 <div key={q.id} className="bg-white border border-black rounded-2xl p-4">
                   <div className="flex items-start justify-between gap-4">
@@ -550,21 +546,24 @@ export default function MyQuotes() {
                           {ORIGIN_LABELS[originOf(q)]}
                           {q.parent_quote_number && ` — מחליפה את ${q.parent_quote_number}`}
                         </span>
-                        {/* "אושרה" is no longer tied to the admin's internal review
-                            decision (q.status === "approved") — an agent doesn't
-                            care that a manager clicked approve, only that the
-                            quote actually became a real order in Morning. So this
-                            label is now driven by alreadyOrder; every other status
-                            (draft/sent/rejected) still reads straight off q.status. */}
-                        {alreadyOrder ? (
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600">
-                            אושרה
+                        {/* Doc status (issued quote/order in Morning) is no longer
+                            tied to the manager's internal review decision — an
+                            agent doesn't care that a manager clicked approve,
+                            only whether the quote actually became a real
+                            document in Morning. So this badge shows the doc
+                            status when there is one; every other status
+                            (draft/pending review/reviewed/rejected) still
+                            reads straight off q.status via the shared
+                            STATUS_LABELS/STATUS_COLORS from quoteLabels. */}
+                        {ownDocStatus ? (
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${DOC_STATUS_COLORS[ownDocStatus]}`}>
+                            {DOC_STATUS_LABELS[ownDocStatus]}
                           </span>
-                        ) : q.status !== "approved" ? (
+                        ) : (
                           <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLORS[q.status || "draft"]}`}>
                             {STATUS_LABELS[q.status || "draft"]}
                           </span>
-                        ) : null}
+                        )}
                       </div>
                       <div className="flex items-center gap-3 mt-1.5 text-sm text-slate-500 flex-wrap">
                         <span className="flex items-center gap-1">
