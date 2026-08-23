@@ -502,162 +502,187 @@ export default function MyQuotes() {
             {tab === "orders" ? "עדיין אין הזמנות" : "עדיין לא נשמרו הצעות"}
           </div>
         ) : (
-          <div className="space-y-2">
-            {visibleQuotes.map((q) => {
-              const ownDoc = morningDocs[q.id];
-              // A duplicated quote ("שכפול מ-...") never gets its own Morning
-              // document until it's issued separately — until then, fall back
-              // to the ORIGINAL quote's document so "פתח"/"הורד" still work,
-              // instead of just having nothing to show.
-              const parentQuote = !ownDoc && q.parent_quote_number
-                ? quotes.find((x) => x.quote_number === q.parent_quote_number)
-                : null;
-              const parentDoc = parentQuote ? morningDocs[parentQuote.id] : null;
-              const morningDoc = ownDoc || parentDoc;
-              const docIsFromParent = !ownDoc && !!parentDoc;
-              // Doc status ("הונפקה הצעת מחיר"/"הונפקה הזמנת עבודה") is about
-              // THIS quote, never borrowed from the parent — only the
-              // document open/download actions fall back.
-              const alreadyOrder = ownDoc && ownDoc.morning_document_type === MORNING_ORDER_TYPE;
-              const ownDocStatus = docStatusKey(ownDoc);
-              return (
-                <div key={q.id} className="bg-white border border-black rounded-2xl p-4">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold text-foreground">{q.client_name}</span>
-                        <span className="text-xs text-slate-400 font-mono">{q.quote_number}</span>
-                        {/* Only shown once the scope is widened past "just me" —
-                            a manager looking at their own quotes doesn't need
-                            to be told every row is theirs. */}
-                        {agentScope && q.created_by && (
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
-                            {sellers[q.created_by] || q.created_by}
+          <div className="rounded-2xl border border-black bg-white overflow-hidden">
+            {/* overflow-x-auto on its own wrapper (not the rounded/bordered one
+                above) — scrolling a bordered container clips its own edges. */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-black text-xs text-slate-500">
+                    <th className="text-right font-medium px-4 py-3">לקוח</th>
+                    <th className="text-right font-medium px-4 py-3">תאריך</th>
+                    <th className="text-right font-medium px-4 py-3">מורנינג</th>
+                    <th className="text-right font-medium px-4 py-3">סכום</th>
+                    <th className="text-right font-medium px-4 py-3">סטטוס</th>
+                    <th className="text-right font-medium px-4 py-3">מסמך</th>
+                    <th className="text-right font-medium px-4 py-3">פעולות</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {visibleQuotes.map((q) => {
+                    const ownDoc = morningDocs[q.id];
+                    // A duplicated quote ("שכפול מ-...") never gets its own Morning
+                    // document until it's issued separately — until then, fall back
+                    // to the ORIGINAL quote's document so "פתח"/"הורד" still work,
+                    // instead of just having nothing to show.
+                    const parentQuote = !ownDoc && q.parent_quote_number
+                      ? quotes.find((x) => x.quote_number === q.parent_quote_number)
+                      : null;
+                    const parentDoc = parentQuote ? morningDocs[parentQuote.id] : null;
+                    const morningDoc = ownDoc || parentDoc;
+                    const docIsFromParent = !ownDoc && !!parentDoc;
+                    // Doc status ("הונפקה הצעת מחיר"/"הונפקה הזמנת עבודה") is about
+                    // THIS quote, never borrowed from the parent — only the
+                    // document open/download actions fall back.
+                    const alreadyOrder = ownDoc && ownDoc.morning_document_type === MORNING_ORDER_TYPE;
+                    const ownDocStatus = docStatusKey(ownDoc);
+                    return (
+                      <tr key={q.id} className="align-top hover:bg-slate-50/60 transition-colors">
+                        <td className="px-4 py-3">
+                          <div className="font-semibold text-foreground">{q.client_name}</div>
+                          <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                            <span className="text-xs text-slate-400 font-mono">{q.quote_number}</span>
+                            {/* Only shown once the scope is widened past "just me" —
+                                a manager looking at their own quotes doesn't need
+                                to be told every row is theirs. */}
+                            {agentScope && q.created_by && (
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                                {sellers[q.created_by] || q.created_by}
+                              </span>
+                            )}
+                            {/* Which of the three kinds this row is. A duplicate and
+                                a manager revision both REPLACE the quote they name,
+                                so the agent can see at a glance that an older row of
+                                theirs is no longer the live version of the deal. */}
+                            <span
+                              className={`text-xs px-2 py-0.5 rounded-full ${ORIGIN_COLORS[originOf(q)]}`}
+                              title={ORIGIN_LABELS[originOf(q)]}
+                            >
+                              {ORIGIN_LABELS[originOf(q)]}
+                              {q.parent_quote_number && ` — מחליפה את ${q.parent_quote_number}`}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-slate-500">
+                          <span className="flex items-center gap-1">
+                            <Calendar className="w-3 h-3" />
+                            {new Date(q.created_date).toLocaleDateString("he-IL")}
                           </span>
-                        )}
-                        {/* Which of the three kinds this row is. A duplicate and
-                            a manager revision both REPLACE the quote they name,
-                            so the agent can see at a glance that an older row of
-                            theirs is no longer the live version of the deal. */}
-                        <span
-                          className={`text-xs px-2 py-0.5 rounded-full ${ORIGIN_COLORS[originOf(q)]}`}
-                          title={ORIGIN_LABELS[originOf(q)]}
-                        >
-                          {ORIGIN_LABELS[originOf(q)]}
-                          {q.parent_quote_number && ` — מחליפה את ${q.parent_quote_number}`}
-                        </span>
-                        {/* Doc status (issued quote/order in Morning) is no longer
-                            tied to the manager's internal review decision — an
-                            agent doesn't care that a manager clicked approve,
-                            only whether the quote actually became a real
-                            document in Morning. So this badge shows the doc
-                            status when there is one; every other status
-                            (draft/pending review/reviewed/rejected) still
-                            reads straight off q.status via the shared
-                            STATUS_LABELS/STATUS_COLORS from quoteLabels. */}
-                        {ownDocStatus ? (
-                          <span className={`text-xs px-2 py-0.5 rounded-full ${DOC_STATUS_COLORS[ownDocStatus]}`}>
-                            {DOC_STATUS_LABELS[ownDocStatus]}
-                          </span>
-                        ) : (
-                          <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLORS[q.status || "draft"]}`}>
-                            {STATUS_LABELS[q.status || "draft"]}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-3 mt-1.5 text-sm text-slate-500 flex-wrap">
-                        <span className="flex items-center gap-1">
-                          <Calendar className="w-3 h-3" />
-                          {new Date(q.created_date).toLocaleDateString("he-IL")}
-                        </span>
-                        {morningDoc ? (
-                          <span className="text-slate-400">
-                            מורנינג: {MORNING_TYPE_LABELS[morningDoc.morning_document_type] || "מסמך"} #
-                            {formatDocNumber(morningDoc.morning_document_number || morningDoc.morning_document_id)}
-                            {docIsFromParent && " (מהצעה המקורית)"}
-                          </span>
-                        ) : (
-                          <span className="text-slate-400">{NOT_ISSUED_LABELS[q.status || "draft"]}</span>
-                        )}
-                        {morningDoc?.document_url && (
-                          <a
-                            href={morningDoc.document_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="flex items-center gap-1 text-amber-600 hover:text-amber-700 hover:underline"
-                          >
-                            <Download className="w-3 h-3" /> הורד מסמך מורנינג{docIsFromParent && " (מקורי)"}
-                          </a>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 shrink-0">
-                      <div className="text-left ml-2">
-                        <div className="text-base font-bold text-primary tabular-nums">{fmt(q.price_with_vat)}</div>
-                        <div className="text-sm text-slate-400">כולל מע״מ</div>
-                      </div>
-                      <button
-                        onClick={() => {
-                          if (isAdmin) {
-                            setSelectedQuote(q);
-                          } else if (morningDoc?.document_url) {
-                            setPreviewDoc(morningDoc.document_url);
-                          } else {
-                            openQuoteDocument(q);
-                          }
-                        }}
-                        title={isAdmin ? "פתיחת ממשק העלויות והרווחיות המלא לעריכה" : morningDoc?.document_url ? "תצוגה מקדימה של מסמך המורנינג" : "טרם הונפק מסמך — מוצגת התצוגה הפנימית"}
-                        className="text-xs px-3 py-1.5 rounded-lg border border-black text-slate-600 hover:border-slate-500 hover:bg-slate-50 transition-colors"
-                      >
-                        פתח
-                      </button>
-                      <button
-                        onClick={() => duplicateQuote(q)}
-                        className="text-xs px-3 py-1.5 rounded-lg border border-black text-slate-600 hover:border-slate-500 hover:bg-slate-50 transition-colors"
-                      >
-                        שכפל
-                      </button>
-                      {/* Standalone payment link — a completely independent Morning
-                          operation (see createPaymentForm in sync.js), always
-                          available whether or not the order exists yet. This lets
-                          an agent collect payment BEFORE issuing the work order,
-                          not just after. Each click creates a fresh link (the
-                          underlying receipt is only created by Morning once the
-                          customer actually pays), so re-clicking to resend is safe. */}
-                      <button
-                        onClick={() => handlePullPaymentLink(q)}
-                        disabled={issuingIds.has(q.id)}
-                        className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-amber-400 text-amber-700 bg-amber-50 hover:bg-amber-100 disabled:opacity-50 transition-colors"
-                      >
-                        {issuingIds.has(q.id) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                        שלח קישור תשלום
-                      </button>
-                      {!ownDoc && (
-                        <button
-                          onClick={() => handleIssueQuoteDoc(q)}
-                          disabled={issuingIds.has(q.id)}
-                          className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-black text-slate-600 hover:border-slate-500 hover:bg-slate-50 disabled:opacity-50 transition-colors"
-                        >
-                          {issuingIds.has(q.id) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
-                          הנפק הצעת מחיר
-                        </button>
-                      )}
-                      {!alreadyOrder && (
-                        <button
-                          onClick={() => handleIssueOrder(q)}
-                          disabled={issuingIds.has(q.id)}
-                          className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50 transition-colors"
-                        >
-                          {issuingIds.has(q.id) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PackagePlus className="w-3.5 h-3.5" />}
-                          הנפק הזמנת עבודה
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-slate-500">
+                          {morningDoc ? (
+                            <>
+                              {MORNING_TYPE_LABELS[morningDoc.morning_document_type] || "מסמך"} #
+                              {formatDocNumber(morningDoc.morning_document_number || morningDoc.morning_document_id)}
+                              {docIsFromParent && <div className="text-xs text-slate-400">מהצעה המקורית</div>}
+                            </>
+                          ) : (
+                            <span className="text-slate-400">{NOT_ISSUED_LABELS[q.status || "draft"]}</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <div className="font-bold text-primary tabular-nums">{fmt(q.price_with_vat)}</div>
+                          <div className="text-xs text-slate-400">כולל מע״מ</div>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          {/* Doc status (issued quote/order in Morning) is no longer
+                              tied to the manager's internal review decision — an
+                              agent doesn't care that a manager clicked approve,
+                              only whether the quote actually became a real
+                              document in Morning. So this badge shows the doc
+                              status when there is one; every other status
+                              (draft/pending review/reviewed/rejected) still
+                              reads straight off q.status via the shared
+                              STATUS_LABELS/STATUS_COLORS from quoteLabels. */}
+                          {ownDocStatus ? (
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${DOC_STATUS_COLORS[ownDocStatus]}`}>
+                              {DOC_STATUS_LABELS[ownDocStatus]}
+                            </span>
+                          ) : (
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLORS[q.status || "draft"]}`}>
+                              {STATUS_LABELS[q.status || "draft"]}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          {morningDoc?.document_url && (
+                            <a
+                              href={morningDoc.document_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              title={`הורד מסמך מורנינג${docIsFromParent ? " (מקורי)" : ""}`}
+                              className="inline-flex items-center gap-1 text-amber-600 hover:text-amber-700 hover:underline text-xs"
+                            >
+                              <Download className="w-3.5 h-3.5" /> הורדה
+                            </a>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <button
+                              onClick={() => {
+                                if (isAdmin) {
+                                  setSelectedQuote(q);
+                                } else if (morningDoc?.document_url) {
+                                  setPreviewDoc(morningDoc.document_url);
+                                } else {
+                                  openQuoteDocument(q);
+                                }
+                              }}
+                              title={isAdmin ? "פתיחת ממשק העלויות והרווחיות המלא לעריכה" : morningDoc?.document_url ? "תצוגה מקדימה של מסמך המורנינג" : "טרם הונפק מסמך — מוצגת התצוגה הפנימית"}
+                              className="text-xs px-3 py-1.5 rounded-lg border border-black text-slate-600 hover:border-slate-500 hover:bg-slate-50 transition-colors"
+                            >
+                              פתח
+                            </button>
+                            <button
+                              onClick={() => duplicateQuote(q)}
+                              className="text-xs px-3 py-1.5 rounded-lg border border-black text-slate-600 hover:border-slate-500 hover:bg-slate-50 transition-colors"
+                            >
+                              שכפל
+                            </button>
+                            {/* Standalone payment link — a completely independent Morning
+                                operation (see createPaymentForm in sync.js), always
+                                available whether or not the order exists yet. This lets
+                                an agent collect payment BEFORE issuing the work order,
+                                not just after. Each click creates a fresh link (the
+                                underlying receipt is only created by Morning once the
+                                customer actually pays), so re-clicking to resend is safe. */}
+                            <button
+                              onClick={() => handlePullPaymentLink(q)}
+                              disabled={issuingIds.has(q.id)}
+                              title="שלח קישור תשלום"
+                              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-amber-400 text-amber-700 bg-amber-50 hover:bg-amber-100 disabled:opacity-50 transition-colors"
+                            >
+                              {issuingIds.has(q.id) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                            </button>
+                            {!ownDoc && (
+                              <button
+                                onClick={() => handleIssueQuoteDoc(q)}
+                                disabled={issuingIds.has(q.id)}
+                                title="הנפק הצעת מחיר"
+                                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-black text-slate-600 hover:border-slate-500 hover:bg-slate-50 disabled:opacity-50 transition-colors"
+                              >
+                                {issuingIds.has(q.id) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
+                              </button>
+                            )}
+                            {!alreadyOrder && (
+                              <button
+                                onClick={() => handleIssueOrder(q)}
+                                disabled={issuingIds.has(q.id)}
+                                title="הנפק הזמנת עבודה"
+                                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50 transition-colors"
+                              >
+                                {issuingIds.has(q.id) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PackagePlus className="w-3.5 h-3.5" />}
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>
