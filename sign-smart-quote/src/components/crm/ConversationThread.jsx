@@ -59,12 +59,21 @@ function StatusTicks({ status }) {
   return <Clock className="w-3 h-3" style={{ color: WA.meta }} />;
 }
 
+// crm_messages.created_at is SQLite CURRENT_TIMESTAMP: UTC, written as
+// 'YYYY-MM-DD HH:MM:SS' with a space and no 'Z'. `new Date(that)` reads it as
+// LOCAL time, which in Israel showed every message 3 hours early — a reply
+// sent at 16:52 appeared in the thread as 13:52, so the whole conversation
+// looked stale and out of order against the customer's own WhatsApp. Same
+// hazard already documented in routes/inbox.js, routes/myDay.js and
+// sessionWindow.js; normalize to ISO 8601 before parsing.
+const asDate = (iso) => new Date(typeof iso === "string" && !iso.includes("T") ? iso.replace(" ", "T") + "Z" : iso);
+
 const timeOf = (iso) =>
-  new Date(iso).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" });
+  asDate(iso).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" });
 
 // "היום" / "אתמול" / a date — the chip WhatsApp puts between days.
 function dayLabel(iso) {
-  const d = new Date(iso);
+  const d = asDate(iso);
   const today = new Date();
   const startOf = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
   const diffDays = Math.round((startOf(today) - startOf(d)) / 86400000);
