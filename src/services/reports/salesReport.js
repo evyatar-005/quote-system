@@ -330,7 +330,7 @@ async function sendReport(db, cfg) {
   if (!recipients.length) return { sent: false };
 
   const { subject, html, text, count } = await buildReport(db, cfg);
-  const info = await mail.sendMail(db, { to: recipients.join(', '), subject, html, text });
+  const info = await mail.sendMail(db, { to: recipients.join(', '), subject, html, text, context: `report:${REPORT_TYPE}` });
   console.log(`[salesReport] sent sales report (${count} orders) to ${recipients.join(', ')}`);
   return { sent: true, count, accepted: info?.accepted || [], rejected: info?.rejected || [], response: info?.response || '' };
 }

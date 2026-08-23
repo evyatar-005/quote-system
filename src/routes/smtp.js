@@ -63,6 +63,15 @@ module.exports = function registerSmtp(app, db, deps) {
     });
   });
 
+  // ── GET /api/smtp/log — recent send attempts, with the server's answer ────
+  // The only way an admin without shell access can tell "SMTP accepted it" from
+  // "it was actually delivered to every address" apart. See mail_log in
+  // schema.sql for why this exists.
+  app.get('/api/smtp/log', requireAdmin, (req, res) => {
+    const limit = Math.min(parseInt(req.query.limit, 10) || 30, 200);
+    res.json(mail.recentMailLog(db, limit));
+  });
+
   // ── POST /api/smtp/test — sends a real test email to the calling admin ─────
   app.post('/api/smtp/test', requireAdmin, async (req, res) => {
     if (!req.user.email) {
@@ -74,6 +83,7 @@ module.exports = function registerSmtp(app, db, deps) {
         subject: 'בדיקת הגדרות SMTP — מערכת הצעות מחיר',
         text: 'זוהי הודעת בדיקה. אם קיבלת אותה, הגדרות ה-SMTP תקינות.',
         html: '<div dir="rtl">זוהי הודעת בדיקה. אם קיבלת אותה, הגדרות ה-SMTP תקינות.</div>',
+        context: 'smtp-test',
       });
       console.log(`[POST /api/smtp/test] sent to "${req.user.email}"`);
       res.json({ ok: true });

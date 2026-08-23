@@ -413,6 +413,26 @@ CREATE TABLE IF NOT EXISTS smtp_credentials (
   updated_at   TEXT DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Every outgoing mail attempt, success or failure, with the mail server's own
+-- answer. Exists because this system is administered by people with no shell
+-- access to the host: without a persisted record, a send that SMTP accepted
+-- but never delivered (or accepted for only some recipients) is invisible —
+-- the UI just says "sent" and the truth lives only in console output nobody
+-- can read. `accepted`/`rejected` come straight from nodemailer's info.
+CREATE TABLE IF NOT EXISTS mail_log (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  context       TEXT,               -- e.g. 'report:delivery_notes', 'smtp-test'
+  to_addresses  TEXT,
+  subject       TEXT,
+  success       INTEGER NOT NULL,
+  accepted      TEXT,               -- comma-separated, from the mail server
+  rejected      TEXT,               -- comma-separated, from the mail server
+  response      TEXT,               -- raw SMTP response line
+  error_message TEXT,
+  from_address  TEXT,
+  created_at    TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
 -- One row per SCHEDULE (src/services/reports/) — a report_type can have
 -- several independent schedules at once (e.g. a daily digest AND a monthly
 -- rollup of the same report), which is why this isn't keyed on report_type

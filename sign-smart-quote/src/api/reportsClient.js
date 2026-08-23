@@ -88,6 +88,11 @@ export function generateReport(reportType, { recipients, fromDate, toDate }) {
   return request(`/api/reports/generate/${reportType}`, { method: 'POST', body: { recipients, fromDate, toDate } });
 }
 
+/** Recent outgoing-mail attempts with the mail server's own answer. Throws on failure. */
+export function getMailLog(limit = 30) {
+  return request(`/api/smtp/log?limit=${limit}`);
+}
+
 /** Renders the report without sending it: { subject, html, count }. Throws on failure. */
 export function previewReport(reportType, { fromDate, toDate }) {
   return request(`/api/reports/preview/${reportType}`, { method: 'POST', body: { fromDate, toDate } });

@@ -41,19 +41,61 @@ function buildTransport(row) {
 // rejects others, the send "succeeds" and the rejected ones are reported only
 // in info.rejected — so a caller that ignores the return value tells the admin
 // "sent successfully" for mail that partly never went anywhere.
-async function sendMail(db, { to, subject, html, text }) {
+// Never let bookkeeping break an actual send — a failure to write the audit
+// row must not turn a delivered mail into a thrown error.
+function logMailAttempt(db, entry) {
+  try {
+    db.prepare(
+      `INSERT INTO mail_log (context, to_addresses, subject, success, accepted, rejected, response, error_message, from_address)
+       VALUES (@context, @to_addresses, @subject, @success, @accepted, @rejected, @response, @error_message, @from_address)`
+    ).run({
+      context: entry.context || null,
+      to_addresses: entry.to || null,
+      subject: entry.subject || null,
+      success: entry.success ? 1 : 0,
+      accepted: (entry.accepted || []).join(', ') || null,
+      rejected: (entry.rejected || []).join(', ') || null,
+      response: entry.response || null,
+      error_message: entry.errorMessage || null,
+      from_address: entry.from || null,
+    });
+  } catch (err) {
+    console.error('[mail] failed to write mail_log row:', err.message);
+  }
+}
+
+async function sendMail(db, { to, subject, html, text, context }) {
   const row = getSmtpConfig(db);
   if (!row || !row.host || !row.from_email) {
+    logMailAttempt(db, { context, to, subject, success: false, errorMessage: 'SMTP is not configured' });
     throw new Error('SMTP is not configured');
   }
   const transport = buildTransport(row);
   const from = row.from_name ? `"${row.from_name}" <${row.from_email}>` : row.from_email;
-  const info = await transport.sendMail({ from, to, subject, html, text });
+
+  let info;
+  try {
+    info = await transport.sendMail({ from, to, subject, html, text });
+  } catch (err) {
+    logMailAttempt(db, { context, to, subject, from, success: false, errorMessage: err.message });
+    throw err;
+  }
+
   const rejected = info?.rejected || [];
+  const accepted = info?.accepted || [];
   if (rejected.length) {
     console.error(`[mail] server REJECTED ${rejected.length} recipient(s): ${rejected.join(', ')} — response: ${info?.response || '(none)'}`);
   }
-  console.log(`[mail] from="${from}" accepted=[${(info?.accepted || []).join(', ')}] response="${info?.response || ''}"`);
+  console.log(`[mail] from="${from}" accepted=[${accepted.join(', ')}] response="${info?.response || ''}"`);
+  // Accepted-but-nothing-delivered is the exact failure this log exists for,
+  // so a send with zero accepted recipients is recorded as a failure even
+  // though nodemailer resolved.
+  logMailAttempt(db, {
+    context, to, subject, from,
+    success: accepted.length > 0 && rejected.length === 0,
+    accepted, rejected,
+    response: info?.response || '',
+  });
   return info;
 }
 
@@ -80,4 +122,8 @@ function resetPasswordEmail({ fullName, link, minutes }) {
   return { subject, html, text };
 }
 
-module.exports = { getSmtpConfig, isConfigured, sendMail, resetPasswordEmail };
+function recentMailLog(db, limit = 30) {
+  return db.prepare(`SELECT * FROM mail_log ORDER BY id DESC LIMIT ?`).all(limit);
+}
+
+module.exports = { getSmtpConfig, isConfigured, sendMail, resetPasswordEmail, recentMailLog };
