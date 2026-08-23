@@ -380,17 +380,10 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
       lines.push("ללא התקנה");
     }
 
-    // Kapa shelves — priced as part of the line, so they belong in its description.
-    const standardShelves = parseInt(formData?.standardShelves) || 0;
-    const customShelves = parseInt(formData?.customShelves) || 0;
-    const shelves = [];
-    if (standardShelves > 0) shelves.push(standardShelves === 1 ? "מדף סטנדרטי אחד" : `${standardShelves} מדפים סטנדרטיים`);
-    if (customShelves > 0) shelves.push(customShelves === 1 ? "מדף אחד בעיצוב אישי" : `${customShelves} מדפים בעיצוב אישי`);
-    const legsQty = parseInt(formData?.legsQty) || 0;
-    const coloredShelfQty = parseInt(formData?.coloredShelfQty) || 0;
-    if (legsQty > 0) shelves.push(legsQty === 1 ? "רגל אחת עשויה קאפה" : `${legsQty} רגליים עשויות קאפה`);
-    if (coloredShelfQty > 0) shelves.push(coloredShelfQty === 1 ? "מדף צבעוני אחד ללא חיתוך צורני" : `${coloredShelfQty} מדפים צבעוניים ללא חיתוך צורני`);
-    if (shelves.length) lines.push(shelves.join(", "));
+    // Kapa shelves/legs/colored-shelf are priced extras — they get their own
+    // row underneath (see extrasRowFor below), so they must NOT also appear
+    // here or the same thing prints twice on the document (once bare in the
+    // spec line, once priced in the extras row).
 
     // The agent's own free text goes last, on one "הערה:" line — deduped
     // against the heading: for free_product the lineLabel IS the product name
@@ -460,7 +453,13 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
     return {
       row: {
         groupLabel,
-        description: priced.map((e) => `${e.label}: ₪${e.sellingCost}`).join("\n"),
+        // No per-extra ₪ amount here — the row's own unitPrice (below)
+        // already carries the summed total, so a price on each line would
+        // just be the same money broken apart and repeated. Each extra
+        // still needs its own quantity spelled out (e.g. "מדפים סטנדרטיים
+        // - 3 יחידות"), not merged into one line, so multiple extras of the
+        // same family stay distinguishable.
+        description: priced.map((e) => (e.calc ? `${e.label} - ${e.calc}` : e.label)).join("\n"),
         freeText: "",
         quantity,
         unitPrice: total,

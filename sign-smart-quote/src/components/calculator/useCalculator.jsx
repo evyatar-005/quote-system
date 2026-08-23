@@ -242,9 +242,15 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
     const priceWithVat = sellingPriceAll * (1 + (parseFloat(config.vat_percent) || 18) / 100);
 
     const extrasBreakdown = [];
-    if (shelvesCostReal > 0 || shelvesSellingPrice > 0) extrasBreakdown.push({ key: 'shelves', label: 'מדפים', cost: round(shelvesCostReal), sellingCost: round(shelvesSellingPrice), calc: `${standardShelves || 0} סטנדרטים + ${customShelves || 0} בעיצוב אישי`, type: 'material' });
-    if (legsCostReal > 0 || legsSellingPrice > 0) extrasBreakdown.push({ key: 'legs', label: 'רגליים עשויות קאפה', cost: round(legsCostReal), sellingCost: round(legsSellingPrice), calc: `${legsQty || 0} יחידות`, type: 'material' });
-    if (coloredShelfCostReal > 0 || coloredShelfSellingPrice > 0) extrasBreakdown.push({ key: 'colored_shelf', label: 'מדף צבעוני ללא חיתוך צורני', cost: round(coloredShelfCostReal), sellingCost: round(coloredShelfSellingPrice), calc: `${coloredShelfQty || 0} יחידות`, type: 'material' });
+    // Standard and custom-design shelves used to collapse into one combined
+    // "מדפים" row (calc: "3 סטנדרטים + 4 בעיצוב אישי") — split into their own
+    // rows, each carrying its own qty, so the Morning extras line can list
+    // "מדפים סטנדרטיים - 3 יח׳" and "מדפים בעיצוב אישי - 4 יח׳" separately
+    // instead of one merged line an agent/customer has to parse.
+    if (standardShelfDeal.cost > 0 || standardShelfDeal.selling > 0) extrasBreakdown.push({ key: 'standard_shelves', label: 'מדפים סטנדרטיים', cost: round(standardShelfDeal.cost), sellingCost: round(standardShelfDeal.selling), qty: standardShelves || 0, calc: `${standardShelves || 0} יחידות`, type: 'material' });
+    if (customShelfDeal.cost > 0 || customShelfDeal.selling > 0) extrasBreakdown.push({ key: 'custom_shelves', label: 'מדפים בעיצוב אישי', cost: round(customShelfDeal.cost), sellingCost: round(customShelfDeal.selling), qty: customShelves || 0, calc: `${customShelves || 0} יחידות`, type: 'material' });
+    if (legsCostReal > 0 || legsSellingPrice > 0) extrasBreakdown.push({ key: 'legs', label: 'רגליים עשויות קאפה', cost: round(legsCostReal), sellingCost: round(legsSellingPrice), qty: legsQty || 0, calc: `${legsQty || 0} יחידות`, type: 'material' });
+    if (coloredShelfCostReal > 0 || coloredShelfSellingPrice > 0) extrasBreakdown.push({ key: 'colored_shelf', label: 'מדף צבעוני ללא חיתוך צורני', cost: round(coloredShelfCostReal), sellingCost: round(coloredShelfSellingPrice), qty: coloredShelfQty || 0, calc: `${coloredShelfQty || 0} יחידות`, type: 'material' });
     if (tape.row) extrasBreakdown.push(tape.row);
 
     return {
