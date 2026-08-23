@@ -453,6 +453,43 @@ module.exports = function registerCrm(app, db, deps) {
       l.created_at
     )`;
 
+  // "The customer wrote and nobody has answered yet" — the lead-side twin of
+  // the inbox's overdue chip, but deliberately NOT the same rule.
+  //
+  // The inbox keys off unread_count, which resets the moment anyone OPENS the
+  // thread. That's right for "an unread badge" and wrong for this: an agent
+  // who reads a message, gets pulled away and never replies would silently
+  // drop out of the count — exactly the lead this tile exists to catch.
+  // Comparing the two timestamps instead means only an actual outbound reply
+  // clears it, so the number always answers "how many people are waiting on
+  // us right now".
+  //
+  // Same conversation attachment as LEAD_ACTIVITY_SQL (by lead, or by the
+  // customer's thread — monday leads arrive with no conversation and get
+  // matched by phone later).
+  // Two chips share this rule and differ only by how long the wait has run:
+  //   awaiting=1        → everyone waiting, even for 3 minutes ("בהמתנה")
+  //   awaiting=overdue  → only past crm_settings.reply_overdue_minutes ("באיחור")
+  // The threshold is the SAME setting the inbox's own overdue chip uses, so a
+  // manager can never see the two screens disagree about what "late" means.
+  //
+  // NOT to be confused with the follow_up=overdue chip: that one is about a
+  // callback WE promised, this one is about a message THEY sent.
+  const awaitingReplySql = (minutes) => `
+    EXISTS (
+      SELECT 1 FROM crm_conversations cv
+       WHERE (cv.lead_id = l.id OR cv.customer_id = l.customer_id)
+         AND cv.last_inbound_at IS NOT NULL
+         AND (cv.last_outbound_at IS NULL OR cv.last_inbound_at > cv.last_outbound_at)
+         ${minutes ? `AND CAST((julianday('now') - julianday(cv.last_inbound_at)) * 1440 AS INTEGER) >= ${minutes}` : ''}
+    )`;
+
+  // Mirrors routes/inbox.js's overdueMinutes() — same column, same default.
+  function replyOverdueMinutes() {
+    const s = db.prepare(`SELECT reply_overdue_minutes FROM crm_settings WHERE id = 1`).get();
+    return (s && s.reply_overdue_minutes) || 60;
+  }
+
   // Real monday status values for one campaign's board, straight out of the
   // cached raw_json — NOT out of the board's label bank. The bank lists labels
   // that may never be used, while this returns exactly what's on the leads,
@@ -522,7 +559,7 @@ module.exports = function registerCrm(app, db, deps) {
     const {
       status, assigned_to, customer_id, campaign_id, date_from, date_to, q,
       sort, limit, offset, claimed, stuck, stuck_hours, follow_up, open,
-      monday_col, monday_val,
+      monday_col, monday_val, awaiting,
     } = req.query;
     const me = req.user.username;
     const where = [];
@@ -586,6 +623,13 @@ module.exports = function registerCrm(app, db, deps) {
       where.push(`l.status NOT IN ('won','lost','disqualified') AND ${LEAD_ACTIVITY_SQL} <= datetime('now', '-${hours} hours')`);
     }
 
+    // Waiting on us to answer. Both variants exclude closed leads — a customer
+    // who wrote after we marked the deal lost isn't an open service debt, and
+    // counting them would make the tile permanently non-zero.
+    if (awaiting === '1' || awaiting === 'overdue') {
+      where.push(`l.status NOT IN ('won','lost','disqualified') AND ${awaitingReplySql(awaiting === 'overdue' ? replyOverdueMinutes() : null)}`);
+    }
+
     // Filter on a monday column's real value (see /api/crm/lead-filters above).
     // Reads the cached raw_json rather than calling monday — the poller keeps
     // it current, and this stays a single local query. Measured at ~35ms over
@@ -622,6 +666,14 @@ module.exports = function registerCrm(app, db, deps) {
                ORDER BY COALESCE(cv.last_message_at, cv.created_at) DESC LIMIT 1) AS conversation_id,
              (SELECT SUM(cv.unread_count) FROM crm_conversations cv
                WHERE cv.lead_id = l.id OR cv.customer_id = l.customer_id) AS unread_count,
+             -- How long the customer has been waiting for a reply, in minutes;
+             -- NULL when we're not the ones holding the ball. Drives both the
+             -- "בהמתנה" tile's longest-wait line and the per-row badge.
+             (SELECT CAST((julianday('now') - julianday(MAX(cv.last_inbound_at))) * 1440 AS INTEGER)
+                FROM crm_conversations cv
+               WHERE (cv.lead_id = l.id OR cv.customer_id = l.customer_id)
+                 AND cv.last_inbound_at IS NOT NULL
+                 AND (cv.last_outbound_at IS NULL OR cv.last_inbound_at > cv.last_outbound_at)) AS awaiting_minutes,
              -- "Already bought from us" = a Morning ORDER document on one of
              -- this customer's OTHER quotes. Same signal as leadContext.js's
              -- customerHistory and as the 'won' auto-stamp, so the badge here,

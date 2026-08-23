@@ -66,6 +66,14 @@ const FILTERS = [
     hint: "ללא סינון סטטוס כלל — כולל לידים סגורים, אבודים ולא רלוונטיים.",
   },
   {
+    key: "awaiting", label: "בהמתנה לתשובה", params: { awaiting: "1" },
+    hint: "הלקוח כתב לנו ואף אחד עדיין לא ענה — מהרגע הראשון, בלי סף זמן. נספר לפי ההודעה האחרונה בשיחה: רק תשובה יוצאת בפועל מורידה ליד מהרשימה, לא עצם זה שמישהו פתח את השיחה וקרא.",
+  },
+  {
+    key: "awaiting_overdue", label: "באיחור בתשובה", params: { awaiting: "overdue" },
+    hint: "תת-קבוצה של ״בהמתנה לתשובה״ — רק אלה שממתינים מעל הסף שהוגדר בהגדרות ה-CRM (ברירת מחדל: שעה). זה אותו סף בדיוק שמפעיל את ״באיחור״ בתיבת השיחות.",
+  },
+  {
     key: "stuck", label: "תקועים", params: { stuck: "1" },
     hint: "ליד פתוח שלא היה בו שום מגע מעל 48 שעות. ״מגע״ = ההודעה האחרונה בשיחת הוואטסאפ; אם אין שיחה — הפעם הראשונה שנציג טיפל בו; ואם גם זה אין — מתי הליד נכנס למערכת. שינוי טכני (סנכרון מנדיי, עריכת שדה) לא נחשב מגע.",
   },
@@ -98,6 +106,17 @@ const FILTERS = [
     hint: "לידים שאתה הנציג המשויך שלהם — גם אם אינך מחזיק בהם משבצת עבודה כרגע.",
   },
 ];
+
+// An unanswered message can sit for days — "ממתין 4320 דק׳" is unreadable,
+// so the unit scales to the wait. Same function as the inbox's chat list
+// (CrmInbox.jsx), duplicated rather than shared: two copies is not yet a
+// pattern, and neither file owns a helpers module the other imports.
+function waitLabel(minutes) {
+  if (minutes == null) return "";
+  if (minutes < 60) return `${minutes} דק׳`;
+  if (minutes < 1440) return `${Math.floor(minutes / 60)} שע׳`;
+  return `${Math.floor(minutes / 1440)} ימים`;
+}
 
 // SQLite hands back naive 'YYYY-MM-DD HH:MM:SS'. follow_up_date is Israel
 // wall-clock (see the note in lib/leadPriority.js), so it is parsed as local
@@ -142,6 +161,14 @@ export default function CrmLeads() {
   const [newCount, setNewCount] = useState(null);
   const [overdueCount, setOverdueCount] = useState(null);
   const [overdueSoonest, setOverdueSoonest] = useState(null);
+  // "The customer wrote and we haven't answered" — counted from the first
+  // minute (awaiting) and, separately, only past the configured SLA
+  // (awaitingLate). Two numbers rather than one because "someone is waiting"
+  // and "someone has been waiting too long" are different decisions: the
+  // first is the queue, the second is the alarm.
+  const [awaitingCount, setAwaitingCount] = useState(null);
+  const [awaitingLate, setAwaitingLate] = useState(null);
+  const [awaitingLongest, setAwaitingLongest] = useState(null);
 
   const reloadSummary = useCallback(() => {
     crmLeads.list({ status: "new", open: "1", limit: 1 })
@@ -151,6 +178,21 @@ export default function CrmLeads() {
       .then((rows) => {
         setOverdueCount(rows[0]?.total_count ?? 0);
         setOverdueSoonest(rows[0]?.follow_up_date ?? null);
+      })
+      .catch(() => {});
+    // sort=last_activity puts the most recent first, so the LONGEST wait is
+    // the last page, not the first — pull the count here and read the longest
+    // wait off the late query below instead, which is the one that matters.
+    crmLeads.list({ awaiting: "1", limit: 1 })
+      .then((rows) => setAwaitingCount(rows[0]?.total_count ?? 0))
+      .catch(() => {});
+    crmLeads.list({ awaiting: "overdue", sort: "created", limit: 200 })
+      .then((rows) => {
+        setAwaitingLate(rows[0]?.total_count ?? 0);
+        // awaiting_minutes rides on every row (routes/crm.js); the biggest one
+        // in the page is the headline "someone has been waiting THIS long".
+        const longest = rows.reduce((max, r) => Math.max(max, r.awaiting_minutes || 0), 0);
+        setAwaitingLongest(longest || null);
       })
       .catch(() => {});
   }, []);
@@ -169,6 +211,13 @@ export default function CrmLeads() {
   };
   const openOverdue = () => {
     setFilter("overdue");
+    setStatus("");
+    setCampaign("");
+    setAssignee("");
+    listRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+  const openAwaiting = (key) => {
+    setFilter(key);
     setStatus("");
     setCampaign("");
     setAssignee("");
@@ -265,7 +314,7 @@ export default function CrmLeads() {
               below. Clicking one sets the matching filter and scrolls the
               list into view, so it reads as "drill down", not a separate
               report. */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
             <button
               type="button"
               onClick={openNewLeads}
@@ -299,6 +348,47 @@ export default function CrmLeads() {
                   {overdueCount > 0 && overdueSoonest && (
                     <span className="text-[11px] text-slate-400" dir="ltr">
                       הראשון: {followUpLabel(overdueSoonest)?.txt}
+                    </span>
+                  )}
+                </span>
+              </span>
+            </button>
+
+            {/* The customer is waiting on US — counted from minute one. */}
+            <button
+              type="button"
+              onClick={() => openAwaiting("awaiting")}
+              className="flex items-center gap-3 rounded-xl border border-black bg-white px-4 py-3 text-right hover:bg-slate-50 transition-colors"
+            >
+              <span className="shrink-0 w-9 h-9 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                <MessageCircle className="w-4 h-4" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-xs text-slate-500">בהמתנה לתשובה</span>
+                <span className="block text-xl font-bold">
+                  {awaitingCount === null ? <Loader2 className="w-4 h-4 animate-spin text-slate-300" /> : awaitingCount}
+                </span>
+              </span>
+            </button>
+
+            {/* The subset that has crossed the SLA — the alarm, not the queue. */}
+            <button
+              type="button"
+              onClick={() => openAwaiting("awaiting_overdue")}
+              className="flex items-center gap-3 rounded-xl border border-black bg-white px-4 py-3 text-right hover:bg-slate-50 transition-colors"
+            >
+              <span className="shrink-0 w-9 h-9 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center">
+                <AlertTriangle className="w-4 h-4" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-xs text-slate-500">באיחור בתשובה</span>
+                <span className="flex items-baseline gap-2">
+                  <span className="text-xl font-bold">
+                    {awaitingLate === null ? <Loader2 className="w-4 h-4 animate-spin text-slate-300" /> : awaitingLate}
+                  </span>
+                  {awaitingLate > 0 && awaitingLongest && (
+                    <span className="text-[11px] text-slate-400">
+                      הכי ותיק: {waitLabel(awaitingLongest)}
                     </span>
                   )}
                 </span>
@@ -480,6 +570,16 @@ function LeadRow({ l, isAdmin }) {
           {l.unread_count > 0 && (
             <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-500 text-white">
               {l.unread_count}
+            </span>
+          )}
+          {/* Survives being read, unlike the unread badge next to it — this is
+              "still owes them an answer", which only an outbound reply clears. */}
+          {l.awaiting_minutes != null && (
+            <span
+              title="הלקוח כתב ועדיין לא נענה"
+              className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200"
+            >
+              ממתין {waitLabel(l.awaiting_minutes)}
             </span>
           )}
         </div>

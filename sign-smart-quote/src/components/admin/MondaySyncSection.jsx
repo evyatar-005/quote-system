@@ -193,6 +193,16 @@ export default function MondaySyncSection() {
           <div className="text-sm font-semibold text-slate-600">בורדים ממופים</div>
           {boardMaps.map((b) => {
             const mappedQuoteFile = JSON.parse(b.column_map || "{}").quote_file;
+            // Status push fails SILENTLY when it isn't fully configured:
+            // pushBoard() returns early with no status column, and skips any
+            // individual status whose monday label is blank — no error, no log
+            // row, nothing in the UI. A board can sit for months looking
+            // healthy ("נסרק לאחרונה" is green, pulls work fine) while nothing
+            // the agents do ever reaches monday. Spelled out here because it is
+            // the one part of the sync that cannot report its own failure.
+            const statusValues = (() => { try { return JSON.parse(b.status_values || "{}"); } catch (_) { return {}; } })();
+            const mappedStatuses = ["won", "lost", "quoted"].filter((k) => statusValues[k]);
+            const pushOff = !b.status_column_id || mappedStatuses.length === 0;
             return (
               <div key={b.id} className="border border-black rounded-xl px-3 py-2 text-sm space-y-2">
                 <div className="flex items-center justify-between gap-3">
@@ -203,6 +213,23 @@ export default function MondaySyncSection() {
                       {b.last_error && <span className="text-red-500"> — {b.last_error}</span>}
                       {" · "}
                       {mappedQuoteFile ? <span className="text-emerald-600">קובץ הצעת מחיר ממופה</span> : <span className="text-amber-600">אין מיפוי לקובץ הצעת מחיר</span>}
+                    </div>
+                    <div className="text-xs mt-0.5">
+                      {pushOff ? (
+                        <span className="text-red-600 font-medium">
+                          ⚠ דחיפת סטטוס ל-monday לא פעילה —{" "}
+                          {!b.status_column_id ? "לא נבחרה עמודת סטטוס" : "אף סטטוס לא מופה לתווית בבורד"}.
+                          שינויי סטטוס ב-CRM לא יגיעו לבורד.
+                        </span>
+                      ) : mappedStatuses.length < 3 ? (
+                        <span className="text-amber-600">
+                          דחיפת סטטוס חלקית — ממופים {mappedStatuses.length} מתוך 3
+                          (חסר: {["won", "lost", "quoted"].filter((k) => !statusValues[k])
+                            .map((k) => ({ won: "זכינו", lost: "אבדנו", quoted: "נשלחה הצעה" }[k])).join(", ")})
+                        </span>
+                      ) : (
+                        <span className="text-emerald-600">דחיפת סטטוס פעילה — כל 3 הסטטוסים ממופים</span>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
