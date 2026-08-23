@@ -394,6 +394,25 @@ module.exports = function registerCrm(app, db, deps) {
     res.status(201).json(db.prepare(`SELECT * FROM crm_activity_log WHERE customer_id = ? ORDER BY created_at DESC LIMIT 50`).all(customer.id));
   });
 
+  // Opens (find-or-create) the WhatsApp thread for a customer who has no lead
+  // yet. Mirrors POST /api/crm/leads/:id/conversation (leadQueue.js), which
+  // only exists for a customer that already has a lead — a plain "לקוח חדש"
+  // has none, so there was previously NO way to reach a composer for them at
+  // all short of manually creating a throwaway lead first. The customers list's
+  // WhatsApp icon used to open wa.me directly instead (bypassing the CRM
+  // entirely — no message logged, no thread, nothing the next agent could see);
+  // this is what it calls now.
+  app.post('/api/crm/customers/:id/conversation', requireAuth, (req, res) => {
+    const customer = customerById(req.params.id);
+    if (!customer) return res.status(404).json({ error: 'לקוח לא נמצא' });
+    if (!customer.phone_e164) return res.status(400).json({ error: 'ללקוח אין מספר טלפון' });
+    const { resolveConversation } = require('../services/channels/whatsapp/outbox');
+    const conversationId = resolveConversation(db, {
+      customerId: customer.id, phoneE164: customer.phone_e164,
+    });
+    res.json({ conversation_id: conversationId });
+  });
+
   app.get('/api/crm/customers/:id/timeline', requireAuth, (req, res) => {
     const customer = customerById(req.params.id);
     if (!customer) return res.status(404).json({ error: 'לקוח לא נמצא' });

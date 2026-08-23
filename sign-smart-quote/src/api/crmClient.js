@@ -73,6 +73,9 @@ export const crmCustomers = {
   timeline(id) {
     return request(`/api/crm/customers/${id}/timeline`);
   },
+  openConversation(id) {
+    return request(`/api/crm/customers/${id}/conversation`, { method: 'POST' });
+  },
 };
 
 export const crmLeads = {

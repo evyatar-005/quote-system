@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Loader2, MessagesSquare, Lock, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { inbox } from "@/api/inboxClient";
@@ -58,6 +59,23 @@ export default function CrmInbox() {
   const [loadingList, setLoadingList] = useState(true);
   const [activeId, setActiveId] = useState(null);
   const [filters, setFilters] = useState({ q: "", filter: "all" });
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Deep link from outside the inbox — e.g. the customers list's WhatsApp
+  // button, which finds-or-creates a conversation server-side and lands here
+  // with ?conversation=<id>. ConversationThread fetches its own data from
+  // just the id, so it opens fine even before the conversation shows up in
+  // `conversations` (which may not include it yet — a filtered/paged list,
+  // or a conversation that was just created and hasn't hit the poll). The
+  // param is consumed once and stripped so a later filter change or refresh
+  // doesn't keep forcing this conversation back open.
+  useEffect(() => {
+    const fromUrl = searchParams.get("conversation");
+    if (!fromUrl) return;
+    setActiveId(Number(fromUrl));
+    setSearchParams((prev) => { prev.delete("conversation"); return prev; }, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const Sidebar = user?.role === "agent" ? AgentSidebar : ManagerSidebar;
 
   // The poll and the SSE handler need the CURRENT filters without being torn

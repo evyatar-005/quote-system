@@ -220,7 +220,26 @@ function CustomerRow({ c }) {
   // The whole row is a Link, so the contact shortcuts must swallow the click —
   // otherwise tapping "וואטסאפ" would also navigate into the customer card.
   const stop = (e) => { e.preventDefault(); e.stopPropagation(); };
-  const waNumber = c.phone_e164 ? c.phone_e164.replace(/\D/g, "") : null;
+  const navigate = useNavigate();
+  const [openingWa, setOpeningWa] = useState(false);
+
+  // Used to open wa.me directly — WhatsApp Web in a new tab, entirely outside
+  // the CRM: no thread, no logged message, nothing the next agent could see.
+  // Now it opens (find-or-creates) the same conversation row the lead
+  // workspace uses and drops the agent straight into its composer instead.
+  const openWhatsApp = async (e) => {
+    stop(e);
+    if (openingWa) return;
+    setOpeningWa(true);
+    try {
+      const { conversation_id } = await crmCustomers.openConversation(c.id);
+      navigate(`/crm/inbox?conversation=${conversation_id}`);
+    } catch (err) {
+      toast.error(err.message || "פתיחת השיחה נכשלה");
+    } finally {
+      setOpeningWa(false);
+    }
+  };
 
   return (
     <Link
@@ -276,16 +295,15 @@ function CustomerRow({ c }) {
             >
               <Phone className="w-3.5 h-3.5" />
             </a>
-            <a
-              href={`https://wa.me/${waNumber}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
+            <button
+              type="button"
+              onClick={openWhatsApp}
+              disabled={openingWa}
               title="וואטסאפ"
-              className="p-1.5 rounded-lg border border-slate-200 text-emerald-600 hover:bg-emerald-50"
+              className="p-1.5 rounded-lg border border-slate-200 text-emerald-600 hover:bg-emerald-50 disabled:opacity-50"
             >
-              <MessageCircle className="w-3.5 h-3.5" />
-            </a>
+              {openingWa ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MessageCircle className="w-3.5 h-3.5" />}
+            </button>
           </>
         )}
       </div>
