@@ -177,7 +177,7 @@ export default function MondaySyncSection() {
       const existing = JSON.parse(board.column_map || "{}");
       // Spread `existing` first so any key this form doesn't expose (name, and
       // anything added later) survives the round-trip instead of being dropped.
-      await mondaySync.updateBoardMap(board.id, {
+      const saved = await mondaySync.updateBoardMap(board.id, {
         column_map: {
           ...existing,
           quote_file: editQuoteFileCol || undefined,
@@ -192,8 +192,24 @@ export default function MondaySyncSection() {
           quoted: editStatusQuoted || undefined,
         },
       });
-      toast.success("המיפוי עודכן");
-      setEditingId(null);
+      // Re-seed the form from the SERVER's response and keep it open, rather
+      // than closing and trusting a refetch. Closing on save made a failed or
+      // partial write indistinguishable from a successful one: the panel went
+      // back to the collapsed row, and re-opening it showed "ללא" again with
+      // no way to tell whether the save never landed or was never sent — the
+      // exact confusion reported here. Now the values on screen after saving
+      // ARE the stored ones.
+      const savedMap = (() => { try { return JSON.parse(saved.column_map || "{}"); } catch (_) { return {}; } })();
+      const savedStatus = (() => { try { return JSON.parse(saved.status_values || "{}"); } catch (_) { return {}; } })();
+      setEditPhoneCol(savedMap.phone || "");
+      setEditEmailCol(savedMap.email || "");
+      setEditQuoteFileCol(savedMap.quote_file || "");
+      setEditFollowUpCol(savedMap.follow_up || "");
+      setEditStatusCol(saved.status_column_id || "");
+      setEditStatusWon(savedStatus.won || "");
+      setEditStatusLost(savedStatus.lost || "");
+      setEditStatusQuoted(savedStatus.quoted || "");
+      toast.success("המיפוי נשמר");
       load();
     } catch (err) {
       toast.error(err.message || "העדכון נכשל");
