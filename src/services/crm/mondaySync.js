@@ -180,9 +180,12 @@ async function pullBoard(db, boardMap, ownerUsername) {
   );
   const touchItemMap = db.prepare(`UPDATE monday_item_map SET last_pulled_at = CURRENT_TIMESTAMP, raw_json = ? WHERE id = ?`);
   const findLeadByExt = db.prepare(`SELECT * FROM crm_leads WHERE source = 'monday' AND external_ref = ?`);
+  // status comes from the board when its label is mapped, else 'new' — a lead
+  // that arrives already marked "עסקה נסגרה" on the board should not land in
+  // the CRM as brand new and re-enter the agents' queue.
   const insertLead = db.prepare(
     `INSERT INTO crm_leads (customer_id, campaign_id, source, external_ref, status, title, assigned_to, follow_up_date, follow_up_source, source_created_at)
-     VALUES (@customer_id, @campaign_id, 'monday', @external_ref, 'new', @title, @assigned_to, @follow_up_date, @follow_up_source, @source_created_at)`
+     VALUES (@customer_id, @campaign_id, 'monday', @external_ref, @status, @title, @assigned_to, @follow_up_date, @follow_up_source, @source_created_at)`
   );
   // Follow-up dates keep moving on the board, so unlike the rest of the lead
   // (frozen at first pull) this one is refreshed on every poll for leads that
@@ -200,7 +203,42 @@ async function pullBoard(db, boardMap, ownerUsername) {
         AND follow_up_source IS NOT 'agent'`
   );
 
+  // Status pull. Until this existed the sync was one-way for status — we
+  // pushed won/lost/quoted TO the board and never read it back — so a lead
+  // worked entirely on monday stayed 'new' in the CRM forever. That is why
+  // ~3,665 of 3,665 leads read as "לידים חדשים": the value was written once
+  // at creation and never revisited.
+  //
+  // Reuses the SAME status_values map as pushBoard, inverted (label → status).
+  // One map for both directions means the two can never disagree about which
+  // board label means "won" — and it costs no extra configuration.
+  const statusByLabel = (() => {
+    const out = new Map();
+    let sv = {};
+    try { sv = JSON.parse(boardMap.status_values || '{}'); } catch (_) { sv = {}; }
+    for (const [internal, label] of Object.entries(sv)) {
+      const trimmed = (label || '').toString().trim();
+      if (trimmed) out.set(trimmed, internal);
+    }
+    return out;
+  })();
+
+  // Never clobbers a decision an agent made in the CRM: only moves a lead
+  // that is still 'new'. A lead someone actively worked here keeps its local
+  // status even if the board disagrees — the board is authoritative for
+  // untouched leads, the agent is authoritative for the rest.
+  const updateStatusFromBoard = db.prepare(
+    `UPDATE crm_leads
+        SET status = @status,
+            closed_at = CASE WHEN @status IN ('won','lost','disqualified')
+                             THEN COALESCE(closed_at, @now) ELSE closed_at END,
+            quoted_at = CASE WHEN @status = 'quoted' THEN COALESCE(quoted_at, @now) ELSE quoted_at END,
+            updated_at = @now
+      WHERE id = @id AND status = 'new' AND status != @status`
+  );
+
   let created = 0;
+  let statusPulled = 0;
   const tx = db.transaction(() => {
     for (const item of items) {
       const name = columnMap.name ? columnText(item.column_values, columnMap.name) : item.name;
@@ -217,6 +255,14 @@ async function pullBoard(db, boardMap, ownerUsername) {
         ? ((/^\d{4}-\d{2}-\d{2}(?: \d{2}:\d{2})?/.exec(rawFollowUp) || [])[0] || rawFollowUp.slice(0, 10)) || null
         : null;
 
+      // The board's current label for this item, resolved to one of our
+      // internal statuses. NULL when the board uses a label nobody mapped —
+      // in which case the lead is simply left alone rather than guessed at.
+      const boardLabel = boardMap.status_column_id
+        ? (columnText(item.column_values, boardMap.status_column_id) || '').trim()
+        : '';
+      const boardStatus = boardLabel ? (statusByLabel.get(boardLabel) || null) : null;
+
       const existingMap = findItemMap.get(boardMap.board_id, item.id);
       if (existingMap) {
         touchItemMap.run(JSON.stringify(item), existingMap.id);
@@ -231,6 +277,14 @@ async function pullBoard(db, boardMap, ownerUsername) {
           // follow-up date — an agent moving it on the board must show up on
           // My Day, and this is the only place we see the new value.
           if (columnMap.follow_up) updateFollowUp.run(followUp, existingMap.lead_id);
+          // …and the status, which is the whole point of the pull side: this
+          // is the only moment we can see that a lead was progressed on the
+          // board. The statement itself refuses to touch anything past 'new'.
+          if (boardStatus) {
+            statusPulled += updateStatusFromBoard.run({
+              id: existingMap.lead_id, status: boardStatus, now: new Date().toISOString(),
+            }).changes;
+          }
         }
         continue;
       }
@@ -249,6 +303,7 @@ async function pullBoard(db, boardMap, ownerUsername) {
           // would silently assign an entire 100-row board to whoever pressed
           // the button. See CLAUDE.md CRM plan Phase 5 §2/§3.
           assigned_to: null,
+          status: boardStatus || 'new',
           follow_up_date: followUp,
           follow_up_source: followUp ? 'monday' : null,
           source_created_at: mondayTs(item.created_at),
@@ -270,8 +325,8 @@ async function pullBoard(db, boardMap, ownerUsername) {
   });
   tx();
 
-  logSync(db, { direction: 'pull', board_id: boardMap.board_id, success: true, response_json: { itemCount: items.length, created } });
-  return { pulled: items.length, created };
+  logSync(db, { direction: 'pull', board_id: boardMap.board_id, success: true, response_json: { itemCount: items.length, created, statusPulled } });
+  return { pulled: items.length, created, statusPulled };
 }
 
 // Pushes any lead whose status changed since it was last written to the
