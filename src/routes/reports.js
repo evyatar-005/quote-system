@@ -117,7 +117,15 @@ module.exports = function registerReports(app, db, deps) {
       const result = await runner.sendReport(db, { recipients, fromDate, toDate });
       if (!result.sent) return res.status(400).json({ error: 'יש להזין נמענים לדוח' });
       console.log(`[POST /api/reports/generate/${type}] sent ${fromDate}..${toDate} to ${recipients}`);
-      res.json({ ok: true, count: result.count });
+      // accepted/rejected come straight from the mail server's own answer —
+      // without them a partial rejection reads as a clean success in the UI.
+      res.json({
+        ok: true,
+        count: result.count,
+        accepted: result.accepted || [],
+        rejected: result.rejected || [],
+        response: result.response || '',
+      });
     } catch (err) {
       console.error(`[POST /api/reports/generate/${type}] failed:`, err.message);
       res.status(400).json({ error: err.message });

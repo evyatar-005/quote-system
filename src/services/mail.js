@@ -35,6 +35,12 @@ function buildTransport(row) {
 // Throws if not configured or if the send itself fails — callers decide
 // whether a failure here should be swallowed (e.g. forgot-password always
 // returns a generic response regardless) or surfaced (e.g. the admin test-mail).
+//
+// Returns nodemailer's info object. This matters: nodemailer only THROWS when
+// every recipient was rejected. If the server accepts some addresses and
+// rejects others, the send "succeeds" and the rejected ones are reported only
+// in info.rejected — so a caller that ignores the return value tells the admin
+// "sent successfully" for mail that partly never went anywhere.
 async function sendMail(db, { to, subject, html, text }) {
   const row = getSmtpConfig(db);
   if (!row || !row.host || !row.from_email) {
@@ -42,7 +48,13 @@ async function sendMail(db, { to, subject, html, text }) {
   }
   const transport = buildTransport(row);
   const from = row.from_name ? `"${row.from_name}" <${row.from_email}>` : row.from_email;
-  await transport.sendMail({ from, to, subject, html, text });
+  const info = await transport.sendMail({ from, to, subject, html, text });
+  const rejected = info?.rejected || [];
+  if (rejected.length) {
+    console.error(`[mail] server REJECTED ${rejected.length} recipient(s): ${rejected.join(', ')} — response: ${info?.response || '(none)'}`);
+  }
+  console.log(`[mail] from="${from}" accepted=[${(info?.accepted || []).join(', ')}] response="${info?.response || ''}"`);
+  return info;
 }
 
 function resetPasswordEmail({ fullName, link, minutes }) {

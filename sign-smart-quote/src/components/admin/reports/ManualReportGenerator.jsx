@@ -54,7 +54,16 @@ export default function ManualReportGenerator({ reportDefs }) {
         fromDate,
         toDate,
       });
-      toast.success(`הדוח נשלח בהצלחה (${result.count} רשומות)`);
+      // The mail server's own verdict, not just "the request didn't error" —
+      // it accepts some addresses and rejects others without failing the send,
+      // so reporting a flat success here hid mail that never went out.
+      const rejected = result.rejected || [];
+      const accepted = result.accepted || [];
+      if (rejected.length) {
+        toast.error(`נדחו ע״י שרת הדואר: ${rejected.join(", ")}${accepted.length ? ` · נשלח ל-${accepted.length}` : ""}`, { duration: 15000 });
+      } else {
+        toast.success(`הדוח נשלח ל-${accepted.length || recipients.length} נמענים (${result.count} רשומות)`);
+      }
       setPreview(null);
     } catch (err) {
       toast.error(err?.message || "שגיאה בשליחת הדוח");
