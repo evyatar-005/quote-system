@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { convertMorningDocument, createPaymentLink, getLatestMorningDocuments } from "@/api/morningClient";
 import QuoteDocument from "@/components/calculator/QuoteDocument";
+import QuoteDetailsModal from "@/components/QuoteDetailsModal";
 import DocumentIssuedModal from "@/components/DocumentIssuedModal";
 import { MORNING_ORDER_TYPE, toLocalDateStr, DATE_PRESETS, computeDateRange, formatDocNumber, ORIGIN_LABELS, ORIGIN_COLORS, originOf } from "@/lib/quoteLabels";
 import { latestRevisionsOnly, reconstructBuilderState } from "@/lib/quoteEconomics";
@@ -68,6 +69,7 @@ export default function MyQuotes() {
   const [sellers, setSellers] = useState({});
   const [issuingIds, setIssuingIds] = useState(() => new Set());
   const [documentQuote, setDocumentQuote] = useState(null);
+  const [selectedQuote, setSelectedQuote] = useState(null);
   // Raw Morning document URL currently previewed — resolved to a blob URL
   // below (previewBlobUrl) before the iframe ever gets it (the proxy route
   // needs the Bearer token, which a plain <iframe src> can't attach).
@@ -597,8 +599,16 @@ export default function MyQuotes() {
                         <div className="text-sm text-slate-400">כולל מע״מ</div>
                       </div>
                       <button
-                        onClick={() => (morningDoc?.document_url ? setPreviewDoc(morningDoc.document_url) : openQuoteDocument(q))}
-                        title={morningDoc?.document_url ? "תצוגה מקדימה של מסמך המורנינג" : "טרם הונפק מסמך — מוצגת התצוגה הפנימית"}
+                        onClick={() => {
+                          if (morningDoc?.document_url) {
+                            setPreviewDoc(morningDoc.document_url);
+                          } else if (isAdmin) {
+                            setSelectedQuote(q);
+                          } else {
+                            openQuoteDocument(q);
+                          }
+                        }}
+                        title={morningDoc?.document_url ? "תצוגה מקדימה של מסמך המורנינג" : isAdmin ? "טרם הונפק מסמך — פתיחת ממשק העלויות המלא לעריכה" : "טרם הונפק מסמך — מוצגת התצוגה הפנימית"}
                         className="text-xs px-3 py-1.5 rounded-lg border border-black text-slate-600 hover:border-slate-500 hover:bg-slate-50 transition-colors"
                       >
                         פתח
@@ -652,6 +662,16 @@ export default function MyQuotes() {
           </div>
         )}
       </div>
+
+      {selectedQuote && (
+        <QuoteDetailsModal
+          quote={selectedQuote}
+          morningDoc={morningDocs[selectedQuote.id]}
+          onOpenMorningDoc={setPreviewDoc}
+          onClose={() => setSelectedQuote(null)}
+          onSaved={() => { setSelectedQuote(null); loadQuotes(agentScope); }}
+        />
+      )}
 
       {documentQuote && (
         <QuoteDocument
