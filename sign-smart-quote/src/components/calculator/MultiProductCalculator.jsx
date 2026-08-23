@@ -422,22 +422,28 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
     return lines;
   };
 
-  // Product name on the first line, full spec underneath.
+  // Product name on the first line, full spec underneath. Fixed-price catalog
+  // families (kapa/rollup/glass) are picked as a specific tier row — that
+  // row's own description already carries its size/spec (e.g. "קאפה ללא
+  // חיתוך צורני במידות..."), so it's used as the title instead of the bare
+  // category name, or the size the customer is paying for would be invisible
+  // on the document.
+  const lineTitle = (formData, fallback) =>
+    formData?.result?.kapaDescription || formData?.result?.rollupDescription || formData?.result?.glassDescription || fallback;
+
   const lineDescription = (title, formData, itemLabel) =>
     [title, ...buildSpecLines(formData, itemLabel, title)].join("\n");
 
   // Fixed-price catalog families (kapa/rollup/glass) carry their own per-row
   // SKU on the calc result; everything else uses its static מק"ט from the
-  // picker (same code shown next to the product everywhere in the UI). The
-  // product name is appended too — the bare code isn't meaningful on its own
-  // inside Morning's מק"ט column.
+  // picker (same code shown next to the product everywhere in the UI). Just
+  // the bare code — the product name already opens the description (`lineTitle`
+  // above), so repeating it in the מק"ט column would show it twice.
   const lineSku = (formData) => {
     if (formData?.productType === "free_product") return null;
     const code = formData?.result?.kapaSku || formData?.result?.rollupSku || formData?.result?.glassSku
       || PRODUCT_CODES[formData?.productType] || null;
-    if (!code) return null;
-    const name = PRODUCT_NAMES[formData?.productType] || formData?.productType;
-    return `${code} ${name}`;
+    return code || null;
   };
 
   const buildLineItems = () => {
@@ -452,23 +458,26 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
       // name the one item, and that note is just as real.
       const itemLabel = itemLabels[item.id]?.trim() || "";
       const isFree = formData.productType === "free_product";
+      const sku = lineSku(formData);
       lines.push({
         groupLabel,
         description: lineDescription(
-          isFree ? (formData.lineLabel || "מוצר חופשי") : (PRODUCT_NAMES[formData.productType] || formData.productType),
+          isFree ? (formData.lineLabel || "מוצר חופשי") : lineTitle(formData, PRODUCT_NAMES[formData.productType] || formData.productType),
           formData,
           itemLabel,
         ),
         freeText: formData.lineLabel || "",
         quantity: parseInt(formData.quantity) || 1,
         unitPrice: formData.result?.sellingPricePerUnit ?? 0,
-        sku: lineSku(formData),
+        sku,
       });
       // Graphics notes as their own zero-price line, right under the product
       // they belong to — a real separate row in the Morning document (not
       // just an extra sentence inside the product's own description block),
       // so it reads as "this note is about the item above" without affecting
-      // the product's price.
+      // the product's price. Its own מק"ט carries the parent line's code so
+      // it's clear which product the note is about even when rows get
+      // reordered or the description is skimmed.
       if (formData.graphicsNote?.trim()) {
         lines.push({
           groupLabel,
@@ -476,7 +485,7 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
           freeText: "",
           quantity: 1,
           unitPrice: 0,
-          sku: null,
+          sku: sku ? `${sku} גרפיקה` : null,
           isNote: true, // skipped as the document-minimum top-up target below
         });
       }
