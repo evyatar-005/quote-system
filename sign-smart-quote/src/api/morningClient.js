@@ -131,6 +131,20 @@ export async function getLatestMorningDocuments(quoteIds) {
   return request(`/api/morning/quotes/documents?ids=${quoteIds.join(',')}`);
 }
 
+/**
+ * Quotes/orders issued straight from Morning, with no quote in this system
+ * behind them: { quotesCount, ordersCount, ordersRevenue, orders[] }.
+ * Revenue only — those documents carry no cost breakdown of ours, so there is
+ * deliberately no profit figure to read. Throws on failure.
+ */
+export async function getMorningDirectActivity({ fromDate, toDate } = {}) {
+  const params = new URLSearchParams();
+  if (fromDate) params.set('fromDate', fromDate);
+  if (toDate) params.set('toDate', toDate);
+  const qs = params.toString();
+  return request(`/api/morning/direct-activity${qs ? `?${qs}` : ''}`);
+}
+
 /** Current Morning credentials/config (admin only). Throws on failure. */
 export async function getMorningConfig() {
   return request('/api/morning/config');

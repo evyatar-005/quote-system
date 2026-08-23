@@ -51,6 +51,11 @@ function ProductMetricCard({ title, subtitle, orders, metricKey }) {
     });
     return aggregateProducts(inRange)
       .filter((p) => p.units > 0)
+      // A product with no saved cost has no knowable profit or margin — it
+      // would rank as a flat ₪0 / 0.0% next to real measured values and read
+      // as "this product earns nothing", which isn't what the data says.
+      // Revenue/units/avgPrice are unaffected, so those views keep it.
+      .filter((p) => (metricKey === "profit" || metricKey === "marginPct" ? p.hasCost : true))
       .sort((a, b) => b[metricKey] - a[metricKey]);
   }, [orders, datePreset, customFrom, customTo, metricKey]);
 
@@ -85,7 +90,7 @@ function ProductMetricCard({ title, subtitle, orders, metricKey }) {
       )}
 
       {rows.length === 0 ? (
-        <p className="text-sm text-slate-400 py-8 text-center">אין הזמנות בטווח הזמן שנבחר</p>
+        <p className="text-sm text-slate-400 py-8 text-center">אין נתונים בטווח הזמן שנבחר</p>
       ) : (
         <>
           <div dir="ltr" style={{ width: "100%", height: 280 }}>
@@ -166,6 +171,11 @@ function ProductPieCard({ orders }) {
     });
     return aggregateProducts(inRange)
       .filter((p) => p.units > 0)
+      // A product with no saved cost has no knowable profit or margin — it
+      // would rank as a flat ₪0 / 0.0% next to real measured values and read
+      // as "this product earns nothing", which isn't what the data says.
+      // Revenue/units/avgPrice are unaffected, so those views keep it.
+      .filter((p) => (metricKey === "profit" || metricKey === "marginPct" ? p.hasCost : true))
       .sort((a, b) => b[metricKey] - a[metricKey]);
   }, [orders, datePreset, customFrom, customTo, metricKey]);
 
@@ -213,7 +223,7 @@ function ProductPieCard({ orders }) {
       )}
 
       {rows.length === 0 ? (
-        <p className="text-sm text-slate-400 py-8 text-center">אין הזמנות בטווח הזמן שנבחר</p>
+        <p className="text-sm text-slate-400 py-8 text-center">אין נתונים בטווח הזמן שנבחר</p>
       ) : (
         <>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -228,7 +238,14 @@ function ProductPieCard({ orders }) {
                     cy="50%"
                     outerRadius="75%"
                     paddingAngle={2}
-                    label={({ sku, percent }) => (percent > 0.04 ? `${sku} ${(percent * 100).toFixed(0)}%` : "")}
+                    // Label by NAME, not by מק"ט: a product with no catalogue
+                    // code (free_product) has an empty sku, which rendered as
+                    // a bare orphan "34%" with nothing identifying it. The
+                    // percent leads so the two never transpose visually
+                    // inside this LTR chart container.
+                    label={({ name, sku, percent }) =>
+                      percent > 0.04 ? `${(percent * 100).toFixed(0)}% · ${name || sku || "—"}` : ""
+                    }
                     labelLine={false}
                   >
                     {rows.map((r, i) => (
@@ -286,8 +303,27 @@ function ProductPieCard({ orders }) {
                     <td className="text-foreground">{r.name}</td>
                     <td className="tabular-nums text-slate-600">{r.lines}</td>
                     <td className="tabular-nums text-slate-600">{fmt(r.revenue)}</td>
-                    <td className="tabular-nums font-semibold text-primary">{fmt(r.profit)}</td>
-                    <td className={`tabular-nums font-semibold ${r.marginPct < 0 ? "text-red-500" : "text-emerald-600"}`}>{r.marginPct.toFixed(1)}%</td>
+                    {/* A line with no saved cost (מוצר חופשי, and older
+                        graphics-style rows) has an UNKNOWN profit, not a zero
+                        one — printing revenue as profit produced a fake 100%
+                        margin and inflated every profit figure on the tab. */}
+                    <td className="tabular-nums font-semibold text-primary">
+                      {r.hasCost ? fmt(r.profit) : <span className="text-slate-400 font-normal">—</span>}
+                    </td>
+                    <td className={`tabular-nums font-semibold ${!r.hasCost ? "" : r.marginPct < 0 ? "text-red-500" : "text-emerald-600"}`}>
+                      {r.hasCost ? (
+                        <>
+                          {r.marginPct.toFixed(1)}%
+                          {r.costMissing > 0 && (
+                            <span className="text-[10px] text-amber-600 font-normal mr-1" title={`${r.costMissing} שורות ללא עלות שמורה — לא נכללות בחישוב הרווחיות`}>
+                              ({r.costMissing} ללא עלות)
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-slate-400 font-normal" title="אין עלות שמורה לשורות של מוצר זה — לא ניתן לחשב רווחיות">—</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -304,33 +340,83 @@ function ProductPieCard({ orders }) {
 // review or issued to the client but never turned into a real order. This is
 // deliberately a smaller, truthier set than the agent-analytics tab.
 export default function ProductAnalytics({ quotes, morningDocs }) {
-  const orders = useMemo(
+  // הזמנות (default) = quotes that became a real Morning order.
+  // הצעות = every issued quote, ordered or not. The two answer different
+  // questions ("what did we sell" vs "what do we offer"), so they must never
+  // be silently mixed — hence an explicit switch rather than one blended set.
+  const [scope, setScope] = useState("orders");
+
+  const orders = useMemo(() => {
     // latestRevisionsOnly first: a revised quote is one deal saved as two
     // rows, and if both ever became orders the units/revenue would double.
-    () => latestRevisionsOnly(quotes).filter((q) => morningDocs[q.id]?.morning_document_type === MORNING_ORDER_TYPE),
-    [quotes, morningDocs]
+    const live = latestRevisionsOnly(quotes);
+    const rows = scope === "orders"
+      ? live.filter((q) => morningDocs[q.id]?.morning_document_type === MORNING_ORDER_TYPE)
+      : live;
+    // Date every ORDER by when Morning actually issued it, not by when the
+    // quote behind it was first drafted — a quote written last month and
+    // confirmed today is this month's business. Same correction already made
+    // to the sales email report (v1.0.100); the charts here were still
+    // filtering on created_date and misattributing those orders.
+    return rows.map((q) => {
+      const orderedAt = morningDocs[q.id]?.created_at;
+      return scope === "orders" && orderedAt ? { ...q, created_date: orderedAt } : q;
+    });
+  }, [quotes, morningDocs, scope]);
+
+  const scopeSwitch = (
+    <div className="flex items-center gap-2">
+      {[
+        { key: "orders", label: "הזמנות" },
+        { key: "quotes", label: "הצעות מחיר" },
+      ].map(({ key, label }) => (
+        <button
+          key={key}
+          onClick={() => setScope(key)}
+          className={`h-8 px-3 text-xs rounded-lg border transition-colors ${
+            scope === key ? "border-primary bg-primary/10 text-primary font-semibold" : "border-black text-slate-500 hover:border-slate-500"
+          }`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
   );
 
   if (!orders.length) {
     return (
       <div className="bg-white border border-black rounded-2xl p-8 text-center">
         <PackageSearch className="w-8 h-8 text-slate-300 mx-auto mb-3" />
-        <p className="text-sm text-foreground font-semibold">אין עדיין הזמנות בפועל</p>
-        <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
-          המסך הזה סופר רק הצעות שהונפקו בפועל כהזמנה במורנינג — לא טיוטות, לא הצעות שנשלחו
-          לבדיקה, ולא הצעות שהונפקו ללקוח בלי שהפכו להזמנה. ברגע שהזמנה ראשונה תונפק, הניתוח יתמלא.
+        <p className="text-sm text-foreground font-semibold">
+          {scope === "orders" ? "אין עדיין הזמנות בפועל" : "אין עדיין הצעות מחיר"}
         </p>
+        <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+          {scope === "orders"
+            ? "התצוגה הזו סופרת רק הצעות שהונפקו בפועל כהזמנה במורנינג — לא טיוטות, לא הצעות שנשלחו לבדיקה, ולא הצעות שהונפקו ללקוח בלי שהפכו להזמנה. אפשר לעבור ל\"הצעות מחיר\" כדי לראות גם כאלה שטרם נסגרו."
+            : "עדיין לא נשמרו הצעות מחיר במערכת."}
+        </p>
+        {/* The switch has to stay reachable here too — otherwise an empty
+            "הזמנות" view is a dead end with no way back to "הצעות מחיר". */}
+        <div className="flex justify-center mt-4">{scopeSwitch}</div>
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <h3 className="text-sm font-semibold text-foreground">ניתוח מוצרים</h3>
+        {scopeSwitch}
+      </div>
+
       <div className="flex items-start gap-2 text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-600">
         <PackageSearch className="w-4 h-4 shrink-0 mt-0.5 text-slate-400" />
         <span>
-          מבוסס על {orders.length} הזמנות שהונפקו בפועל במורנינג. כל גרף מסונן בנפרד לפי הזמן שבחרת עבורו.
-          המחזור והרווח מחושבים ברמת השורה (לא כולל מע״מ, משלוח או התקנה — אלה שייכים להצעה כולה, לא למוצר ספציפי).
+          מבוסס על {orders.length} {scope === "orders" ? "הזמנות שהונפקו בפועל במורנינג" : "הצעות מחיר שהוצאו (כולל כאלה שלא נסגרו)"}.
+          כל גרף מסונן בנפרד לפי הזמן שבחרת עבורו
+          {scope === "orders" && " — לפי התאריך שבו ההזמנה הונפקה במורנינג, לא לפי מתי ההצעה נכתבה"}.
+          {" "}המחזור והרווח מחושבים ברמת השורה (לא כולל מע״מ, משלוח או התקנה — אלה שייכים להצעה כולה, לא למוצר ספציפי),
+          ומשוקללים לפי הנחת המנהל בפועל. שורות ללא עלות שמורה מסומנות ולא נכללות בחישוב הרווחיות.
         </span>
       </div>
 

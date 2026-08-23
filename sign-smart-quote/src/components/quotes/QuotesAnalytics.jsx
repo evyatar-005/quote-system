@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ResponsiveContainer, BarChart, Bar, LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, LabelList,
@@ -6,6 +6,12 @@ import {
 import { AlertTriangle, Target, ChevronDown } from "lucide-react";
 import { fmt, MORNING_ORDER_TYPE, DATE_PRESETS, computeDateRange, toLocalDateStr } from "@/lib/quoteLabels";
 import { economicsOf, linesOf, shippingOf, productLabel, productSku, compareSku, latestRevisionsOnly } from "@/lib/quoteEconomics";
+import { getMorningDirectActivity } from "@/api/morningClient";
+
+// Synthetic agent key for documents issued straight in Morning, with no quote
+// in this system behind them. Kept as a reserved key so it can never collide
+// with a real `created_by` value.
+const MORNING_AGENT_KEY = "__morning__";
 
 // Printella brand hues — one stable colour per series so an agent keeps the
 // same colour across every chart on the page.
@@ -58,6 +64,28 @@ export default function QuotesAnalytics({ quotes, sellers, morningDocs = {} }) {
   const [customFrom, setCustomFrom] = useState(toLocalDateStr(new Date()));
   const [customTo, setCustomTo] = useState(toLocalDateStr(new Date()));
 
+  // Morning-direct activity — quotes/orders issued straight in Morning that
+  // never passed through this system, so no local quote row exists for them.
+  // Purely additive: if Morning is unconfigured or the call fails we simply
+  // show no such row, and the rest of the report must keep working.
+  const [morningDirect, setMorningDirect] = useState(null);
+  const [morningDirectFailed, setMorningDirectFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const { from, to } = computeDateRange(datePreset, customFrom, customTo);
+    setMorningDirectFailed(false);
+    // "all" means no bounds at all — the endpoint treats missing dates as
+    // "everything", so don't invent a range here.
+    getMorningDirectActivity({
+      fromDate: from ? toLocalDateStr(from) : undefined,
+      toDate: to ? toLocalDateStr(to) : undefined,
+    })
+      .then((data) => { if (!cancelled) setMorningDirect(data || null); })
+      .catch(() => { if (!cancelled) { setMorningDirect(null); setMorningDirectFailed(true); } });
+    return () => { cancelled = true; };
+  }, [datePreset, customFrom, customTo]);
+
   const rangedQuotes = useMemo(() => {
     const { from, to } = computeDateRange(datePreset, customFrom, customTo);
     const inRange = (!from && !to) ? quotes : quotes.filter((q) => {
@@ -80,7 +108,10 @@ export default function QuotesAnalytics({ quotes, sellers, morningDocs = {} }) {
   // quote, regardless of its `status`.
   const isClosed = (q) => morningDocs[q.id]?.morning_document_type === MORNING_ORDER_TYPE;
 
-  const { agents, missingCost, months, agentNames, agentProducts, productTypes, agentClosedProducts, closedProductTypes, totals } = useMemo(() => {
+  // Everything below is derived from LOCAL quotes only — the Morning-direct
+  // row is injected afterwards so it can never leak into the trend chart or
+  // the product breakdowns, which have no product-type data for it.
+  const { agents: localAgents, missingCost, months, agentNames, agentProducts, productTypes, agentClosedProducts, closedProductTypes, totals: localTotals } = useMemo(() => {
     const byAgent = {};
     let missingCost = 0;
 
@@ -195,6 +226,48 @@ export default function QuotesAnalytics({ quotes, sellers, morningDocs = {} }) {
     return { agents, missingCost, months, agentNames, agentProducts, productTypes, agentClosedProducts, closedProductTypes, totals };
   }, [rangedQuotes, sellers, morningDocs]);
 
+  // Append the Morning-direct row LAST, never sorted into the profit ranking:
+  // we have no cost breakdown for those documents, so its profit/margin are
+  // unknown (not zero) and any profit-based ordering would be a lie.
+  const morningRow = useMemo(() => {
+    if (!morningDirect) return null;
+    const quotesCount = morningDirect.quotesCount || 0;
+    const ordersCount = morningDirect.ordersCount || 0;
+    const ordersRevenue = morningDirect.ordersRevenue || 0;
+    if (!quotesCount && !ordersCount) return null;
+    return {
+      key: MORNING_AGENT_KEY,
+      name: "מורנינג",
+      isExternal: true, // → render "—" for profit / margin (never measured)
+      count: quotesCount + ordersCount,
+      orders: ordersCount,
+      closedRevenue: ordersRevenue,
+      closedNetSales: ordersRevenue,
+      closedDealAmount: ordersRevenue,
+      closedCost: 0,
+      closedProfit: 0,
+      marginPct: 0,
+      // Average deal IS knowable here (turnover ÷ orders) — only profit and
+      // margin depend on the cost breakdown we don't have, so blanking this
+      // one too would hide a real figure for no reason.
+      avgClosedDeal: ordersCount > 0 ? ordersRevenue / ordersCount : 0,
+      closeRatePct: (quotesCount + ordersCount) > 0 ? (ordersCount / (quotesCount + ordersCount)) * 100 : 0,
+    };
+  }, [morningDirect]);
+
+  const agents = useMemo(() => (morningRow ? [...localAgents, morningRow] : localAgents), [localAgents, morningRow]);
+
+  // Counts and turnover include Morning-direct; PROFIT deliberately does not,
+  // because it is unmeasured there — adding a 0 would understate the real
+  // total and pretend we know something we don't.
+  const totals = useMemo(() => (morningRow ? {
+    ...localTotals,
+    closedRevenue: localTotals.closedRevenue + morningRow.closedRevenue,
+    closedDealAmount: localTotals.closedDealAmount + morningRow.closedDealAmount,
+    count: localTotals.count + morningRow.count,
+    orders: localTotals.orders + morningRow.orders,
+  } : localTotals), [localTotals, morningRow]);
+
   const dateFilterBar = (
     <div className="flex items-center gap-3 flex-wrap">
       <label className="flex flex-col gap-1">
@@ -223,7 +296,7 @@ export default function QuotesAnalytics({ quotes, sellers, morningDocs = {} }) {
     </div>
   );
 
-  if (!rangedQuotes.length) {
+  if (!rangedQuotes.length && !morningRow) {
     return (
       <div className="space-y-4">
         {dateFilterBar}
@@ -264,8 +337,11 @@ export default function QuotesAnalytics({ quotes, sellers, morningDocs = {} }) {
                 <td className="px-3 py-2 tabular-nums text-slate-600">{a.count}</td>
                 <td className="px-3 py-2 tabular-nums text-slate-600">{a.orders}</td>
                 <td className="px-3 py-2 tabular-nums text-slate-600">{fmt(a.closedDealAmount)}</td>
+                {/* No cost breakdown exists for Morning-direct documents, so
+                    average-deal/profit are UNKNOWN — show an em dash rather
+                    than a real-looking ₪0. */}
                 <td className="px-3 py-2 tabular-nums text-slate-600">{fmt(a.avgClosedDeal)}</td>
-                <td className="px-3 py-2 tabular-nums font-semibold text-primary">{fmt(a.closedProfit)}</td>
+                <td className="px-3 py-2 tabular-nums font-semibold text-primary">{a.isExternal ? <span className="text-slate-400">—</span> : fmt(a.closedProfit)}</td>
               </tr>
             ))}
             <tr className="bg-slate-50 font-semibold">
@@ -294,11 +370,28 @@ export default function QuotesAnalytics({ quotes, sellers, morningDocs = {} }) {
         </span>
       </div>
 
+      {/* Explains the synthetic "מורנינג" row — without this the em dashes in
+          the profit/margin columns look like a bug rather than "unmeasured". */}
+      {morningRow && (
+        <div className="flex items-start gap-2 text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-600">
+          <Target className="w-4 h-4 shrink-0 mt-0.5 text-slate-400" />
+          <span>
+            <strong>שורת "מורנינג"</strong> מרכזת מסמכים שהופקו ישירות במורנינג בלי לעבור דרך המערכת.
+            הסכומים הם ללא מע״מ, אך <strong>רווח, מרווח וממוצע לעסקה אינם זמינים</strong> עבורם (מוצגים כ־"—")
+            כי אין למסמכים האלה פירוט עלויות — ולכן הם גם לא נכללים בסך הרווח, בגרף המגמה ובפילוח לפי סוגי מוצר.
+          </span>
+        </div>
+      )}
+
+      {morningDirectFailed && (
+        <div className="text-xs text-slate-400 px-1">לא ניתן לטעון כרגע נתוני מורנינג ישירים — שאר הדוח מוצג כרגיל.</div>
+      )}
+
       {missingCost > 0 && (
         <div className="flex items-start gap-2 text-xs bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 text-amber-800">
           <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
           <span>
-            {missingCost} מתוך {totals.orders} ההזמנות הסגורות נשמרו ללא פירוט עלויות, ולכן נכללות במחזור הסגירה אך לא בחישובי הרווח והמרווח.
+            {missingCost} מתוך {localTotals.orders} ההזמנות הסגורות נשמרו ללא פירוט עלויות, ולכן נכללות במחזור הסגירה אך לא בחישובי הרווח והמרווח.
           </span>
         </div>
       )}
@@ -344,8 +437,9 @@ export default function QuotesAnalytics({ quotes, sellers, morningDocs = {} }) {
                   <td className="tabular-nums text-slate-600">{a.orders}</td>
                   <td className="tabular-nums font-semibold text-foreground">{a.closeRatePct.toFixed(1)}%</td>
                   <td className="tabular-nums text-slate-600">{fmt(a.closedRevenue)}</td>
-                  <td className="tabular-nums font-semibold text-primary">{fmt(a.closedProfit)}</td>
-                  <td className={`tabular-nums font-semibold ${a.marginPct < 0 ? "text-red-500" : "text-emerald-600"}`}>{a.marginPct.toFixed(1)}%</td>
+                  {/* Same reason as the summary table above — unknown, not zero. */}
+                  <td className="tabular-nums font-semibold text-primary">{a.isExternal ? <span className="text-slate-400">—</span> : fmt(a.closedProfit)}</td>
+                  <td className={`tabular-nums font-semibold ${a.isExternal ? "text-slate-400" : a.marginPct < 0 ? "text-red-500" : "text-emerald-600"}`}>{a.isExternal ? "—" : `${a.marginPct.toFixed(1)}%`}</td>
                   <td className="tabular-nums text-slate-600">{fmt(a.avgClosedDeal)}</td>
                 </tr>
               ))}

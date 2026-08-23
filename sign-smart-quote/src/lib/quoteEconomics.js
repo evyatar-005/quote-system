@@ -19,7 +19,12 @@ export const safeParse = (json, fallback) => {
   }
 };
 
-export const productLabel = (t) => PRODUCT_NAMES[t] || CATEGORY_LABELS[t] || t;
+// free_product is a real productType the calculator writes, but it is not in
+// PRODUCT_NAMES (it has no catalogue entry — the agent types its own price and
+// name), so it used to fall through to the raw English slug on every
+// analytics screen.
+const EXTRA_PRODUCT_LABELS = { free_product: "מוצר חופשי" };
+export const productLabel = (t) => PRODUCT_NAMES[t] || CATEGORY_LABELS[t] || EXTRA_PRODUCT_LABELS[t] || t;
 export const productSku = (t) => PRODUCT_CODES[t] || "";
 // "005-1" sorts before "005-10" and after "003-6" — compare the numeric parts,
 // not the raw string, so the מק"ט order matches the catalogue.
@@ -75,25 +80,70 @@ export function shippingOf(quote) {
 // linesOf/economicsOf above). Used by the product-analytics charts, where
 // "which product earned most" must not be diluted by quote-level extras that
 // have no product to attach to.
+// How far the quote's REAL pre-VAT total moved from the sum of its saved line
+// prices — i.e. the manager's discount (and the document-minimum top-up),
+// neither of which is written back onto the individual lines. Without this,
+// a discounted deal still reports its full pre-discount price per product, so
+// every product's revenue and profit read high. Mirrors the priceRatio logic
+// CostBreakdown already uses in QuoteDetailsModal.jsx.
+function discountRatioOf(quote, lines) {
+  const linesTotal = lines.reduce((s, l) => s + (l.result.sellingPriceAll || 0), 0);
+  if (!(linesTotal > 0)) return 1;
+  const realTotal = (quote.price_before_vat || 0) - shippingOf(quote);
+  if (!(realTotal > 0)) return 1;
+  return realTotal / linesTotal;
+}
+
+// Per-product rollup across a set of quotes, at the LINE level — deliberately
+// excludes VAT, shipping and installation, none of which live on a line (see
+// linesOf/economicsOf above). Used by the product-analytics charts, where
+// "which product earned most" must not be diluted by quote-level extras that
+// have no product to attach to.
+//
+// `costedRevenue`/`costedProfit` cover only the lines that actually carry a
+// saved cost. A line with no cost (free_product, and graphics-style rows that
+// never had a cost breakdown) would otherwise report profit == revenue, i.e. a
+// fake 100% margin, and silently inflate every profit figure on the screen.
+// Margin is therefore computed on the costed subset only, and `costMissing`
+// lets the UI say so instead of printing a number it can't stand behind.
 export function aggregateProducts(quotes) {
   const map = {};
   for (const q of quotes) {
-    for (const l of linesOf(q)) {
+    const lines = linesOf(q);
+    const ratio = discountRatioOf(q, lines);
+    for (const l of lines) {
       const t = l.productType || "—";
-      if (!map[t]) map[t] = { type: t, name: productLabel(t), sku: productSku(t), revenue: 0, cost: 0, units: 0, lines: 0 };
+      if (!map[t]) {
+        map[t] = { type: t, name: productLabel(t), sku: productSku(t), revenue: 0, cost: 0, units: 0, lines: 0, costMissing: 0, costedRevenue: 0 };
+      }
       const p = map[t];
-      p.revenue += l.result.sellingPriceAll || 0;
-      p.cost += l.result.totalCostAll || 0;
+      const lineRevenue = (l.result.sellingPriceAll || 0) * ratio;
+      p.revenue += lineRevenue;
       p.units += l.quantity || 1;
       p.lines += 1;
+
+      // Only the commission slice of cost moves with price; material, labour
+      // and overhead are price-independent (same rule as CostBreakdown).
+      const savedCost = l.result.totalCostAll;
+      if (savedCost == null || savedCost === 0) {
+        p.costMissing += 1;
+        continue;
+      }
+      const commissions = (l.result.breakdown?.salesAgentCommissionCost || 0) + (l.result.breakdown?.marketingCommissionCost || 0);
+      p.cost += savedCost + commissions * (ratio - 1);
+      p.costedRevenue += lineRevenue;
     }
   }
   return Object.values(map).map((p) => {
-    const profit = p.revenue - p.cost;
+    const costedProfit = p.costedRevenue - p.cost;
     return {
       ...p,
-      profit,
-      marginPct: p.revenue > 0 ? (profit / p.revenue) * 100 : 0,
+      // Whole-product profit stays unknown while any line lacks a cost — the
+      // costed part alone is what the margin is honest about.
+      profit: costedProfit,
+      costedProfit,
+      marginPct: p.costedRevenue > 0 ? (costedProfit / p.costedRevenue) * 100 : 0,
+      hasCost: p.costedRevenue > 0,
       avgPrice: p.units > 0 ? p.revenue / p.units : 0,
       label: p.sku ? `${p.sku} · ${p.name}` : p.name,
     };

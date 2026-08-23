@@ -9,6 +9,7 @@
 
 const mail = require('../mail');
 const { request } = require('../morning/client');
+const { fetchMorningOnlyDocuments } = require('../morning/directDocuments');
 const { parseRecipients, computeDateRange } = require('./scheduledReports');
 const { renderReportEmail, tableShell, tableRow, barCell, formatDateRangeHe } = require('./emailTemplate');
 
@@ -133,48 +134,10 @@ async function fetchCancelledOrderQuoteIds(db, fromDate, toDate) {
 // represented locally — those go on a synthetic "מורנינג" row instead of a
 // real agent's name, since no agent in our system created them.
 async function fetchMorningOnlyOrders(db, fromDate, toDate) {
-  const localIds = new Set(
-    db.prepare(`SELECT morning_document_id FROM morning_documents_map WHERE morning_document_type = ?`)
-      .all(MORNING_ORDER_TYPE).map((r) => String(r.morning_document_id))
-  );
-
-  const candidates = [];
-  let page = 1;
-  for (;;) {
-    const result = await request(db, 'POST', '/documents/search', {
-      type: [MORNING_ORDER_TYPE],
-      status: [0, 1],
-      fromDate,
-      toDate,
-      page,
-      pageSize: 100,
-    });
-    for (const doc of result.items || []) {
-      if (!localIds.has(String(doc.id))) candidates.push(doc.id);
-    }
-    if (page >= (result.pages || 1)) break;
-    page += 1;
-  }
-  if (!candidates.length) return [];
-
-  // Search results don't include line items — fetch each candidate's full
-  // document so the product breakdown can still show what was actually sold.
-  const orders = [];
-  await Promise.all(candidates.map(async (id) => {
-    try {
-      const doc = await request(db, 'GET', `/documents/${id}`);
-      if (!doc) return;
-      const preVat = doc.amountDueVat ?? (doc.amount != null && doc.vat != null ? doc.amount - doc.vat : doc.amount);
-      orders.push({
-        totalBeforeVat: preVat || 0,
-        totalWithVat: doc.amount || 0,
-        income: doc.income || [],
-      });
-    } catch (err) {
-      console.error(`[fetchMorningOnlyOrders] failed to fetch document ${id}:`, err.message);
-    }
-  }));
-  return orders;
+  const docs = await fetchMorningOnlyDocuments(db, {
+    type: MORNING_ORDER_TYPE, fromDate, toDate, withDetails: true,
+  });
+  return docs.map((d) => ({ totalBeforeVat: d.amount, income: d.income || [] }));
 }
 
 // One row per agent with at least one actual ORDER (a quote that got a real
@@ -316,7 +279,10 @@ function mergeMorningOnlyOrders(agentRows, productRows, morningOnlyOrders) {
     username: 'morning', agentName: 'מורנינג',
     ordersCount: morningOnlyOrders.length,
     totalBeforeVat: morningOnlyOrders.reduce((sum, o) => sum + o.totalBeforeVat, 0),
-    totalWithVat: morningOnlyOrders.reduce((sum, o) => sum + o.totalWithVat, 0),
+    // Morning's search gives us the pre-VAT figure only, and nothing in this
+    // report renders totalWithVat — kept at 0 so the row still has the same
+    // shape as a real agent's rather than carrying a wrong number.
+    totalWithVat: 0,
   };
   const mergedAgentRows = [...agentRows, morningAgent].sort((a, b) => b.totalBeforeVat - a.totalBeforeVat);
 

@@ -6,6 +6,7 @@
 const crypto = require('crypto');
 const sync = require('../services/morning/sync');
 const { DOCUMENT_TYPE } = require('../services/morning/mappings');
+const { fetchMorningOnlyDocuments } = require('../services/morning/directDocuments');
 const { notifyPaymentReceived } = require('../services/notifyAdmins');
 
 module.exports = function registerMorning(app, db, deps) {
@@ -200,6 +201,34 @@ module.exports = function registerMorning(app, db, deps) {
   app.get('/api/morning/quotes/documents', requireAuth, (req, res) => {
     const ids = (req.query.ids || '').split(',').map(s => parseInt(s, 10)).filter(Number.isInteger);
     res.json(sync.getLatestDocuments(db, ids));
+  });
+
+  // ── GET /api/morning/direct-activity?fromDate=&toDate= ────────────────────
+  // Quotes and orders issued straight from Morning, with no quote in this
+  // system behind them. The analytics screen renders these as a synthetic
+  // "מורנינג" agent so the per-agent report covers the whole business rather
+  // than only what was quoted through this app.
+  //
+  // Cost/profit are deliberately absent: those documents carry a price but no
+  // cost breakdown of ours, so any profit figure for them would be invented.
+  // The caller must present them as revenue-only.
+  app.get('/api/morning/direct-activity', requireAuth, async (req, res) => {
+    const { fromDate, toDate } = req.query;
+    try {
+      const [quotes, orders] = await Promise.all([
+        fetchMorningOnlyDocuments(db, { type: DOCUMENT_TYPE.quote, fromDate, toDate }),
+        fetchMorningOnlyDocuments(db, { type: DOCUMENT_TYPE.order, fromDate, toDate }),
+      ]);
+      res.json({
+        quotesCount: quotes.length,
+        ordersCount: orders.length,
+        ordersRevenue: orders.reduce((sum, o) => sum + o.amount, 0),
+        orders: orders.map((o) => ({ number: o.number, clientName: o.clientName, amount: o.amount })),
+      });
+    } catch (err) {
+      console.error('[GET /api/morning/direct-activity] failed:', err.message);
+      res.status(400).json({ error: err.message });
+    }
   });
 
   // ── GET /api/morning/document-proxy?url= ──────────────────────────────────
