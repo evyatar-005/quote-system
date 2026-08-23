@@ -33,7 +33,7 @@ async function listFolder(db, folderId) {
   const creds = getCredentials(db);
   const res = await driveFetch('files', {
     q: `'${folderId}' in parents and trashed = false`,
-    fields: 'files(id,name,mimeType,size,modifiedTime)',
+    fields: 'files(id,name,mimeType,size,modifiedTime,thumbnailLink)',
     pageSize: 200,
   }, creds.api_key);
   const { files = [] } = await res.json();
@@ -57,6 +57,9 @@ async function listFolder(db, folderId) {
     id: f.id, name: f.name, mimeType: f.mimeType,
     sizeBytes: f.size ? Number(f.size) : null, modifiedTime: f.modifiedTime || null,
     isFolder: f.mimeType === `${GOOGLE_DOC_MIME_PREFIX}folder`,
+    // Short-lived signed URL, not cached to disk — fetched fresh on every
+    // listFolder call (this function never serves from drive_file_cache).
+    thumbnailLink: f.thumbnailLink || null,
   }));
 }
 

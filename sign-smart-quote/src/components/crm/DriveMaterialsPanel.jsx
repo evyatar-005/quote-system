@@ -114,7 +114,18 @@ export default function DriveMaterialsPanel({ leadId }) {
               </button>
             ) : (
               <div key={f.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50">
-                <File className="w-4 h-4 text-slate-400 shrink-0" />
+                {f.mimeType?.startsWith("image/") && f.thumbnailLink ? (
+                  <img
+                    src={f.thumbnailLink}
+                    alt=""
+                    className="w-7 h-7 rounded object-cover shrink-0 border border-slate-200"
+                    // Thumbnail URLs are short-lived signed links straight from
+                    // Drive — if one 404s/expires, fall back to the plain icon
+                    // instead of a broken-image glyph.
+                    onError={(e) => { e.currentTarget.style.display = "none"; e.currentTarget.nextSibling.style.display = "block"; }}
+                  />
+                ) : null}
+                <File className={`w-4 h-4 text-slate-400 shrink-0 ${f.mimeType?.startsWith("image/") && f.thumbnailLink ? "hidden" : ""}`} />
                 <span className="truncate text-sm flex-1">{f.name}</span>
                 <Button
                   size="sm"
