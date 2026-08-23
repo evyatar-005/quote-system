@@ -526,7 +526,12 @@ export default function MyQuotes() {
                     // document until it's issued separately — until then, fall back
                     // to the ORIGINAL quote's document so "פתח"/"הורד" still work,
                     // instead of just having nothing to show.
-                    const parentQuote = !ownDoc && q.parent_quote_number
+                    // Looked up independent of whether THIS quote already has
+                    // its own Morning document — "מחליפה את X" (מס' מסמך
+                    // column) must keep naming the replaced document even
+                    // after this duplicate/revision gets issued separately,
+                    // not just while it's still borrowing the parent's doc.
+                    const parentQuote = q.parent_quote_number
                       ? quotes.find((x) => x.quote_number === q.parent_quote_number)
                       : null;
                     const parentDoc = parentQuote ? morningDocs[parentQuote.id] : null;
@@ -585,6 +590,16 @@ export default function MyQuotes() {
                               {docIsFromParent && <div className="text-xs text-slate-400">מהצעה המקורית</div>}
                             </>
                           )}
+                          {/* Which Morning document this row replaces — lives
+                              here (not the סטטוס column) because it's about
+                              the DOCUMENT being superseded, named by its own
+                              Morning number, same subject as the rest of this
+                              column. Shown whenever there's a parent doc to
+                              name, regardless of whether this row already has
+                              its own separately-issued document. */}
+                          {parentMorningRef && (
+                            <div className="text-xs text-slate-400">מחליפה את {parentMorningRef}</div>
+                          )}
                         </td>
                         <td className="px-4 py-3 border-l border-slate-100 text-center">
                           <div className="font-semibold text-foreground">{q.client_name}</div>
@@ -614,7 +629,10 @@ export default function MyQuotes() {
                               quote's lifecycle). A plain new quote's type
                               already reads from the סוג מסמך column, so
                               repeating "הצעת מחיר" here would just be the same
-                              word twice on one row. */}
+                              word twice on one row. Which document it replaces
+                              is named in the מס' מסמך column instead — that's
+                              about the document, this badge is only about
+                              what kind of row it is. */}
                           {originOf(q) !== "new" && (
                             <div className="mt-1">
                               <span
@@ -622,7 +640,6 @@ export default function MyQuotes() {
                                 title={ORIGIN_LABELS[originOf(q)]}
                               >
                                 {ORIGIN_LABELS[originOf(q)]}
-                                {parentMorningRef && ` — מחליפה את ${parentMorningRef}`}
                               </span>
                             </div>
                           )}
