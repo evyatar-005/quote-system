@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { Search, Loader2, Target, Phone, MessageCircle, AlertTriangle, CalendarClock } from "lucide-react";
+import { Search, Loader2, Target, Phone, MessageCircle, AlertTriangle, CalendarClock, Sparkles } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 import { crmLeads, crmAgents, crmCampaignList } from "@/api/crmClient";
 import { relativeTime } from "@/lib/leadPriority";
@@ -91,7 +91,7 @@ const FILTERS = [
   },
   {
     key: "unassigned", label: "לא משויך", params: { assigned_to: "unassigned" }, adminOnly: true,
-    hint: "לידים בבריכה שאף נציג לא אחראי עליהם. אלה הלידים שנציג ימשוך בלחיצה על ״משוך ליד״.",
+    hint: "לידים שעדיין לא שויכו לאף נציג. אלה הלידים שנציג ימשוך בלחיצה על ״משוך ליד״.",
   },
   {
     key: "mine", label: "שלי", params: { assigned_to: "me" },
@@ -134,6 +134,46 @@ export default function CrmLeads() {
   const [mondayCols, setMondayCols] = useState([]);
   const [mondayPick, setMondayPick] = useState("");
   const firstLoad = useRef(true);
+  const listRef = useRef(null);
+
+  // Two always-on summary tiles, independent of whatever the filter bar is
+  // currently set to — they run their own fixed query each so a manager can
+  // see "new" and "overdue follow-up" counts no matter what's selected below.
+  const [newCount, setNewCount] = useState(null);
+  const [overdueCount, setOverdueCount] = useState(null);
+  const [overdueSoonest, setOverdueSoonest] = useState(null);
+
+  const reloadSummary = useCallback(() => {
+    crmLeads.list({ status: "new", open: "1", limit: 1 })
+      .then((rows) => setNewCount(rows[0]?.total_count ?? 0))
+      .catch(() => {});
+    crmLeads.list({ follow_up: "overdue", sort: "follow_up", limit: 1 })
+      .then((rows) => {
+        setOverdueCount(rows[0]?.total_count ?? 0);
+        setOverdueSoonest(rows[0]?.follow_up_date ?? null);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => { reloadSummary(); }, [reloadSummary]);
+
+  // Clicking a tile jumps straight to that slice — status "new" doesn't have
+  // its own chip, so it also clears any campaign/monday pick that would
+  // otherwise hide leads with no board match yet.
+  const openNewLeads = () => {
+    setFilter("open");
+    setStatus("new");
+    setCampaign("");
+    setAssignee("");
+    listRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+  const openOverdue = () => {
+    setFilter("overdue");
+    setStatus("");
+    setCampaign("");
+    setAssignee("");
+    listRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   const chips = useMemo(() => FILTERS.filter((f) => isAdmin || !f.adminOnly), [isAdmin]);
 
@@ -221,6 +261,51 @@ export default function CrmLeads() {
       <div className="w-full mx-auto px-4 sm:px-8 py-8 flex flex-col lg:flex-row gap-8 items-start">
         <Sidebar />
         <div className="flex-1 min-w-0 w-full max-w-[1400px] space-y-4">
+          {/* Summary tiles — fixed queries, independent of the filter bar
+              below. Clicking one sets the matching filter and scrolls the
+              list into view, so it reads as "drill down", not a separate
+              report. */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={openNewLeads}
+              className="flex items-center gap-3 rounded-xl border border-black bg-white px-4 py-3 text-right hover:bg-slate-50 transition-colors"
+            >
+              <span className="shrink-0 w-9 h-9 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center">
+                <Sparkles className="w-4 h-4" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-xs text-slate-500">לידים חדשים</span>
+                <span className="block text-xl font-bold">
+                  {newCount === null ? <Loader2 className="w-4 h-4 animate-spin text-slate-300" /> : newCount}
+                </span>
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={openOverdue}
+              className="flex items-center gap-3 rounded-xl border border-black bg-white px-4 py-3 text-right hover:bg-slate-50 transition-colors"
+            >
+              <span className="shrink-0 w-9 h-9 rounded-full bg-red-50 text-red-600 flex items-center justify-center">
+                <AlertTriangle className="w-4 h-4" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-xs text-slate-500">פולואפ באיחור</span>
+                <span className="flex items-baseline gap-2">
+                  <span className="text-xl font-bold">
+                    {overdueCount === null ? <Loader2 className="w-4 h-4 animate-spin text-slate-300" /> : overdueCount}
+                  </span>
+                  {overdueCount > 0 && overdueSoonest && (
+                    <span className="text-[11px] text-slate-400" dir="ltr">
+                      הראשון: {followUpLabel(overdueSoonest)?.txt}
+                    </span>
+                  )}
+                </span>
+              </span>
+            </button>
+          </div>
+
           {/* Control bar */}
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative flex-1 min-w-[220px] max-w-md">
@@ -282,7 +367,7 @@ export default function CrmLeads() {
                 <SelectTrigger dir="rtl" className="w-[180px]"><SelectValue placeholder="נציג" /></SelectTrigger>
                 <SelectContent dir="rtl">
                   <SelectItem value="any">כל הנציגים</SelectItem>
-                  <SelectItem value="unassigned">לא משויך (בבריכה)</SelectItem>
+                  <SelectItem value="unassigned">טרם שויך לנציג</SelectItem>
                   {agents.map((a) => (
                     <SelectItem key={a.username} value={a.username}>{a.full_name || a.username}</SelectItem>
                   ))}
@@ -297,7 +382,7 @@ export default function CrmLeads() {
             </Select>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div ref={listRef} className="flex flex-wrap items-center gap-2 scroll-mt-24">
             {/* delayDuration 200 so hovering across the row to reach a chip
                 doesn't flash a tooltip for each one on the way. */}
             <TooltipProvider delayDuration={200}>
@@ -337,7 +422,7 @@ export default function CrmLeads() {
                 <div className="hidden xl:grid grid-cols-[minmax(0,2fr)_120px_140px_140px_120px_100px_minmax(0,1fr)] gap-4 px-4 py-2 bg-slate-50 text-[11px] font-semibold text-slate-500">
                   <span>לקוח</span>
                   <span>סטטוס</span>
-                  <span>{isAdmin ? "משויך ל" : "בטיפול"}</span>
+                  <span>{isAdmin ? "סוכן מטפל" : "בטיפול"}</span>
                   <span>פעילות אחרונה</span>
                   <span>פולואפ</span>
                   <span>ערך</span>
@@ -429,7 +514,7 @@ function LeadRow({ l, isAdmin }) {
 
       <div className="text-xs text-slate-500 truncate">
         {isAdmin
-          ? (l.assigned_to_name || l.assigned_to || <span className="text-amber-600">בבריכה</span>)
+          ? (l.assigned_to_name || l.assigned_to || <span className="text-amber-600">טרם שויך לנציג</span>)
           : (l.claimed_by ? "בטיפולך" : <span className="text-slate-300">—</span>)}
         {isAdmin && l.claimed_by && (
           <div className="text-[10px] text-slate-400">תפוס ע״י {l.claimed_by_name || l.claimed_by}</div>
