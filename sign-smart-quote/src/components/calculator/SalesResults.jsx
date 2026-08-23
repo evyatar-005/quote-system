@@ -52,7 +52,16 @@ export default function SalesResults({ result, quantity, config }) {
   // others (kapa shelves) keep them separate. Normalize to a true base price + a single
   // addons total so "מחיר כללי" never double-counts what's already inside sellingPricePerUnit.
   const bakedInAddons = (result.paintSellingSurcharge || 0) + (result.spacersSellingSurcharge || 0);
-  const shelvesSellingPrice = result.isKapa ? ((result.extrasBreakdown || []).find(ex => ex.key === 'shelves')?.sellingCost || 0) : 0;
+  // Every priced kapa extra (מדפים סטנדרטיים/בעיצוב אישי, רגליים, מדף צבעוני,
+  // דבק דו-צדדי) — summed rather than looked up by a single 'shelves' key,
+  // which stopped matching once standard/custom shelves became their own
+  // entries, and which never covered legs/colored shelf at all. Shipping is
+  // order-level, not part of a product's price.
+  const shelvesSellingPrice = result.isKapa
+    ? (result.extrasBreakdown || [])
+        .filter(ex => typeof ex.sellingCost === 'number' && ex.sellingCost > 0 && ex.key !== 'shipping')
+        .reduce((sum, ex) => sum + ex.sellingCost, 0)
+    : 0;
   // PVC carpet folds a waste charge (cost of the offcut × admin multiplier) into
   // sellingPricePerUnit — pulled back out here so it shows as its own addon line
   // instead of silently disappearing into "מחיר מכירה", same treatment as kapa's shelves.

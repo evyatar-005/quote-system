@@ -435,16 +435,17 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
     return itemLabel?.trim() ? `${code} · ${itemLabel.trim()}` : code;
   };
 
-  // Priced extras (ספייסרים / צביעה / דבק דו-צדדי) as their own row right
-  // under the product they belong to — same pattern as the graphics-note row
-  // below, but carrying the real summed price of just those extras (pulled
+  // Priced extras (ספייסרים / צביעה / דבק דו-צדדי / מדפים) as their own row
+  // right under the product they belong to — same pattern as the graphics-note
+  // row below, but carrying the real summed price of just those extras (pulled
   // straight out of the per-extra sellingCost the pricing engine already
-  // computes, see extrasBreakdown in useCalculator.jsx) instead of ₪0. The
-  // product row's own unitPrice is reduced by the same per-unit amount so the
-  // line total is unchanged — this only moves where the cost is shown, not
-  // how much it is. Labor-only sub-rows (sellingCost: null) and shipping stay
-  // out — they were never part of the product's customer-facing unit price.
-  const extrasRowFor = (result, groupLabel, sku, quantity) => {
+  // computes, see extrasBreakdown in useCalculator.jsx) instead of ₪0.
+  //
+  // quantity is deliberately 1, NOT the product's quantity: every sellingCost
+  // in extrasBreakdown is already a whole-line amount (e.g. kapa's
+  // shelvesSellingPrice covers all the shelves on the line), so multiplying by
+  // the product quantity would charge them q times over.
+  const extrasRowFor = (result, groupLabel, sku) => {
     const priced = (result?.extrasBreakdown || []).filter(
       (e) => typeof e.sellingCost === "number" && e.sellingCost > 0 && e.key !== "shipping"
     );
@@ -461,12 +462,25 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
         // same family stay distinguishable.
         description: priced.map((e) => (e.calc ? `${e.label} - ${e.calc}` : e.label)).join("\n"),
         freeText: "",
-        quantity,
+        quantity: 1,
         unitPrice: total,
         sku: sku ? `${sku} תוספות` : null,
       },
       total,
     };
+  };
+
+  // The line's true pre-VAT total, split between the product row and its
+  // extras row. sellingPriceAll — never sellingPricePerUnit — is the only
+  // field that reliably carries EVERYTHING for every family: some families
+  // (logo) bake paint/spacers into sellingPricePerUnit while others (kapa
+  // shelves/legs) keep them out of it entirely (see SalesResults.jsx). The
+  // old code subtracted the extras from sellingPricePerUnit and added them
+  // back as their own row — which for kapa cancelled them out to ₪0, so
+  // shelves and legs were being given away free on every document.
+  const productRowUnitPrice = (result, extrasTotal, quantity) => {
+    const lineTotal = result?.sellingPriceAll ?? (result?.sellingPricePerUnit ?? 0) * quantity;
+    return (lineTotal - extrasTotal) / (quantity || 1);
   };
 
   const buildLineItems = () => {
@@ -483,7 +497,7 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
       const isFree = formData.productType === "free_product";
       const sku = lineSku(formData, itemLabel);
       const quantity = parseInt(formData.quantity) || 1;
-      const { row: extrasRow, total: extrasTotal } = extrasRowFor(formData.result, groupLabel, sku, quantity);
+      const { row: extrasRow, total: extrasTotal } = extrasRowFor(formData.result, groupLabel, sku);
       lines.push({
         groupLabel,
         description: lineDescription(
@@ -492,7 +506,7 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
         ),
         freeText: formData.lineLabel || "",
         quantity,
-        unitPrice: (formData.result?.sellingPricePerUnit ?? 0) - extrasTotal,
+        unitPrice: productRowUnitPrice(formData.result, extrasTotal, quantity),
         sku,
       });
       if (extrasRow) lines.push(extrasRow);
@@ -518,7 +532,7 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
         if (!row.result) return;
         const extraRowSku = lineSku(formData, itemLabel);
         const extraRowQuantity = parseInt(row.quantity) || 1;
-        const { row: extraRowExtrasRow, total: extraRowExtrasTotal } = extrasRowFor(row.result, groupLabel, extraRowSku, extraRowQuantity);
+        const { row: extraRowExtrasRow, total: extraRowExtrasTotal } = extrasRowFor(row.result, groupLabel, extraRowSku);
         lines.push({
           groupLabel,
           // An extra row is the same configured product at a different size, so
@@ -531,7 +545,7 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
           ),
           freeText: row.lineLabel || "",
           quantity: extraRowQuantity,
-          unitPrice: (row.result.sellingPricePerUnit ?? 0) - extraRowExtrasTotal,
+          unitPrice: productRowUnitPrice(row.result, extraRowExtrasTotal, extraRowQuantity),
           sku: extraRowSku,
         });
         if (extraRowExtrasRow) lines.push(extraRowExtrasRow);
