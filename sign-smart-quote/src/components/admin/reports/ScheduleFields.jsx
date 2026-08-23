@@ -4,7 +4,16 @@ const WEEKDAY_LABELS = ["ראשון", "שני", "שלישי", "רביעי", "ח�
 
 // Frequency + time-of-day (+ weekday/day-of-month, shown only when relevant)
 // — shared by every report card.
-export default function ScheduleFields({ frequency, time, weekday, dayOfMonth, onChange }) {
+export default function ScheduleFields({ frequency, time, weekday, dayOfMonth, daysOfWeek, onChange }) {
+  const toggleDay = (day) => {
+    // Empty/missing daysOfWeek means "every day" — expand that to an
+    // explicit list first, so unchecking one day doesn't collapse back to
+    // "every day" being interpreted as "only this day".
+    const current = Array.isArray(daysOfWeek) && daysOfWeek.length ? daysOfWeek : [0, 1, 2, 3, 4, 5, 6];
+    const next = current.includes(day) ? current.filter((d) => d !== day) : [...current, day];
+    onChange({ daysOfWeek: next });
+  };
+
   return (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-4">
       <div className="space-y-1.5">
@@ -28,6 +37,31 @@ export default function ScheduleFields({ frequency, time, weekday, dayOfMonth, o
           onChange={(e) => onChange({ time: e.target.value })}
         />
       </div>
+      {frequency === "daily" && (
+        <div className="space-y-1.5 sm:col-span-3">
+          <label className="text-sm font-semibold text-slate-600">ימים לשליחה</label>
+          <div className="flex flex-wrap gap-2">
+            {WEEKDAY_LABELS.map((label, i) => {
+              const active = !Array.isArray(daysOfWeek) || daysOfWeek.length === 0 || daysOfWeek.includes(i);
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => toggleDay(i)}
+                  className={`px-3 h-8 rounded-lg text-sm border transition-colors ${
+                    active
+                      ? "bg-[#C9A84C]/20 border-[#C9A84C] text-slate-800"
+                      : "bg-white border-slate-200 text-slate-400"
+                  }`}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-xs text-muted-foreground">כל הימים מסומנים כברירת מחדל — הסר יום כדי לדלג עליו (למשל שישי/שבת).</p>
+        </div>
+      )}
       {frequency === "weekly" && (
         <div className="space-y-1.5">
           <label className="text-sm font-semibold text-slate-600">יום בשבוע</label>

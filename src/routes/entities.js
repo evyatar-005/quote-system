@@ -5,7 +5,7 @@
 //   - loadConfig()  → flat { key: value } object from signshop_config
 //   - upsertConfig  → prepared stmt taking { key, value, label }
 
-const { ensureMorningClient } = require('../services/morning/sync');
+const { ensureMorningClient, closeSupersededQuoteDocument } = require('../services/morning/sync');
 const { resolveRecipe } = require('../services/production/resolveRecipe');
 const { notifyAdminsOfSentQuote } = require('../services/notifyAdmins');
 
@@ -208,9 +208,10 @@ module.exports = function registerEntities(app, db, deps) {
     // analytics/QuotesArchive actually count, per the v1.0.75 dedup) silently
     // reattributes the sale away from the agent the moment a manager touches it.
     let createdBy = user.username;
+    let parentQuote = null;
     if (body.parent_quote_number) {
-      const parent = db.prepare(`SELECT created_by FROM signshop_quotes WHERE quote_number = ?`).get(body.parent_quote_number);
-      if (parent && parent.created_by) createdBy = parent.created_by;
+      parentQuote = db.prepare(`SELECT id, created_by FROM signshop_quotes WHERE quote_number = ?`).get(body.parent_quote_number);
+      if (parentQuote && parentQuote.created_by) createdBy = parentQuote.created_by;
     }
     row.created_by = createdBy;                          // override client value
     if (!provided.includes('created_by')) provided.push('created_by');
@@ -244,6 +245,16 @@ module.exports = function registerEntities(app, db, deps) {
         email: body.client_email,
         paymentTerms: body.client_payment_terms,
       }).catch(err => console.error(`[quoteCreate] Morning client registration failed for quote #${lastInsertRowid}:`, err.message));
+    }
+
+    // A new quote opened from an existing one (duplicate/revision) makes the
+    // parent's own Morning "הצעת מחיר" document stale — close it manually so
+    // Morning's own list doesn't keep showing two live quotes for one deal.
+    // Fire-and-forget, same convention as the Morning client registration
+    // above: a Morning hiccup here must never block saving the new quote.
+    if (parentQuote) {
+      closeSupersededQuoteDocument(db, parentQuote.id)
+        .catch(err => console.error(`[quoteCreate] closing superseded quote #${parentQuote.id} failed:`, err.message));
     }
 
     const created = quoteRowById(lastInsertRowid);

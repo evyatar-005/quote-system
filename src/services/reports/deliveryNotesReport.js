@@ -9,9 +9,11 @@ const { renderReportEmail, tableShell, tableRow, barCell, formatDateRangeHe } = 
 
 const REPORT_TYPE = 'delivery_notes';
 const DELIVERY_NOTE_TYPE = 200;
-// 1 = מסמך סגור, 2 = מסמך סומן ידנית כסגור — "closed" as requested; an open
-// (0) delivery note hasn't actually gone out yet and shouldn't be reported.
-const CLOSED_STATUSES = [1, 2];
+// Full status enum (from GET /documents/statuses): 0=פתוח, 1=סגור,
+// 2=סומן ידנית כסגור, 3=מבטל, 4=בוטל. The report should list every delivery
+// note actually issued that day regardless of open/closed, but exclude ones
+// that were cancelled or manually closed out (not a real delivery).
+const REPORTABLE_STATUSES = [0, 1];
 
 // Paginated search — pageSize 100 keeps this to one request on any normal
 // period; the loop only continues if Morning reports more pages than that.
@@ -21,7 +23,7 @@ async function fetchClosedDeliveryNotes(db, fromDate, toDate) {
   for (;;) {
     const result = await request(db, 'POST', '/documents/search', {
       type: [DELIVERY_NOTE_TYPE],
-      status: CLOSED_STATUSES,
+      status: REPORTABLE_STATUSES,
       fromDate,
       toDate,
       page,

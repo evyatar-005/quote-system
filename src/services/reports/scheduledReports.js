@@ -24,7 +24,7 @@ function getSchedule(db, id) {
 
 // id === null/undefined creates a new schedule; otherwise updates the
 // existing one (and must belong to reportType — checked by the route).
-function saveSchedule(db, id, reportType, { enabled, recipients, frequency, time, weekday, dayOfMonth }) {
+function saveSchedule(db, id, reportType, { enabled, recipients, frequency, time, weekday, dayOfMonth, daysOfWeek }) {
   const values = {
     report_type: reportType,
     enabled: enabled ? 1 : 0,
@@ -33,18 +33,19 @@ function saveSchedule(db, id, reportType, { enabled, recipients, frequency, time
     time: time || '17:00',
     weekday: weekday ?? 0,
     day_of_month: dayOfMonth ?? 1,
+    days_of_week: Array.isArray(daysOfWeek) && daysOfWeek.length ? daysOfWeek.join(',') : null,
   };
   if (id) {
     db.prepare(
       `UPDATE report_schedules SET enabled=@enabled, recipients=@recipients, frequency=@frequency,
-         time=@time, weekday=@weekday, day_of_month=@day_of_month, updated_at=CURRENT_TIMESTAMP
+         time=@time, weekday=@weekday, day_of_month=@day_of_month, days_of_week=@days_of_week, updated_at=CURRENT_TIMESTAMP
        WHERE id=@id AND report_type=@report_type`
     ).run({ ...values, id });
     return getSchedule(db, id);
   }
   const { lastInsertRowid } = db.prepare(
-    `INSERT INTO report_schedules (report_type, enabled, recipients, frequency, time, weekday, day_of_month)
-     VALUES (@report_type, @enabled, @recipients, @frequency, @time, @weekday, @day_of_month)`
+    `INSERT INTO report_schedules (report_type, enabled, recipients, frequency, time, weekday, day_of_month, days_of_week)
+     VALUES (@report_type, @enabled, @recipients, @frequency, @time, @weekday, @day_of_month, @days_of_week)`
   ).run(values);
   return getSchedule(db, lastInsertRowid);
 }
@@ -93,13 +94,16 @@ function computeDateRange(frequency, today) {
 // - weekly: only on the configured weekday (0=Sunday..6=Saturday)
 // - monthly: only on the configured day-of-month, clamped to the last day of
 //   shorter months (so "31" still fires in February, on the 28th/29th)
-function isScheduledDay(now, frequency, weekday, dayOfMonth) {
+function isScheduledDay(now, frequency, weekday, dayOfMonth, daysOfWeek) {
   if (frequency === 'weekly') return now.getDay() === weekday;
   if (frequency === 'monthly') {
     const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
     return now.getDate() === Math.min(dayOfMonth, lastDayOfMonth);
   }
-  return true; // daily
+  // daily, optionally restricted to a subset of weekdays (e.g. skip Fri/Sat)
+  if (!daysOfWeek) return true;
+  const allowed = String(daysOfWeek).split(',').map(Number);
+  return allowed.includes(now.getDay());
 }
 
 // Runs `runner(db, schedule)` and writes the outcome to last_sent_at/
@@ -145,7 +149,7 @@ function startReportScheduler(db, reportRunners) {
 
       const [hour, minute] = (schedule.time || '17:00').split(':').map(Number);
       if (now.getHours() !== hour || now.getMinutes() !== minute) continue;
-      if (!isScheduledDay(now, schedule.frequency, schedule.weekday, schedule.day_of_month)) continue;
+      if (!isScheduledDay(now, schedule.frequency, schedule.weekday, schedule.day_of_month, schedule.days_of_week)) continue;
 
       // Keyed by schedule id + date so a restart later the same day can't
       // re-trigger, but a genuinely new day/period always can.

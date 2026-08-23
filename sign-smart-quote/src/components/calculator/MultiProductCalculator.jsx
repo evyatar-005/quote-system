@@ -210,7 +210,7 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
   const [delivery, setDelivery] = useState(hydration.delivery || "pickup"); // אספקה — order-level: משלוח / איסוף עצמי
   // Payment is order-level: a single "number of installments" for the whole
   // quote (1 = מזומן, no surcharge). Applied on top of all products + shipping.
-  const [installmentCount, setInstallmentCount] = useState(hydration.installmentCount ?? 2);
+  const [installmentCount, setInstallmentCount] = useState(hydration.installmentCount ?? 1);
   const [clientAddress, setClientAddress] = useState(hydration.clientAddress || "");
   const [clientVatId, setClientVatId] = useState(hydration.clientVatId || "");
   const [clientEmail, setClientEmail] = useState(hydration.clientEmail || "");
@@ -1091,7 +1091,7 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
                 onChange={(e) => setInstallmentCount(parseInt(e.target.value))}
                 className="h-11 w-full rounded-md border-2 border-black bg-white px-2 text-base font-bold text-black focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               >
-                <option value={1}>תשלום מזומן / העברה בנקאית</option>
+                <option value={1}>תשלום מזומן / העברה בנקאית / תשלום 1 באשראי</option>
                 {Array.from({ length: 9 }, (_, i) => i + 2).map((n) => (<option key={n} value={n}>תשלום באשראי עד {n} תשלומים</option>))}
               </select>
               {installmentCount > 1 && (

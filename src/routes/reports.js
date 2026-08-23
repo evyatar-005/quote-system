@@ -34,8 +34,8 @@ module.exports = function registerReports(app, db, deps) {
   app.post('/api/reports/config/:type', requireAdmin, (req, res) => {
     const { type } = req.params;
     if (!REPORT_RUNNERS[type]) return res.status(404).json({ error: `unknown report type "${type}"` });
-    const { enabled, recipients, frequency, time, weekday, day_of_month } = req.body || {};
-    const schedule = saveSchedule(db, null, type, { enabled, recipients, frequency, time, weekday, dayOfMonth: day_of_month });
+    const { enabled, recipients, frequency, time, weekday, day_of_month, days_of_week } = req.body || {};
+    const schedule = saveSchedule(db, null, type, { enabled, recipients, frequency, time, weekday, dayOfMonth: day_of_month, daysOfWeek: days_of_week });
     console.log(`[POST /api/reports/config/${type}] created schedule #${schedule.id}`);
     res.status(201).json(schedule);
   });
@@ -44,8 +44,8 @@ module.exports = function registerReports(app, db, deps) {
   app.put('/api/reports/config/:type/:id', requireAdmin, (req, res) => {
     const { type, id } = req.params;
     if (!REPORT_RUNNERS[type]) return res.status(404).json({ error: `unknown report type "${type}"` });
-    const { enabled, recipients, frequency, time, weekday, day_of_month } = req.body || {};
-    const schedule = saveSchedule(db, Number(id), type, { enabled, recipients, frequency, time, weekday, dayOfMonth: day_of_month });
+    const { enabled, recipients, frequency, time, weekday, day_of_month, days_of_week } = req.body || {};
+    const schedule = saveSchedule(db, Number(id), type, { enabled, recipients, frequency, time, weekday, dayOfMonth: day_of_month, daysOfWeek: days_of_week });
     if (!schedule) return res.status(404).json({ error: 'schedule not found' });
     console.log(`[PUT /api/reports/config/${type}/${id}] enabled=${!!schedule.enabled} frequency=${schedule.frequency}`);
     res.json(schedule);

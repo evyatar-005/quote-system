@@ -8,6 +8,7 @@
 // monthly) always comes from the schedule that triggered it.
 
 const mail = require('../mail');
+const { request } = require('../morning/client');
 const { parseRecipients, computeDateRange } = require('./scheduledReports');
 const { renderReportEmail, tableShell, tableRow, barCell, formatDateRangeHe } = require('./emailTemplate');
 
@@ -98,19 +99,97 @@ function fetchOrderedDates(db) {
   return map;
 }
 
+// Local sync only records that an order document was created — it never
+// learns afterwards that Morning cancelled or manually-closed-out that same
+// document, so a quote whose order got cancelled kept counting as a sale
+// forever. Cross-checks each order still in the reporting period against
+// Morning's live status (0=פתוח/1=סגור keep it, 2=סומן ידנית כסגור/3=מבטל/
+// 4=בוטל drop it) — same rule requested for the delivery-notes report.
+async function fetchCancelledOrderQuoteIds(db, fromDate, toDate) {
+  const orders = db.prepare(
+    `SELECT quote_id, morning_document_id FROM morning_documents_map
+     WHERE morning_document_type = ? AND date(created_at) BETWEEN date(?) AND date(?)`
+  ).all(MORNING_ORDER_TYPE, fromDate, toDate);
+
+  const excluded = new Set();
+  await Promise.all(orders.map(async (o) => {
+    try {
+      const doc = await request(db, 'GET', `/documents/${o.morning_document_id}`);
+      if (doc && [2, 3, 4].includes(doc.status)) excluded.add(o.quote_id);
+    } catch {
+      // Morning unreachable / doc gone — leave the order counted rather than
+      // silently dropping real sales because of a transient API failure.
+    }
+  }));
+  return excluded;
+}
+
+// Not every order document in Morning was created through our interface —
+// an office/accounting user can issue one directly in Morning, with no
+// signshop_quotes row and no morning_documents_map entry, so the report was
+// silently blind to those. Pulls every order (type 100) actually issued
+// (open/closed — same 0/1 rule as everywhere else in this report) in the
+// period straight from Morning, then keeps only the ones NOT already
+// represented locally — those go on a synthetic "מורנינג" row instead of a
+// real agent's name, since no agent in our system created them.
+async function fetchMorningOnlyOrders(db, fromDate, toDate) {
+  const localIds = new Set(
+    db.prepare(`SELECT morning_document_id FROM morning_documents_map WHERE morning_document_type = ?`)
+      .all(MORNING_ORDER_TYPE).map((r) => String(r.morning_document_id))
+  );
+
+  const candidates = [];
+  let page = 1;
+  for (;;) {
+    const result = await request(db, 'POST', '/documents/search', {
+      type: [MORNING_ORDER_TYPE],
+      status: [0, 1],
+      fromDate,
+      toDate,
+      page,
+      pageSize: 100,
+    });
+    for (const doc of result.items || []) {
+      if (!localIds.has(String(doc.id))) candidates.push(doc.id);
+    }
+    if (page >= (result.pages || 1)) break;
+    page += 1;
+  }
+  if (!candidates.length) return [];
+
+  // Search results don't include line items — fetch each candidate's full
+  // document so the product breakdown can still show what was actually sold.
+  const orders = [];
+  await Promise.all(candidates.map(async (id) => {
+    try {
+      const doc = await request(db, 'GET', `/documents/${id}`);
+      if (!doc) return;
+      const preVat = doc.amountDueVat ?? (doc.amount != null && doc.vat != null ? doc.amount - doc.vat : doc.amount);
+      orders.push({
+        totalBeforeVat: preVat || 0,
+        totalWithVat: doc.amount || 0,
+        income: doc.income || [],
+      });
+    } catch (err) {
+      console.error(`[fetchMorningOnlyOrders] failed to fetch document ${id}:`, err.message);
+    }
+  }));
+  return orders;
+}
+
 // One row per agent with at least one actual ORDER (a quote that got a real
 // Morning order document) in the period, ordered highest-selling first. Only
 // closed/ordered quotes are counted at all here — never-ordered quotes don't
 // appear in this report, not even as an "offered" count, per explicit
 // request: this report is about orders, not quotes.
-function fetchSalesByAgent(db, fromDate, toDate) {
-  return db.prepare(`
+function fetchSalesByAgent(db, fromDate, toDate, excludeQuoteIds = new Set()) {
+  const rows = db.prepare(`
     SELECT
+      q.id AS quoteId,
       q.created_by AS username,
       COALESCE(u.full_name, q.created_by) AS agentName,
-      COUNT(*) AS ordersCount,
-      SUM(q.price_before_vat) AS totalBeforeVat,
-      SUM(q.price_with_vat) AS totalWithVat
+      q.price_before_vat AS priceBeforeVat,
+      q.price_with_vat AS priceWithVat
     FROM signshop_quotes q
     LEFT JOIN users u ON u.username = q.created_by
     INNER JOIN (
@@ -120,9 +199,17 @@ function fetchSalesByAgent(db, fromDate, toDate) {
     ) closed ON closed.quote_id = q.id
     WHERE date(closed.ordered_at) BETWEEN date(?) AND date(?)
       AND ${NOT_SUPERSEDED('q')}
-    GROUP BY q.created_by
-    ORDER BY totalBeforeVat DESC
-  `).all(fromDate, toDate);
+  `).all(fromDate, toDate).filter((r) => !excludeQuoteIds.has(r.quoteId));
+
+  const map = new Map();
+  for (const r of rows) {
+    const agent = map.get(r.username) || { username: r.username, agentName: r.agentName, ordersCount: 0, totalBeforeVat: 0, totalWithVat: 0 };
+    agent.ordersCount += 1;
+    agent.totalBeforeVat += r.priceBeforeVat || 0;
+    agent.totalWithVat += r.priceWithVat || 0;
+    map.set(r.username, agent);
+  }
+  return Array.from(map.values()).sort((a, b) => b.totalBeforeVat - a.totalBeforeVat);
 }
 
 // Per-product rollup across every ORDERED quote in the period — never-ordered
@@ -131,12 +218,13 @@ function fetchSalesByAgent(db, fromDate, toDate) {
 // this product (a quote referencing the same product twice via extra-size
 // rows still counts once); revenue/units stay LINE-level, deliberately
 // excluding VAT/shipping/installation which don't live on a line.
-function fetchSalesByProduct(db, fromDate, toDate) {
+function fetchSalesByProduct(db, fromDate, toDate, excludeQuoteIds = new Set()) {
   const orderedDates = fetchOrderedDates(db);
   const quotes = db.prepare(`
     SELECT id, calculation_data FROM signshop_quotes q
     WHERE ${NOT_SUPERSEDED('q')}
   `).all().filter((q) => {
+    if (excludeQuoteIds.has(q.id)) return false;
     const orderedAt = orderedDates.get(q.id);
     return orderedAt && dateStr(orderedAt) >= fromDate && dateStr(orderedAt) <= toDate;
   });
@@ -216,6 +304,38 @@ function buildEmail(agentRows, productRows, frequencyLabel, fromDate, toDate) {
   return { subject, html, text };
 }
 
+// Folds orders issued directly in Morning (no local agent) into the two
+// breakdowns: one synthetic "מורנינג" row in the agent table, and their line
+// items grouped into the product table by description (Morning has no
+// concept of our productType slugs, so the raw description is the best
+// available grouping key there).
+function mergeMorningOnlyOrders(agentRows, productRows, morningOnlyOrders) {
+  if (!morningOnlyOrders.length) return { agentRows, productRows };
+
+  const morningAgent = {
+    username: 'morning', agentName: 'מורנינג',
+    ordersCount: morningOnlyOrders.length,
+    totalBeforeVat: morningOnlyOrders.reduce((sum, o) => sum + o.totalBeforeVat, 0),
+    totalWithVat: morningOnlyOrders.reduce((sum, o) => sum + o.totalWithVat, 0),
+  };
+  const mergedAgentRows = [...agentRows, morningAgent].sort((a, b) => b.totalBeforeVat - a.totalBeforeVat);
+
+  const productMap = new Map(productRows.map((r) => [r.type, { ...r }]));
+  for (const order of morningOnlyOrders) {
+    for (const line of order.income) {
+      const key = line.description || 'לא ידוע';
+      const p = productMap.get(key) || { type: key, name: key, revenue: 0, units: 0, ordersCount: 0 };
+      p.revenue += (line.price || 0) * (line.quantity || 1);
+      p.units += line.quantity || 1;
+      p.ordersCount += 1;
+      productMap.set(key, p);
+    }
+  }
+  const mergedProductRows = Array.from(productMap.values()).sort((a, b) => b.revenue - a.revenue);
+
+  return { agentRows: mergedAgentRows, productRows: mergedProductRows };
+}
+
 async function sendReport(db, cfg) {
   const recipients = parseRecipients(cfg.recipients);
   if (!recipients.length) return { sent: false };
@@ -224,12 +344,15 @@ async function sendReport(db, cfg) {
   // a daily schedule reports on today, a monthly one on the last 30 days,
   // etc. (computeDateRange), never a fixed window independent of frequency.
   const { fromDate, toDate } = computeDateRange(cfg.frequency, new Date());
-  const agentRows = fetchSalesByAgent(db, fromDate, toDate);
-  const productRows = fetchSalesByProduct(db, fromDate, toDate);
+  const excludeQuoteIds = await fetchCancelledOrderQuoteIds(db, fromDate, toDate);
+  const morningOnlyOrders = await fetchMorningOnlyOrders(db, fromDate, toDate);
+  const localAgentRows = fetchSalesByAgent(db, fromDate, toDate, excludeQuoteIds);
+  const localProductRows = fetchSalesByProduct(db, fromDate, toDate, excludeQuoteIds);
+  const { agentRows, productRows } = mergeMorningOnlyOrders(localAgentRows, localProductRows, morningOnlyOrders);
   const { subject, html, text } = buildEmail(agentRows, productRows, FREQUENCY_LABELS[cfg.frequency] || cfg.frequency, fromDate, toDate);
   await mail.sendMail(db, { to: recipients.join(', '), subject, html, text });
   console.log(`[salesReport] sent sales for ${agentRows.length} agent(s)/${productRows.length} product(s), ${fromDate}..${toDate}, to ${recipients.join(', ')}`);
   return { sent: true, count: agentRows.reduce((sum, r) => sum + r.ordersCount, 0) };
 }
 
-module.exports = { REPORT_TYPE, sendReport, fetchSalesByAgent, fetchSalesByProduct };
+module.exports = { REPORT_TYPE, sendReport, fetchSalesByAgent, fetchSalesByProduct, fetchCancelledOrderQuoteIds, fetchMorningOnlyOrders };

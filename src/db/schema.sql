@@ -431,6 +431,7 @@ CREATE TABLE IF NOT EXISTS report_schedules (
   time           TEXT NOT NULL DEFAULT '17:00',
   weekday        INTEGER NOT NULL DEFAULT 0,      -- 0=Sunday..6=Saturday, weekly only
   day_of_month   INTEGER NOT NULL DEFAULT 1,      -- 1-31, monthly only (clamped to month length)
+  days_of_week   TEXT,                            -- daily only; CSV of 0=Sunday..6=Saturday, NULL/empty = every day
   -- Written by scheduledReports.runAndRecord() after every send attempt —
   -- automatic (scheduler tick) or manual ("שלח עכשיו לבדיקה") — so the admin
   -- UI can show "did this actually run" rather than only "is it turned on".

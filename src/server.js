@@ -174,6 +174,11 @@ try { db.exec('ALTER TABLE signshop_lokobond_area_tiers ADD COLUMN agent_min_pri
 // leaked/guessed default password can't be used past the first real login.
 try { db.exec('ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0'); } catch (_) {}
 
+// Lets a daily report schedule skip specific weekdays (e.g. Friday/Saturday,
+// when there's no business activity to report on) — NULL/empty means every
+// day, preserving existing schedules' behavior. See scheduledReports.js.
+try { db.exec('ALTER TABLE report_schedules ADD COLUMN days_of_week TEXT'); } catch (_) {}
+
 // Start of a granular, per-user permission model (independent of the coarse
 // agent/admin/operations role) — first slice: who may see cost/price/profit
 // breakdowns (QuoteDetailsModal, "הצג מרכיבי עלות"). Existing admins are

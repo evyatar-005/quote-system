@@ -14,7 +14,16 @@ function summarize(s) {
   const freq = FREQUENCY_LABELS[s.frequency] || s.frequency;
   if (s.frequency === "weekly") return `${freq}, ${WEEKDAY_LABELS[s.weekday]} ${s.time}`;
   if (s.frequency === "monthly") return `${freq}, ${s.dayOfMonth} לחודש ${s.time}`;
+  if (s.frequency === "daily" && Array.isArray(s.daysOfWeek) && s.daysOfWeek.length && s.daysOfWeek.length < 7) {
+    const days = [...s.daysOfWeek].sort().map((d) => WEEKDAY_LABELS[d]).join("׳, ");
+    return `${freq} (${days}), ${s.time}`;
+  }
   return `${freq}, ${s.time}`;
+}
+
+function parseDaysOfWeek(raw) {
+  if (!raw) return [];
+  return String(raw).split(",").map(Number).filter((n) => !Number.isNaN(n));
 }
 
 // Coarse relative time in Hebrew — this only needs to answer "did this run
@@ -48,6 +57,7 @@ export default function ScheduleEditor({ reportType, schedule, onSaved, onRemove
   const [time, setTime] = useState(schedule?.time || "17:00");
   const [weekday, setWeekday] = useState(schedule?.weekday ?? 0);
   const [dayOfMonth, setDayOfMonth] = useState(schedule?.day_of_month ?? 1);
+  const [daysOfWeek, setDaysOfWeek] = useState(parseDaysOfWeek(schedule?.days_of_week));
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -63,6 +73,7 @@ export default function ScheduleEditor({ reportType, schedule, onSaved, onRemove
     if ("time" in patch) setTime(patch.time);
     if ("weekday" in patch) setWeekday(patch.weekday);
     if ("dayOfMonth" in patch) setDayOfMonth(patch.dayOfMonth);
+    if ("daysOfWeek" in patch) setDaysOfWeek(patch.daysOfWeek);
   };
 
   const payload = () => ({
@@ -72,6 +83,7 @@ export default function ScheduleEditor({ reportType, schedule, onSaved, onRemove
     time,
     weekday: Number(weekday),
     day_of_month: Number(dayOfMonth),
+    days_of_week: frequency === "daily" ? daysOfWeek : [],
   });
 
   const handleSave = async () => {
@@ -126,7 +138,7 @@ export default function ScheduleEditor({ reportType, schedule, onSaved, onRemove
       >
         <div className="flex items-center gap-2.5 min-w-0">
           <span className={`w-2 h-2 rounded-full shrink-0 ${enabled ? "bg-emerald-500" : "bg-slate-300"}`} />
-          <span className="text-sm font-semibold text-slate-700">{summarize({ frequency, time, weekday, dayOfMonth })}</span>
+          <span className="text-sm font-semibold text-slate-700">{summarize({ frequency, time, weekday, dayOfMonth, daysOfWeek })}</span>
           <span className="text-xs text-slate-400 truncate">{recipients.length ? `${recipients.length} נמענים` : "אין נמענים"}</span>
           {lastRunStatus === "error" ? (
             <span className="flex items-center gap-1 text-xs text-red-500 shrink-0">
@@ -176,7 +188,7 @@ export default function ScheduleEditor({ reportType, schedule, onSaved, onRemove
 
       <RecipientsEditor recipients={recipients} onChange={setRecipients} />
 
-      <ScheduleFields frequency={frequency} time={time} weekday={weekday} dayOfMonth={dayOfMonth} onChange={scheduleFieldChange} />
+      <ScheduleFields frequency={frequency} time={time} weekday={weekday} dayOfMonth={dayOfMonth} daysOfWeek={daysOfWeek} onChange={scheduleFieldChange} />
 
       <div className="flex gap-3">
         <Button onClick={handleSave} disabled={saving} className="gap-2">

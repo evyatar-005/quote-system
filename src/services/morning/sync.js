@@ -398,4 +398,35 @@ function getHistory(db, quoteId) {
   };
 }
 
-module.exports = { ensureMorningClient, createOrConvertDocument, createPaymentForm, handlePaymentReceived, getHistory, buildIncomeRows, searchClients, createClient, getLatestDocuments };
+// When an agent opens a new quote as a duplicate/revision of an existing one
+// (parent_quote_number set on create — see entities.js quoteCreate), the old
+// quote's own Morning "הצעת מחיר" document (type 10) is stale — it no longer
+// reflects what's being offered. Closing it manually (POST /documents/{id}/close
+// — undocumented in our API reference, confirmed against the live
+// GET /documents/statuses enum: this lands the document on status 2 "מסמך
+// סומן ידנית כסגור") keeps Morning's own document list from showing two
+// live quotes for the same deal. Only the quote-type document is touched —
+// any order/delivery-note already issued off the parent is untouched.
+// Never let a Morning hiccup block creating the new quote — same
+// fire-and-forget convention as ensureMorningClient above.
+async function closeSupersededQuoteDocument(db, parentQuoteId) {
+  const doc = db.prepare(
+    `SELECT * FROM morning_documents_map WHERE quote_id = ? AND morning_document_type = ? ORDER BY id DESC LIMIT 1`
+  ).get(parentQuoteId, DOCUMENT_TYPE.quote);
+  if (!doc) return;
+  try {
+    await request(db, 'POST', `/documents/${doc.morning_document_id}/close`);
+    db.prepare(
+      `INSERT INTO morning_sync_log (quote_id, action, request_json, success) VALUES (?, 'close_superseded_quote', ?, 1)`
+    ).run(parentQuoteId, JSON.stringify({ morning_document_id: doc.morning_document_id }));
+  } catch (err) {
+    console.error(`[closeSupersededQuoteDocument] failed to close ${doc.morning_document_id} for quote #${parentQuoteId}:`, err.message);
+    try {
+      db.prepare(
+        `INSERT INTO morning_sync_log (quote_id, action, request_json, success, error_message) VALUES (?, 'close_superseded_quote', ?, 0, ?)`
+      ).run(parentQuoteId, JSON.stringify({ morning_document_id: doc.morning_document_id }), err.message);
+    } catch (_) {}
+  }
+}
+
+module.exports = { ensureMorningClient, createOrConvertDocument, createPaymentForm, handlePaymentReceived, getHistory, buildIncomeRows, searchClients, createClient, getLatestDocuments, closeSupersededQuoteDocument };
