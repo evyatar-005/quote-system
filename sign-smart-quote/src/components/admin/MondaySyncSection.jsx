@@ -336,11 +336,18 @@ export default function MondaySyncSection() {
                 ))}
               </ul>
             )}
-            {backfill.matched === 0 && (
-              <p className="text-slate-500">
-                אף ליד לא תואם למיפוי הקיים — ייתכן שהבורדים הישנים השתמשו בתוויות אחרות.
+            {/* What will NOT be updated matters as much as what will: the
+                leftover is the answer to "why is the tile still high", and
+                showing it only when nothing matched hid it in exactly the
+                case where the admin can still act on it. */}
+            {backfill.candidates > backfill.matched && (
+              <p className="text-slate-500 border-t border-amber-200 pt-2">
+                {backfill.matched === 0
+                  ? "אף ליד לא תואם למיפוי הקיים — ייתכן שהבורדים הישנים השתמשו בתוויות אחרות."
+                  : `${backfill.candidates - backfill.matched} לידים יישארו ״חדש״ — אין להם תווית מוכרת בנתונים השמורים.`}
                 {backfill.topUnmatched?.length > 0 && (
-                  <> התוויות הנפוצות שנמצאו: {backfill.topUnmatched.slice(0, 5).map((u) => `״${u.label}״ (${u.count})`).join(", ")}</>
+                  <> הערכים הנפוצים אצלם: {backfill.topUnmatched.slice(0, 6).map((u) => `״${u.label}״ (${u.count})`).join(", ")}.
+                    {" "}אם אחד מהם הוא סטטוס אמיתי — הוסף אותו למיפוי והרץ שוב.</>
                 )}
               </p>
             )}
