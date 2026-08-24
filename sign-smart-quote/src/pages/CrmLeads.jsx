@@ -63,6 +63,13 @@ const SORTS = [
 // explanation: the labels are short, and "תקועים" in particular is a rule
 // nobody can guess (it is NOT updated_at — see LEAD_ACTIVITY_SQL in
 // routes/crm.js), so the exact definition is spelled out rather than implied.
+// How far back "לידים חדשים" looks. A tile meant to answer "what came in that
+// nobody has touched" has to be bounded, or an old backlog buries this week's
+// arrivals and the number never moves.
+const NEW_LEADS_WINDOW_DAYS = 30;
+const NEW_LEADS_SINCE = () =>
+  new Date(Date.now() - NEW_LEADS_WINDOW_DAYS * 86400e3).toISOString().slice(0, 10);
+
 const FILTERS = [
   {
     key: "open", label: "פתוחים", params: { open: "1" },
@@ -178,6 +185,12 @@ export default function CrmLeads() {
   // currently set to — they run their own fixed query each so a manager can
   // see "new" and "overdue follow-up" counts no matter what's selected below.
   const [newCount, setNewCount] = useState(null);
+  // "לידים חדשים" counted every open lead at status 'new' with no time bound,
+  // so a years-old backlog dominated it permanently and the tile stopped being
+  // a signal about today. The headline is now the recent window; the all-time
+  // figure stays visible beside it so nothing is hidden, just demoted.
+  const [newTotal, setNewTotal] = useState(null);
+  const [dateFrom, setDateFrom] = useState("");
   const [overdueCount, setOverdueCount] = useState(null);
   const [overdueSoonest, setOverdueSoonest] = useState(null);
   // "The customer wrote and we haven't answered" — counted from the first
@@ -195,8 +208,11 @@ export default function CrmLeads() {
   const [leadless, setLeadless] = useState([]);
 
   const reloadSummary = useCallback(() => {
-    crmLeads.list({ status: "new", open: "1", limit: 1 })
+    crmLeads.list({ status: "new", open: "1", limit: 1, date_from: NEW_LEADS_SINCE() })
       .then((rows) => setNewCount(rows[0]?.total_count ?? 0))
+      .catch(() => {});
+    crmLeads.list({ status: "new", open: "1", limit: 1 })
+      .then((rows) => setNewTotal(rows[0]?.total_count ?? 0))
       .catch(() => {});
     crmLeads.list({ follow_up: "overdue", sort: "follow_up", limit: 1 })
       .then((rows) => {
@@ -250,9 +266,13 @@ export default function CrmLeads() {
     setStatus("new");
     setCampaign("");
     setAssignee("");
+    // Match the tile: clicking a number must show exactly the rows it counted,
+    // otherwise the list contradicts the tile that opened it.
+    setDateFrom(NEW_LEADS_SINCE());
     listRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
   const openOverdue = () => {
+    setDateFrom("");
     setFilter("overdue");
     setStatus("");
     setCampaign("");
@@ -275,6 +295,7 @@ export default function CrmLeads() {
   // "the tile says nobody is waiting" bug. The count difference is spelled
   // out to the user rather than hidden.
   const filterAwaitingInTable = (key) => {
+    setDateFrom("");
     setFilter(key);
     setStatus("");
     setCampaign("");
@@ -286,7 +307,7 @@ export default function CrmLeads() {
   const activeChip = useMemo(() => chips.find((f) => f.key === filter), [chips, filter]);
   // Hidden filters need a visible count, or a campaign left selected quietly
   // shrinks every list with nothing on screen explaining why.
-  const extraFilterCount = [campaign, assignee, mondayPick].filter(Boolean).length;
+  const extraFilterCount = [campaign, assignee, mondayPick, dateFrom].filter(Boolean).length;
 
   const params = useMemo(() => {
     const chip = chips.find((f) => f.key === filter) || chips[0];
@@ -298,6 +319,7 @@ export default function CrmLeads() {
       ...(mondayPick ? { monday_col: mondayCol, monday_val: rest.join("|") } : {}),
       // An explicit assignee pick wins over the chip's own assigned_to.
       ...(assignee ? { assigned_to: assignee } : {}),
+      ...(dateFrom ? { date_from: dateFrom } : {}),
       limit: PAGE_SIZE,
     };
   }, [q, sort, status, campaign, assignee, filter, chips, mondayPick]);
@@ -386,9 +408,16 @@ export default function CrmLeads() {
                 <Sparkles className="w-4 h-4" />
               </span>
               <span className="min-w-0">
-                <span className="block text-xs text-slate-500">לידים חדשים</span>
-                <span className="block text-xl font-bold">
-                  {newCount === null ? <Loader2 className="w-4 h-4 animate-spin text-slate-300" /> : newCount}
+                <span className="block text-xs text-slate-500">לידים חדשים · {NEW_LEADS_WINDOW_DAYS} ימים</span>
+                <span className="flex items-baseline gap-2">
+                  <span className="text-xl font-bold">
+                    {newCount === null ? <Loader2 className="w-4 h-4 animate-spin text-slate-300" /> : newCount}
+                  </span>
+                  {/* The all-time figure is not hidden, only demoted — it is
+                      real, it is just not a signal about this week. */}
+                  {newTotal != null && newTotal !== newCount && (
+                    <span className="text-[11px] text-slate-400">מתוך {newTotal} בסך הכול</span>
+                  )}
                 </span>
               </span>
             </button>
@@ -653,6 +682,19 @@ export default function CrmLeads() {
               </TooltipProvider>
             )}
 
+            {/* A date filter set by a tile click must announce itself — an
+                unexplained short list is exactly the confusion this screen
+                already guards against for campaign/assignee filters. */}
+            {dateFrom && (
+              <button
+                type="button"
+                onClick={() => setDateFrom("")}
+                title="הסר את סינון התאריך"
+                className="text-[11px] px-2 py-0.5 rounded-full border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100"
+              >
+                מ-{dateFrom} ואילך ✕
+              </button>
+            )}
             {!loading && <span className="text-xs text-slate-400 mr-auto">נמצאו {total} לידים</span>}
           </div>
 
