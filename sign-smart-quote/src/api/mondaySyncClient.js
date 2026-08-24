@@ -28,6 +28,10 @@ async function request(path, { method = 'GET', body } = {}) {
 
 export const mondaySync = {
   listBoards() { return request('/api/monday-sync/boards'); },
+  // Retroactive status completion from stored monday snapshots — preview and
+  // apply are separate calls so thousands of leads are never changed unseen.
+  backfillPreview() { return request('/api/monday-sync/backfill/preview'); },
+  backfillApply() { return request('/api/monday-sync/backfill', { method: 'POST' }); },
   fetchColumns(boardId) { return request(`/api/monday-sync/boards/${boardId}/columns`); },
   createBoardMap(data) { return request('/api/monday-sync/boards', { method: 'POST', body: data }); },
   updateBoardMap(id, data) { return request(`/api/monday-sync/boards/${id}`, { method: 'PUT', body: data }); },

@@ -5,6 +5,7 @@
 // deps: { requireAdmin }
 
 const { fetchBoardColumns, pullBoard, pushBoard, logSync } = require('../services/crm/mondaySync');
+const mondayBackfill = require('../services/crm/mondayBackfill');
 
 module.exports = function registerMondaySync(app, db, deps) {
   const { requireAdmin } = deps;
@@ -67,6 +68,22 @@ module.exports = function registerMondaySync(app, db, deps) {
       db.prepare(`UPDATE monday_board_map SET ${setCols.map(c => `${c} = @${c}`).join(', ')} WHERE id = @id`).run(row);
     }
     res.json(db.prepare(`SELECT * FROM monday_board_map WHERE id = ?`).get(id));
+  });
+
+  // ── Retroactive status completion ────────────────────────────────────────
+  // Leads pulled from boards that are no longer mapped can never be updated by
+  // a sync — there is nothing left to sync against. Their monday snapshots
+  // survive in monday_item_map though, so their real status is already in our
+  // own DB, just never interpreted. Preview and apply are separate endpoints
+  // on purpose: this touches thousands of rows and must be seen before it runs.
+  app.get('/api/monday-sync/backfill/preview', requireAdmin, (req, res) => {
+    res.json(mondayBackfill.analyze(db));
+  });
+
+  app.post('/api/monday-sync/backfill', requireAdmin, (req, res) => {
+    const result = mondayBackfill.apply(db);
+    console.log(`[POST /api/monday-sync/backfill] ${result.updated} lead(s) updated by ${req.user.username}`);
+    res.json(result);
   });
 
   app.delete('/api/monday-sync/boards/:id', requireAdmin, (req, res) => {

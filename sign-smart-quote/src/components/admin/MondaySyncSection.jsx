@@ -118,6 +118,38 @@ export default function MondaySyncSection() {
     }
   };
 
+  // Leads pulled from boards that are no longer mapped can never be fixed by a
+  // sync — there is nothing left to sync against. Their monday snapshots are
+  // still in our own DB though, so their real status can be recovered from
+  // there. Preview first, always: this changes thousands of rows at once.
+  const [backfill, setBackfill] = useState(null);
+  const [backfillBusy, setBackfillBusy] = useState(false);
+
+  const previewBackfill = async () => {
+    setBackfillBusy(true);
+    try {
+      setBackfill(await mondaySync.backfillPreview());
+    } catch (err) {
+      toast.error(err.message || "בדיקת ההשלמה נכשלה");
+    } finally {
+      setBackfillBusy(false);
+    }
+  };
+
+  const applyBackfill = async () => {
+    setBackfillBusy(true);
+    try {
+      const r = await mondaySync.backfillApply();
+      toast.success(`${r.updated} לידים עודכנו מתוך נתוני מנדיי השמורים`);
+      setBackfill(null);
+      load();
+    } catch (err) {
+      toast.error(err.message || "ההשלמה נכשלה");
+    } finally {
+      setBackfillBusy(false);
+    }
+  };
+
   const pullNow = async (id) => {
     try {
       const r = await mondaySync.pullNow(id);
@@ -267,6 +299,62 @@ export default function MondaySyncSection() {
           <p className="text-xs text-muted-foreground">כאשר כבוי, אפשר עדיין למשוך/לדחוף ידנית לכל בורד ממופה</p>
         </div>
         <Switch checked={pollEnabled} onCheckedChange={togglePoll} disabled={savingSettings} />
+      </div>
+
+      {/* Historical completion. Deliberately apart from the per-board pull/push
+          controls: it is a one-off repair of leads whose board is gone, not
+          part of the ongoing sync. */}
+      <div className="rounded-xl border border-amber-300 bg-amber-50/40 p-4 space-y-3">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-slate-700">השלמת סטטוסים היסטורית</div>
+            <p className="text-xs text-muted-foreground mt-0.5 max-w-2xl">
+              לידים שנמשכו מבורדים שכבר אינם מסונכרנים נשארו בסטטוס ״חדש״ — אין מול מה לסנכרן אותם.
+              נתוני מנדיי שלהם עדיין שמורים אצלנו, ואפשר להשלים מהם את הסטטוס. ליד שסוכן כבר טיפל בו לא ישתנה.
+            </p>
+          </div>
+          <Button variant="outline" onClick={previewBackfill} disabled={backfillBusy} className="gap-2 shrink-0">
+            {backfillBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+            בדוק מה ישתנה
+          </Button>
+        </div>
+
+        {backfill && (
+          <div className="rounded-lg border border-amber-300 bg-white p-3 space-y-2 text-xs">
+            <div className="font-semibold text-slate-700">
+              {backfill.matched} מתוך {backfill.candidates} לידים בסטטוס ״חדש״ יעודכנו
+            </div>
+            {backfill.byStatus.length > 0 && (
+              <ul className="space-y-1">
+                {backfill.byStatus.map((b) => (
+                  <li key={b.label} className="flex items-center gap-2 flex-wrap">
+                    <span className={`px-2 py-0.5 rounded-full border ${STATUS_TONE[b.status] || ""}`}>
+                      {STATUS_LABELS[b.status] || b.status}
+                    </span>
+                    <span className="text-slate-500">← ״{b.label}״ · {b.count} לידים</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {backfill.matched === 0 && (
+              <p className="text-slate-500">
+                אף ליד לא תואם למיפוי הקיים — ייתכן שהבורדים הישנים השתמשו בתוויות אחרות.
+                {backfill.topUnmatched?.length > 0 && (
+                  <> התוויות הנפוצות שנמצאו: {backfill.topUnmatched.slice(0, 5).map((u) => `״${u.label}״ (${u.count})`).join(", ")}</>
+                )}
+              </p>
+            )}
+            {backfill.matched > 0 && (
+              <div className="flex items-center gap-2 pt-1">
+                <Button onClick={applyBackfill} disabled={backfillBusy} className="gap-2">
+                  {backfillBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  בצע עדכון ל-{backfill.matched} לידים
+                </Button>
+                <Button variant="ghost" onClick={() => setBackfill(null)}>ביטול</Button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {boardMaps.length > 0 && (
