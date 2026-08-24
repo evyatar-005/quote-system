@@ -11,6 +11,7 @@
 
 const { request: mondayRequest, uploadFileToColumn } = require('../monday/client');
 const { toE164 } = require('./phone');
+const { CLOSED_SQL, statusForLabel, labelOf, LEAD_STATUSES, LEGACY_STATUS_MAP } = require('./leadStatuses');
 
 function logSync(db, { direction, board_id, monday_item_id, lead_id, success, request_json, response_json, error_message }) {
   try {
@@ -199,7 +200,7 @@ async function pullBoard(db, boardMap, ownerUsername) {
   // rounded to midnight, or erased outright, within a minute.
   const updateFollowUp = db.prepare(
     `UPDATE crm_leads SET follow_up_date = ?, follow_up_source = 'monday'
-      WHERE id = ? AND status NOT IN ('won','lost','disqualified')
+      WHERE id = ? AND status NOT IN (${CLOSED_SQL})
         AND follow_up_source IS NOT 'agent'`
   );
 
@@ -209,9 +210,11 @@ async function pullBoard(db, boardMap, ownerUsername) {
   // ~3,665 of 3,665 leads read as "לידים חדשים": the value was written once
   // at creation and never revisited.
   //
-  // Reuses the SAME status_values map as pushBoard, inverted (label → status).
-  // One map for both directions means the two can never disagree about which
-  // board label means "won" — and it costs no extra configuration.
+  // The board's labels ARE our statuses now (services/crm/leadStatuses.js),
+  // so the primary resolution is statusForLabel(label) — no configuration at
+  // all. The board's own status_values map is kept only as a FALLBACK, for a
+  // board that words its labels differently; it can no longer shadow a
+  // canonical label.
   const statusByLabel = (() => {
     const out = new Map();
     let sv = {};
@@ -226,11 +229,16 @@ async function pullBoard(db, boardMap, ownerUsername) {
     for (const [internal, value] of Object.entries(sv)) {
       for (const label of (Array.isArray(value) ? value : [value])) {
         const trimmed = (label || '').toString().trim();
-        if (trimmed) out.set(trimmed, internal);
+        // A mapping saved under the old six-status list still names a legacy
+        // key; translate it rather than writing a value nothing recognises.
+        if (trimmed) out.set(trimmed, LEGACY_STATUS_MAP[internal] || internal);
       }
     }
     return out;
   })();
+  // label → status: canonical first, configured mapping only when the label
+  // isn't one of ours.
+  const resolveLabel = (label) => statusForLabel(label) || statusByLabel.get(label) || null;
 
   // Never clobbers a decision an agent made in the CRM: only moves a lead
   // that is still 'new'. A lead someone actively worked here keeps its local
@@ -239,7 +247,7 @@ async function pullBoard(db, boardMap, ownerUsername) {
   const updateStatusFromBoard = db.prepare(
     `UPDATE crm_leads
         SET status = @status,
-            closed_at = CASE WHEN @status IN ('won','lost','disqualified')
+            closed_at = CASE WHEN @status IN (${CLOSED_SQL})
                              THEN COALESCE(closed_at, @now) ELSE closed_at END,
             quoted_at = CASE WHEN @status = 'quoted' THEN COALESCE(quoted_at, @now) ELSE quoted_at END,
             updated_at = @now
@@ -279,7 +287,7 @@ async function pullBoard(db, boardMap, ownerUsername) {
       const boardLabel = boardMap.status_column_id
         ? (columnText(item.column_values, boardMap.status_column_id) || '').trim()
         : '';
-      const boardStatus = boardLabel ? (statusByLabel.get(boardLabel) || null) : null;
+      const boardStatus = boardLabel ? resolveLabel(boardLabel) : null;
 
       const existingMap = findItemMap.get(boardMap.board_id, item.id);
       if (existingMap) {
@@ -357,7 +365,10 @@ async function pullBoard(db, boardMap, ownerUsername) {
     itemsWithoutLead,
     skippedNotNew,
     hasStatusColumn: !!boardMap.status_column_id,
-    mappedLabelCount: statusByLabel.size,
+    // Canonical labels are always resolvable, with or without a saved
+    // mapping — count them, or the admin screen reads as "0 labels mapped"
+    // on a board that needs no configuration at all.
+    mappedLabelCount: new Set([...statusByLabel.keys(), ...LEAD_STATUSES.map((s) => s.label)]).size,
     // Top offenders only — a board can have dozens of one-off labels and the
     // point is to name the ones actually costing status updates.
     unmappedLabels: Array.from(unmappedLabels.entries())
@@ -386,8 +397,11 @@ async function pushBoard(db, boardMap) {
     // one — it is what the editor lists first and what an admin sees as the
     // primary spelling for that status.
     const mapped = statusValues[row.lead_status];
-    const label = (Array.isArray(mapped) ? mapped[0] : mapped);
-    if (!label) continue; // no mapped monday label for this internal status — skip silently
+    // The board's own wording still wins when one is configured; otherwise
+    // fall back to our canonical label, which IS the board's label now — so a
+    // board with no status_values at all still gets written to correctly.
+    const label = (Array.isArray(mapped) ? mapped[0] : mapped) || labelOf(row.lead_status);
+    if (!label) continue; // nothing sensible to write — skip silently
     try {
       await mondayRequest(
         db,

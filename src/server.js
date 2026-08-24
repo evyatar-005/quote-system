@@ -174,6 +174,30 @@ try { db.exec('ALTER TABLE signshop_lokobond_area_tiers ADD COLUMN agent_min_pri
 // leaked/guessed default password can't be used past the first real login.
 try { db.exec('ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0'); } catch (_) {}
 
+// ─── Lead statuses: legacy six → the customer's real monday statuses ───────
+// The CRM used to carry six generic statuses of its own. They are now the
+// board's own list (services/crm/leadStatuses.js), so the three that changed
+// key must be rewritten in place — otherwise those rows fall out of every
+// open/closed query at once.
+//
+// monday_item_map.last_pushed_status stores an INTERNAL status value (what we
+// last wrote to the board), so it has to be remapped too: left alone it would
+// permanently mismatch crm_leads.status and make pushBoard re-push every
+// single item on every poll, forever.
+//
+// Idempotent by construction: after the first run no row holds a legacy value,
+// so every statement matches zero rows.
+try {
+  const { LEGACY_STATUS_MAP } = require('./services/crm/leadStatuses');
+  let migrated = 0;
+  for (const [oldKey, newKey] of Object.entries(LEGACY_STATUS_MAP)) {
+    migrated += db.prepare('UPDATE crm_leads SET status = ? WHERE status = ?').run(newKey, oldKey).changes;
+    migrated += db.prepare('UPDATE monday_item_map SET last_pushed_status = ? WHERE last_pushed_status = ?')
+      .run(newKey, oldKey).changes;
+  }
+  if (migrated) console.log(`[migration] lead statuses: rewrote ${migrated} legacy status value(s)`);
+} catch (e) { console.error('[migration] lead status migration failed:', e.message); }
+
 // Presence — last time this user made an authenticated request. Needed by the
 // lead auto-router (services/crm/leadRouting.js): a lead must not be handed to
 // an agent who isn't working right now, and nothing in this system tracked

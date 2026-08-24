@@ -258,7 +258,7 @@ function RailRow({ lead, now, active, expanded, onToggle, onOpen, onChanged }) {
               <DropdownMenuContent align="start" dir="rtl">
                 <DropdownMenuItem
                   className="text-red-600 gap-1.5"
-                  onSelect={() => run(() => crmLeads.update(lead.id, { status: "disqualified" }), "סומן כלא רלוונטי")}
+                  onSelect={() => run(() => crmLeads.update(lead.id, { status: "lost_other" }), "סומן כלא רלוונטי")}
                 >
                   <XCircle className="w-4 h-4" /> לא רלוונטי
                 </DropdownMenuItem>

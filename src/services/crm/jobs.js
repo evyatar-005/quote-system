@@ -11,6 +11,7 @@ const { DOCUMENT_TYPE } = require('../morning/mappings');
 const inforuClient = require('../inforu/client');
 const { syncInforuChats } = require('../channels/whatsapp/inforuChatSync');
 const { handleInboundEvent } = require('../channels/whatsapp/inbound');
+const { CLOSED_SQL } = require('./leadStatuses');
 
 const POLL_TICK_MS = 60 * 1000;
 const QUEUE_TICK_MS = 5 * 1000;
@@ -380,7 +381,7 @@ function leadOutcomeSweepTick(db) {
     JOIN morning_documents_map m ON m.quote_id = l.quote_id
     WHERE l.quote_id IS NOT NULL
       AND l.closed_at IS NULL
-      AND l.status NOT IN ('won','lost','disqualified')
+      AND l.status NOT IN (${CLOSED_SQL})
       AND m.morning_document_type = ?
     GROUP BY l.id
   `).all(DOCUMENT_TYPE.order);

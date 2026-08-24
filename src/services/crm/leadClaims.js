@@ -13,6 +13,12 @@
 // when they stop typing. Hence expires_at is nullable and usually NULL.
 
 const { publish } = require('./realtime');
+const { OPEN_KEYS, CLOSED_KEYS, isClosed } = require('./leadStatuses');
+
+// Every open status is claimable: a lead someone already spoke to and then
+// released is still live work, and after the release it has no owner left to
+// reach it. Only the closed outcomes stay out.
+const CLAIMABLE_SQL = OPEN_KEYS.map((k) => `'${k}'`).join(',');
 
 function crmSettingsRow(db) {
   return db.prepare(`SELECT * FROM crm_settings WHERE id = 1`).get() || {};
@@ -35,10 +41,8 @@ const NEXT_CLAIMABLE_SQL = `
          AND (cl.expires_at IS NULL OR cl.expires_at > CURRENT_TIMESTAMP)
   WHERE l.assigned_to IS NULL
     AND cl.lead_id IS NULL
-    -- 'contacted' as well as 'new': a lead someone already spoke to and then
-    -- released is still live work, and after the release above it has no owner
-    -- left to reach it. Closed outcomes (won/lost/disqualified/quoted) stay out.
-    AND l.status IN ('new','contacted')
+    -- Any OPEN status, not just 'new' — see CLAIMABLE_SQL above.
+    AND l.status IN (${CLAIMABLE_SQL})
     AND ( NOT EXISTS (SELECT 1 FROM crm_agent_campaigns WHERE username = @me)
           OR l.campaign_id IN (SELECT campaign_id FROM crm_agent_campaigns WHERE username = @me) )
   ORDER BY COALESCE(l.source_created_at, l.created_at) ASC, l.id ASC
@@ -132,7 +136,9 @@ function claimFill(db, username) {
 
 // The ONE extension point for "when does a lead free its slot" (user
 // requirement: "we'll build more later" — adding a rule is one line here).
-const RELEASE_ON_STATUS = { quoted: 'quoted', won: 'won', lost: 'lost', disqualified: 'disqualified' };
+// 'quoted' plus every closed outcome. The reason string is the status key
+// itself, which is what crm_lead_handling.end_reason records.
+const RELEASE_ON_STATUS = Object.fromEntries(['quoted', ...CLOSED_KEYS].map((k) => [k, k]));
 
 function releaseReason(prev, next) {
   if (next.status !== undefined && next.status !== prev.status && RELEASE_ON_STATUS[next.status]) return RELEASE_ON_STATUS[next.status];

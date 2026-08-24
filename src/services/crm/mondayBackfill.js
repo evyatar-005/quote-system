@@ -11,12 +11,14 @@
 //
 // Nothing here talks to monday. It re-reads data we already stored.
 
+const { CLOSED_SQL, LEAD_STATUSES, LEGACY_STATUS_MAP } = require('./leadStatuses');
+
 // Same refusal as the live pull: a lead an agent has already moved past 'new'
 // is theirs, and a months-old board snapshot must never overrule it.
 const UPDATE_SQL = `
   UPDATE crm_leads
      SET status = @status,
-         closed_at = CASE WHEN @status IN ('won','lost','disqualified')
+         closed_at = CASE WHEN @status IN (${CLOSED_SQL})
                           THEN COALESCE(closed_at, @now) ELSE closed_at END,
          updated_at = @now
    WHERE id = @id AND status = 'new' AND status != @status`;
@@ -33,10 +35,16 @@ function buildLabelMap(db) {
     for (const [internal, value] of Object.entries(sv)) {
       for (const label of (Array.isArray(value) ? value : [value])) {
         const trimmed = (label || '').toString().trim();
-        if (trimmed) out.set(trimmed, internal);
+        // A mapping saved before the status list changed still names a legacy
+        // key; translate it, or it would write a value nothing recognises.
+        if (trimmed) out.set(trimmed, LEGACY_STATUS_MAP[internal] || internal);
       }
     }
   }
+  // The canonical labels win over any configured wording: board labels ARE
+  // our statuses now (see leadStatuses.js), and a stale saved mapping must
+  // not be able to redirect one of them somewhere else.
+  for (const s of LEAD_STATUSES) out.set(s.label, s.key);
   return out;
 }
 

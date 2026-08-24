@@ -11,6 +11,7 @@
 // deps: { requireAuth }
 
 const { releaseClaim, releaseReason } = require('../services/crm/leadClaims');
+const { CLOSED_SQL } = require('../services/crm/leadStatuses');
 
 // How early a scheduled follow-up starts warning the agent (the pop-up counts
 // down to the exact minute from here).
@@ -57,7 +58,7 @@ module.exports = function registerMyDay(app, db, deps) {
         ORDER BY c2.last_message_at DESC, c2.id DESC LIMIT 1
       )
       WHERE l.assigned_to = @me
-        AND l.status NOT IN ('won','lost','disqualified')
+        AND l.status NOT IN (${CLOSED_SQL})
       ORDER BY cl.acquired_at ASC, l.updated_at DESC
     `).all({ me });
 
@@ -92,7 +93,7 @@ module.exports = function registerMyDay(app, db, deps) {
       LEFT JOIN crm_campaigns cam ON cam.id = l.campaign_id
       WHERE l.follow_up_date IS NOT NULL
         AND datetime(l.follow_up_date) <= datetime('now','localtime',@preAlert)
-        AND l.status NOT IN ('won','lost','disqualified')
+        AND l.status NOT IN (${CLOSED_SQL})
         ${mineOnly}
       ORDER BY l.follow_up_date ASC
       LIMIT 10
@@ -199,7 +200,7 @@ module.exports = function registerMyDay(app, db, deps) {
       SELECT * FROM (
       SELECT u.username, u.full_name,
              (SELECT COUNT(*) FROM crm_leads l WHERE l.assigned_to = u.username
-                AND l.status NOT IN ('won','lost','disqualified')
+                AND l.status NOT IN (${CLOSED_SQL})
                 AND l.follow_up_date IS NOT NULL
                 AND date(l.follow_up_date) <= date('now','localtime')) AS due_today,
              (SELECT COUNT(*) FROM crm_lead_claims c WHERE c.username = u.username

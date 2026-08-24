@@ -15,6 +15,8 @@
 //   4. Nobody eligible → the lead goes to the pool (assigned_to stays NULL)
 //      and any agent can pull it with the existing "משוך ליד" queue.
 
+const { OPEN_KEYS } = require('./leadStatuses');
+
 // How recently a user must have made an authenticated request to count as
 // "working now". Generous on purpose: an agent reading a long thread or on a
 // phone call is still at work, and wrongly skipping them just sends more
@@ -25,7 +27,7 @@ const PRESENCE_WINDOW_MINUTES = 20;
 // Statuses that represent live work an agent is actually carrying. 'new' is
 // excluded per rule 3 above; the closed outcomes are excluded because they
 // are finished and must not make an agent look permanently busy.
-const ACTIVE_LOAD_STATUSES = ['contacted', 'quoted'];
+const ACTIVE_LOAD_STATUSES = OPEN_KEYS.filter((k) => k !== 'new');
 
 function crmSettings(db) {
   return db.prepare(`SELECT * FROM crm_settings WHERE id = 1`).get() || {};

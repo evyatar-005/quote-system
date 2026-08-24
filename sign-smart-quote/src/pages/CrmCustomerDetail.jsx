@@ -9,11 +9,10 @@ import ManagerSidebar from "@/components/layout/ManagerSidebar";
 import AgentSidebar from "@/components/layout/AgentSidebar";
 import printellaLogo from "@/assets/printella-logo.png";
 import { toast } from "sonner";
+import { LEAD_STATUSES } from "@/lib/leadStatuses";
 
-const LEAD_STATUS_LABELS = {
-  new: "חדש", contacted: "יצרנו קשר", quoted: "נשלחה הצעה",
-  won: "זכינו", lost: "אבדנו", disqualified: "לא רלוונטי",
-};
+// The status picker offers the board's full stage list, in board order —
+// see src/lib/leadStatuses.js for why the vocabulary lives in one place.
 
 export default function CrmCustomerDetail() {
   const { id } = useParams();
@@ -124,8 +123,8 @@ export default function CrmCustomerDetail() {
                           onChange={(e) => updateLeadStatus(l.id, e.target.value)}
                           className="text-xs border border-black rounded-lg px-2 py-1 bg-white"
                         >
-                          {Object.entries(LEAD_STATUS_LABELS).map(([k, label]) => (
-                            <option key={k} value={k}>{label}</option>
+                          {LEAD_STATUSES.map((st) => (
+                            <option key={st.key} value={st.key}>{st.label}</option>
                           ))}
                         </select>
                       </div>

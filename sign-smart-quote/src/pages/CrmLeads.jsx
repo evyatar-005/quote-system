@@ -18,6 +18,7 @@ import ManagerSidebar from "@/components/layout/ManagerSidebar";
 import AgentSidebar from "@/components/layout/AgentSidebar";
 import printellaLogo from "@/assets/printella-logo.png";
 import { toast } from "sonner";
+import { LEAD_STATUSES, STATUS_LABELS, normalizeStatus, toneOf } from "@/lib/leadStatuses";
 
 // The system's one real leads list — replaces the read-only 5-column grid that
 // used to live as a tab inside CrmCampaignsOverview (and the /crm/leads
@@ -30,22 +31,6 @@ import { toast } from "sonner";
 // so this same component serves both audiences — the only differences are the
 // default filter and whether the assignee column/filter is shown.
 const PAGE_SIZE = 50;
-
-// Exported so the monday status-mapping editor renders the exact same badge
-// palette as the leads table — one source of truth for status colour/wording.
-export const STATUS_LABELS = {
-  new: "חדש", contacted: "יצרנו קשר", quoted: "נשלחה הצעה",
-  won: "זכינו", lost: "אבדנו", disqualified: "לא רלוונטי",
-};
-
-export const STATUS_TONE = {
-  new: "bg-blue-50 text-blue-700 border-blue-200",
-  contacted: "bg-amber-50 text-amber-700 border-amber-200",
-  quoted: "bg-violet-50 text-violet-700 border-violet-200",
-  won: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  lost: "bg-slate-100 text-slate-500 border-slate-200",
-  disqualified: "bg-slate-100 text-slate-500 border-slate-200",
-};
 
 const SORTS = [
   {
@@ -73,11 +58,11 @@ const NEW_LEADS_SINCE = () =>
 const FILTERS = [
   {
     key: "open", label: "פתוחים", params: { open: "1" },
-    hint: "כל ליד שעדיין לא נסגר — כלומר הסטטוס שלו אינו זכינו / אבדנו / לא רלוונטי.",
+    hint: "כל ליד שעדיין לא נסגר — כלומר הסטטוס שלו אינו ״עסקה נסגרה״ ואינו אחד מסטטוסי ״לא רלוונטי״.",
   },
   {
     key: "all", label: "הכל", params: {},
-    hint: "ללא סינון סטטוס כלל — כולל לידים סגורים, אבודים ולא רלוונטיים.",
+    hint: "ללא סינון סטטוס כלל — כולל לידים שנסגרו ולידים שסומנו כלא רלוונטיים.",
   },
   {
     key: "awaiting", label: "בהמתנה לתשובה", params: { awaiting: "1" },
@@ -630,7 +615,7 @@ export default function CrmLeads() {
                 to narrow the list. Values are prefixed so the two vocabularies
                 can share one <Select> without colliding: f: = a named server
                 query, s: = a lead status. Picking a status drops the named
-                filter to "all", otherwise "פתוחים" + "זכינו" would contradict
+                filter to "all", otherwise "פתוחים" + "עסקה נסגרה" would contradict
                 each other and always return nothing. */}
             <Select
               value={status ? `s:${status}` : `f:${filter}`}
@@ -657,8 +642,11 @@ export default function CrmLeads() {
                 })}
                 <SelectGroup>
                   <SelectLabel className="text-[11px] text-slate-400">סטטוס הליד</SelectLabel>
-                  {Object.entries(STATUS_LABELS).map(([k, label]) => (
-                    <SelectItem key={k} value={`s:${k}`}>{label}</SelectItem>
+                  {/* Driven off the ordered list, not an object's key order:
+                      the board's own stage order is what an agent expects to
+                      scan, and a new stage appears here for free. */}
+                  {LEAD_STATUSES.map((s) => (
+                    <SelectItem key={s.key} value={`s:${s.key}`}>{s.label}</SelectItem>
                   ))}
                 </SelectGroup>
               </SelectContent>
@@ -854,8 +842,8 @@ function LeadRow({ l, isAdmin }) {
       </div>
 
       <div>
-        <span className={`text-[11px] px-2 py-0.5 rounded-full border ${STATUS_TONE[l.status] || STATUS_TONE.new}`}>
-          {STATUS_LABELS[l.status] || l.status}
+        <span className={`text-[11px] px-2 py-0.5 rounded-full border ${toneOf(normalizeStatus(l.status))}`}>
+          {STATUS_LABELS[normalizeStatus(l.status)] || l.status}
         </span>
       </div>
 

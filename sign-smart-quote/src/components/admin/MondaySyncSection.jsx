@@ -8,7 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Loader2, Save, RefreshCw, Trash2, Plus, GitMerge, Check, ChevronsUpDown, X } from "lucide-react";
 import { toast } from "sonner";
 import { listMondayBoards } from "@/api/mondayClient";
-import { STATUS_LABELS, STATUS_TONE } from "@/pages/CrmLeads";
+import { STATUS_LABELS, STATUS_TONE, LEAD_STATUS_KEYS } from "@/lib/leadStatuses";
 import { mondaySync, crmSettings } from "@/api/mondaySyncClient";
 import CostSectionCard from "./CostSectionCard";
 
@@ -28,10 +28,11 @@ export default function MondaySyncSection() {
   const [phoneCol, setPhoneCol] = useState("");
   const [emailCol, setEmailCol] = useState("");
   const [statusCol, setStatusCol] = useState("");
-  // One entry per internal status, each holding a LIST of board labels — a
-  // real board spells the same meaning several ways ("לא רלוונטי - מחיר / מרחק /
-  // אחר" are all "lost"), and one-label-per-status left every other label
-  // unmapped, so those items stayed 'new' forever.
+  // One entry per internal status, each holding a LIST of board labels. The
+  // internal statuses are now the board's own labels, so most boards need at
+  // most one label per row — the list shape stays because a board that words
+  // a stage differently (or renamed it) must still be able to point several
+  // spellings at one status instead of leaving them unmapped at 'new'.
   const [statusMap, setStatusMap] = useState({});
   const [quoteFileCol, setQuoteFileCol] = useState("");
   const [followUpCol, setFollowUpCol] = useState("");
@@ -378,7 +379,7 @@ export default function MondaySyncSection() {
             // the one part of the sync that cannot report its own failure.
             const statusValues = (() => { try { return JSON.parse(b.status_values || "{}"); } catch (_) { return {}; } })();
             const normalized = normalizeStatusValues(statusValues);
-            // Honest counts for the many-to-one model: how many of the six
+            // Honest counts for the many-to-one model: how many of the
             // internal statuses carry at least one board label, and how many
             // labels are mapped in total. "3 מתוך 3" meant nothing once a
             // single status can hold a whole list of labels.
@@ -593,9 +594,11 @@ function ColumnPicker({ label, columns, value, onChange }) {
 
 // --- Status mapping: MANY board labels -> ONE internal status ----------------
 
-// The CRM's own six statuses, in pipeline order, so the editor reads like the
+// Every internal status, in pipeline order, so the editor reads like the
 // funnel top-down instead of in whatever order the saved JSON happens to be.
-const INTERNAL_STATUSES = ["new", "contacted", "quoted", "won", "lost", "disqualified"];
+// Taken from the shared list rather than spelled out: the statuses ARE the
+// board's own labels now, so a stage added there must appear here the same day.
+const INTERNAL_STATUSES = LEAD_STATUS_KEYS;
 
 // Saved data comes in two shapes: the legacy single string ("עסקה נסגרה") and
 // the current array. Everything else here works in arrays only, so this is the

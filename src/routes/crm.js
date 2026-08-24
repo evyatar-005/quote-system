@@ -6,6 +6,7 @@
 const { toE164 } = require('../services/crm/phone');
 const { releaseClaim, releaseReason } = require('../services/crm/leadClaims');
 const { DOCUMENT_TYPE } = require('../services/morning/mappings');
+const { CLOSED_SQL, WON_SQL, LOST_SQL, isClosed, isWon, labelOf } = require('../services/crm/leadStatuses');
 
 // Server-side twin of sign-smart-quote/src/lib/quoteEconomics.js's
 // linesOf/economicsOf — same definition (cost = Σ line totalCostAll,
@@ -133,7 +134,7 @@ module.exports = function registerCrm(app, db, deps) {
     const keyCol = byAgent ? "COALESCE(TRIM(l.assigned_to),'') = @id" : 'l.campaign_id = @id';
     const arrivedWhere = [keyCol];
     const quotedWhere = [keyCol, 'l.quoted_at IS NOT NULL'];
-    const closedWhere = [keyCol, "l.status = 'won'", 'l.closed_at IS NOT NULL'];
+    const closedWhere = [keyCol, `l.status IN (${WON_SQL})`, 'l.closed_at IS NOT NULL'];
     if (date_from) {
       arrivedWhere.push('date(COALESCE(l.source_created_at,l.created_at)) >= date(@date_from)');
       quotedWhere.push('date(l.quoted_at) >= date(@date_from)');
@@ -265,7 +266,7 @@ module.exports = function registerCrm(app, db, deps) {
     if (filter === 'buyers') {
       where.push(CUSTOMER_HAS_ORDER_SQL);
     } else if (filter === 'open_leads') {
-      where.push(`EXISTS (SELECT 1 FROM crm_leads l WHERE l.customer_id = c.id AND l.status NOT IN ('won','lost','disqualified'))`);
+      where.push(`EXISTS (SELECT 1 FROM crm_leads l WHERE l.customer_id = c.id AND l.status NOT IN (${CLOSED_SQL}))`);
     } else if (filter === 'no_quotes') {
       where.push(`NOT EXISTS (SELECT 1 FROM signshop_quotes q WHERE q.customer_id = c.id)`);
     } else if (filter === 'mine') {
@@ -282,7 +283,7 @@ module.exports = function registerCrm(app, db, deps) {
     // for existing callers) while letting the UI paginate.
     const rows = db.prepare(
       `SELECT c.*,
-              (SELECT COUNT(*) FROM crm_leads l WHERE l.customer_id = c.id AND l.status NOT IN ('won','lost','disqualified')) AS open_leads,
+              (SELECT COUNT(*) FROM crm_leads l WHERE l.customer_id = c.id AND l.status NOT IN (${CLOSED_SQL})) AS open_leads,
               (SELECT COUNT(*) FROM signshop_quotes q WHERE q.customer_id = c.id) AS quote_count,
               (SELECT MAX(created_at) FROM signshop_quotes q WHERE q.customer_id = c.id) AS last_quote_at,
               (SELECT COUNT(DISTINCT q.id) FROM signshop_quotes q
@@ -556,12 +557,12 @@ module.exports = function registerCrm(app, db, deps) {
   // lead's owner never changes just because it sorts to the top here.
   const LEAD_PRIORITY_RANK = `
     (CASE
-       WHEN l.status NOT IN ('won','lost','disqualified')
+       WHEN l.status NOT IN (${CLOSED_SQL})
             AND l.follow_up_date IS NOT NULL
             AND datetime(l.follow_up_date) <= datetime('now', 'localtime') THEN 1
-       WHEN l.status NOT IN ('won','lost','disqualified') AND ${awaitingReplySql(null)} THEN 2
+       WHEN l.status NOT IN (${CLOSED_SQL}) AND ${awaitingReplySql(null)} THEN 2
        WHEN l.status = 'new' THEN 3
-       WHEN l.status NOT IN ('won','lost','disqualified') THEN 4
+       WHEN l.status NOT IN (${CLOSED_SQL}) THEN 4
        ELSE 5
      END)`;
 
@@ -606,7 +607,7 @@ module.exports = function registerCrm(app, db, deps) {
     }
 
     if (status) { where.push('l.status = ?'); params.push(status); }
-    if (open === '1') { where.push(`l.status NOT IN ('won','lost','disqualified')`); }
+    if (open === '1') { where.push(`l.status NOT IN (${CLOSED_SQL})`); }
     if (assigned_to === 'unassigned') { where.push('l.assigned_to IS NULL'); }
     else if (assigned_to === 'me') { where.push('l.assigned_to = ?'); params.push(me); }
     else if (assigned_to) { where.push('l.assigned_to = ?'); params.push(assigned_to); }
@@ -642,7 +643,7 @@ module.exports = function registerCrm(app, db, deps) {
     } else if (follow_up === 'none') {
       // Open leads nobody scheduled anything for — the silent backlog that no
       // reminder will ever surface.
-      where.push(`l.follow_up_date IS NULL AND l.status NOT IN ('won','lost','disqualified')`);
+      where.push(`l.follow_up_date IS NULL AND l.status NOT IN (${CLOSED_SQL})`);
     } else if (follow_up === 'any') {
       where.push('l.follow_up_date IS NOT NULL');
     }
@@ -651,14 +652,14 @@ module.exports = function registerCrm(app, db, deps) {
     // STALE_HOURS in the client's lib/leadPriority.js so both surfaces agree.
     if (stuck === '1') {
       const hours = Math.min(Math.max(parseInt(stuck_hours, 10) || 48, 1), 24 * 365);
-      where.push(`l.status NOT IN ('won','lost','disqualified') AND ${LEAD_ACTIVITY_SQL} <= datetime('now', '-${hours} hours')`);
+      where.push(`l.status NOT IN (${CLOSED_SQL}) AND ${LEAD_ACTIVITY_SQL} <= datetime('now', '-${hours} hours')`);
     }
 
     // Waiting on us to answer. Both variants exclude closed leads — a customer
     // who wrote after we marked the deal lost isn't an open service debt, and
     // counting them would make the tile permanently non-zero.
     if (awaiting === '1' || awaiting === 'overdue') {
-      where.push(`l.status NOT IN ('won','lost','disqualified') AND ${awaitingReplySql(awaiting === 'overdue' ? replyOverdueMinutes() : null)}`);
+      where.push(`l.status NOT IN (${CLOSED_SQL}) AND ${awaitingReplySql(awaiting === 'overdue' ? replyOverdueMinutes() : null)}`);
     }
 
     // Filter on a monday column's real value (see /api/crm/lead-filters above).
@@ -735,9 +736,9 @@ module.exports = function registerCrm(app, db, deps) {
     res.json(db.prepare(`
       SELECT strftime('%Y-%m', COALESCE(source_created_at, created_at)) AS month,
              COUNT(*) AS total,
-             SUM(CASE WHEN status = 'won' THEN 1 ELSE 0 END) AS won,
-             SUM(CASE WHEN status = 'lost' THEN 1 ELSE 0 END) AS lost,
-             SUM(CASE WHEN status = 'disqualified' THEN 1 ELSE 0 END) AS disqualified
+             SUM(CASE WHEN status IN (${WON_SQL}) THEN 1 ELSE 0 END) AS won,
+             SUM(CASE WHEN status IN (${LOST_SQL}) THEN 1 ELSE 0 END) AS lost,
+             SUM(CASE WHEN status NOT IN (${CLOSED_SQL}) THEN 1 ELSE 0 END) AS open
       FROM crm_leads
       WHERE COALESCE(source_created_at, created_at) >= date('now', '-12 months')
       GROUP BY month
@@ -780,12 +781,12 @@ module.exports = function registerCrm(app, db, deps) {
 
     // Status breakdown reads the REAL deal-status label from monday
     // (board_map.status_column_id — the same field pushBoard already writes
-    // to), not crm_leads.status: that internal 6-value funnel (new/
-    // contacted/quoted/won/lost/disqualified) is barely used in practice —
-    // real data has all 3,555 leads sitting at 'new'/'contacted', while
-    // monday's own status column already carries the granular labels
-    // agents actually pick (פולואפ, בתהליך מכירה, עסקה נסגרה, …). Leads
-    // with no monday link (manual) fall back to the internal status.
+    // to), not crm_leads.status. Historically that was because the internal
+    // funnel was six generic values while the board carried the granular
+    // labels agents actually pick; the two are the same list now
+    // (services/crm/leadStatuses.js), but the board still wins for a
+    // monday-linked lead because it is the live value. Leads with no monday
+    // link (manual) fall back to the internal status, rendered via labelOf.
     // Built directly (not reusing statusWhere's string) — campaign_id and
     // created_at both exist on monday_board_map too once joined, so the
     // plain column names from crm_leads-only queries are ambiguous here.
@@ -802,7 +803,6 @@ module.exports = function registerCrm(app, db, deps) {
         LEFT JOIN monday_board_map bm ON bm.board_id = m.board_id
         WHERE 1=1 ${statusRowsWhere}
       `).all(statusParams);
-      const INTERNAL_STATUS_LABELS = { new: 'חדש', contacted: 'יצרנו קשר', quoted: 'נשלחה הצעה', won: 'זכינו', lost: 'אבדנו', disqualified: 'לא רלוונטי' };
       const counts = new Map();
       for (const r of statusRows) {
         let label = null;
@@ -812,7 +812,7 @@ module.exports = function registerCrm(app, db, deps) {
             if (cv?.text) label = cv.text;
           } catch (_) { /* fall through to internal label */ }
         }
-        if (!label) label = INTERNAL_STATUS_LABELS[r.status] || r.status;
+        if (!label) label = labelOf(r.status);
         counts.set(label, (counts.get(label) || 0) + 1);
       }
       const n_total = statusRows.length;
@@ -833,11 +833,11 @@ module.exports = function registerCrm(app, db, deps) {
     const fRow = db.prepare(`
       SELECT COUNT(*) AS leads_in,
              SUM(CASE WHEN quoted_at IS NOT NULL THEN 1 ELSE 0 END) AS leads_quoted,
-             SUM(CASE WHEN status = 'won' AND closed_at IS NOT NULL THEN 1 ELSE 0 END) AS leads_won,
-             SUM(CASE WHEN status IN ('lost','disqualified') THEN 1 ELSE 0 END) AS leads_dead,
+             SUM(CASE WHEN status IN (${WON_SQL}) AND closed_at IS NOT NULL THEN 1 ELSE 0 END) AS leads_won,
+             SUM(CASE WHEN status IN (${LOST_SQL}) THEN 1 ELSE 0 END) AS leads_dead,
              AVG(CASE WHEN quoted_at IS NOT NULL
                       THEN julianday(quoted_at) - julianday(COALESCE(source_created_at,created_at)) END) AS d_to_quote,
-             AVG(CASE WHEN quoted_at IS NOT NULL AND closed_at IS NOT NULL AND status = 'won'
+             AVG(CASE WHEN quoted_at IS NOT NULL AND closed_at IS NOT NULL AND status IN (${WON_SQL})
                       THEN julianday(closed_at) - julianday(quoted_at) END) AS d_quote_to_close
       FROM crm_leads WHERE 1=1 ${statusWhere}
     `).get(statusParams);
@@ -875,7 +875,7 @@ module.exports = function registerCrm(app, db, deps) {
     for (const r of slaRows) {
       const b = byBucket.get(bucketOf(r.ms));
       b.n += 1;
-      if (r.status === 'won') b.won += 1;
+      if (isWon(r.status)) b.won += 1;
       if (r.ms != null) answered.push(r.ms);
     }
     answered.sort((a, b) => a - b);
@@ -896,7 +896,7 @@ module.exports = function registerCrm(app, db, deps) {
     const lost_reasons = db.prepare(`
       SELECT COALESCE(NULLIF(TRIM(lost_reason),''), 'לא צוין') AS reason, COUNT(*) AS n
       FROM crm_leads
-      WHERE status IN ('lost','disqualified') ${statusWhere}
+      WHERE status IN (${LOST_SQL}) ${statusWhere}
       GROUP BY reason ORDER BY n DESC
     `).all(statusParams);
 
@@ -913,7 +913,7 @@ module.exports = function registerCrm(app, db, deps) {
              CAST((julianday('now') - julianday(conv.last_inbound_at)) * 1440 AS INTEGER) AS minutes_waiting
       FROM crm_conversations conv
       JOIN customers c ON c.id = conv.customer_id
-      LEFT JOIN crm_leads l ON l.customer_id = c.id AND l.status NOT IN ('won','lost','disqualified')
+      LEFT JOIN crm_leads l ON l.customer_id = c.id AND l.status NOT IN (${CLOSED_SQL})
       WHERE conv.unread_count > 0
         AND CAST((julianday('now') - julianday(conv.last_inbound_at)) * 1440 AS INTEGER) >= @overdueMinutes
         ${campaign_id ? ' AND l.campaign_id = @campaign_id ' : ''}
@@ -954,7 +954,7 @@ module.exports = function registerCrm(app, db, deps) {
       SELECT strftime('${fmt}', COALESCE(source_created_at,created_at)) AS b,
              COUNT(*) AS leads,
              SUM(CASE WHEN quoted_at IS NOT NULL THEN 1 ELSE 0 END) AS quoted,
-             SUM(CASE WHEN status = 'won' AND closed_at IS NOT NULL THEN 1 ELSE 0 END) AS won
+             SUM(CASE WHEN status IN (${WON_SQL}) AND closed_at IS NOT NULL THEN 1 ELSE 0 END) AS won
       FROM crm_leads WHERE 1=1 ${statusWhere} GROUP BY b
     `).all(statusParams);
 
@@ -1068,7 +1068,7 @@ module.exports = function registerCrm(app, db, deps) {
       if (c in body) { row[c] = body[c]; setCols.push(c); }
     }
     if (body.status && body.status !== existing.status) {
-      if (['won', 'lost', 'disqualified'].includes(body.status) && !('closed_at' in row)) {
+      if (isClosed(body.status) && !('closed_at' in row)) {
         row.closed_at = new Date().toISOString(); setCols.push('closed_at');
       }
       if (body.status === 'quoted' && !existing.quoted_at) {

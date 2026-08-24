@@ -100,7 +100,9 @@ export default function LeadWorkspacePanel({ leadId, onChanged, onContext }) {
   const markDisqualified = async () => {
     setBusy(true);
     try {
-      await crmLeads.update(leadId, { status: "disqualified" });
+      // 'disqualified' no longer exists — the board's equivalent is
+      // "לא רלוונטי - אחר", i.e. lost for a reason we don't itemise.
+      await crmLeads.update(leadId, { status: "lost_other" });
       toast.success("סומן כלא רלוונטי");
       onChanged ? onChanged() : navigate("/my-day");
     } catch (err) {
@@ -110,15 +112,16 @@ export default function LeadWorkspacePanel({ leadId, onChanged, onContext }) {
     }
   };
 
-  // Distinct from "לא רלוונטי": disqualified means the lead was never real,
-  // lost means we competed and didn't win — and the reason is the whole point
-  // of recording it, so it's required rather than optional.
+  // Distinct from the plain "לא רלוונטי" button above: that one is the
+  // catch-all (lost_other), this one is the priced loss the business actually
+  // reports on — and the reason is the whole point of recording it, so it's
+  // required rather than optional.
   const markLost = async () => {
     const reason = lostReason.trim();
     if (!reason) return toast.error("חובה לציין סיבת הפסד");
     setBusy(true);
     try {
-      await crmLeads.update(leadId, { status: "lost", lost_reason: reason });
+      await crmLeads.update(leadId, { status: "lost_price", lost_reason: reason });
       toast.success("סומן כאבוד");
       setConfirmLost(false);
       onChanged ? onChanged() : navigate("/my-day");
@@ -185,7 +188,7 @@ export default function LeadWorkspacePanel({ leadId, onChanged, onContext }) {
               <XCircle className="w-4 h-4" /> לא רלוונטי
             </DropdownMenuItem>
             <DropdownMenuItem className="text-red-600 gap-1.5" onSelect={() => { setLostReason(""); setConfirmLost(true); }}>
-              <ThumbsDown className="w-4 h-4" /> אבדנו
+              <ThumbsDown className="w-4 h-4" /> אבדנו — מחיר
             </DropdownMenuItem>
             <DropdownMenuItem className="gap-1.5" onSelect={releaseLead}>
               <LogOut className="w-4 h-4" /> שחרר ליד

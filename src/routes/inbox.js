@@ -13,6 +13,7 @@ const { publish, subscribe } = require('../services/crm/realtime');
 const { slotCount, crmSettingsRow } = require('../services/crm/leadClaims');
 const { pickAgentForLead } = require('../services/crm/leadRouting');
 const { drainNow } = require('../services/crm/jobs');
+const { CLOSED_SQL } = require('../services/crm/leadStatuses');
 
 // Must stay in sync with SESSION_TTL_MS in routes/auth.js — the SSE stream
 // below authenticates its own token (EventSource can't send headers) and has
@@ -162,7 +163,7 @@ module.exports = function registerInbox(app, db, deps) {
       where.push(`c.lead_id IS NULL AND NOT EXISTS (
         SELECT 1 FROM crm_leads gl
          WHERE gl.customer_id = c.customer_id
-           AND gl.status NOT IN ('won','lost','disqualified')
+           AND gl.status NOT IN (${CLOSED_SQL})
       )`);
     }
 
@@ -219,7 +220,7 @@ module.exports = function registerInbox(app, db, deps) {
               COALESCE(l.source_created_at, l.created_at) AS at
          FROM crm_leads l
          LEFT JOIN crm_campaigns cam ON cam.id = l.campaign_id
-        WHERE l.customer_id = ? AND l.status NOT IN ('won','lost','disqualified')
+        WHERE l.customer_id = ? AND l.status NOT IN (${CLOSED_SQL})
         ORDER BY at DESC LIMIT 20`
     ).all(conversation.customer_id));
   });

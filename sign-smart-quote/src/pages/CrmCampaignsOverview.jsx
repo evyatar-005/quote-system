@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import ManagerSidebar from "@/components/layout/ManagerSidebar";
 import printellaLogo from "@/assets/printella-logo.png";
 import { toast } from "sonner";
+import { labelOf, normalizeStatus } from "@/lib/leadStatuses";
 
 const fmt = (n) => (n == null ? "—" : new Intl.NumberFormat("he-IL", { maximumFractionDigits: 0 }).format(n));
 const fmtMoney = (n) => (n == null ? "—" : `₪${fmt(n)}`);
@@ -143,7 +144,10 @@ export default function CrmCampaignsOverview() {
     if (needsOverview) load(campaignId, rangePreset, customFrom, customTo, next);
   };
 
-  const pieData = (data?.by_status || []).map((r) => ({ ...r, name: r.status }));
+  // The row may carry either an internal status key or a raw board label
+  // (older aggregates). labelOf() falls back to the value itself, so a label
+  // it doesn't recognise still renders exactly as it arrived.
+  const pieData = (data?.by_status || []).map((r) => ({ ...r, name: labelOf(normalizeStatus(r.status)) }));
 
   return (
     <div className="min-h-screen bg-background text-foreground" dir="rtl">

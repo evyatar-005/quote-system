@@ -3,6 +3,7 @@ import { ChevronDown, ChevronUp, Mail, Phone, Tag, Loader2, CheckCircle2, Circle
 import LastHandledLine from "./LastHandledLine";
 import { leadQueue } from "@/api/leadQueueClient";
 import { toast } from "sonner";
+import { labelOf, toneOf, normalizeStatus } from "@/lib/leadStatuses";
 
 // The lead's identity strip + "every field the campaign pulls" (CRM plan
 // Phase 5 §7/§9). Values come straight from monday_item_map.raw_json via
@@ -123,8 +124,13 @@ export default function LeadFieldsPanel({ context, leadId, onUpdated }) {
       )}
 
       {lead?.status && (
-        <div className="px-4 py-2 border-t border-slate-200 text-xs text-slate-400">
-          סטטוס: <span className="text-slate-600 font-medium">{lead.status}</span>
+        <div className="px-4 py-2 border-t border-slate-200 text-xs text-slate-400 flex items-center gap-2">
+          {/* Was printing the raw slug ("whatsapp_sent"). Same badge as the
+              leads table, so a status looks the same everywhere it appears. */}
+          סטטוס:
+          <span className={`px-2 py-0.5 rounded-full border ${toneOf(normalizeStatus(lead.status))}`}>
+            {labelOf(normalizeStatus(lead.status))}
+          </span>
         </div>
       )}
     </div>

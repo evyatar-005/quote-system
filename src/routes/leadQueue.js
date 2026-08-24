@@ -10,6 +10,7 @@ const { buildLeadContext } = require('../services/crm/leadContext');
 const { enqueue, resolveConversation } = require('../services/channels/whatsapp/outbox');
 const { drainNow } = require('../services/crm/jobs');
 const { updateItemColumn } = require('../services/crm/mondaySync');
+const { CLOSED_SQL } = require('../services/crm/leadStatuses');
 
 module.exports = function registerLeadQueue(app, db, deps) {
   const { requireAuth, requireAdmin } = deps;
@@ -77,7 +78,7 @@ module.exports = function registerLeadQueue(app, db, deps) {
       LEFT JOIN crm_lead_claims cl ON cl.lead_id = l.id
              AND cl.username = @me AND (cl.expires_at IS NULL OR cl.expires_at > CURRENT_TIMESTAMP)
       JOIN customers c ON c.id = l.customer_id
-      WHERE l.assigned_to = @me AND l.status NOT IN ('won','lost','disqualified')
+      WHERE l.assigned_to = @me AND l.status NOT IN (${CLOSED_SQL})
       ORDER BY cl.acquired_at ASC, l.updated_at DESC
     `).all({ me: req.user.username }));
   });
