@@ -545,6 +545,24 @@ module.exports = function registerCrm(app, db, deps) {
     res.json({ columns });
   });
 
+  // "מי הבא בתור" — one combined work-priority order across four buckets a
+  // manager described verbally: a promised callback whose time has come first
+  // (we already told this customer we'd call), then a customer who wrote in
+  // on their own and is still waiting on us, then a lead nobody has touched
+  // yet, then everything else open (already worked, no live urgency). This
+  // is ORDERING only — it does not touch assigned_to/claims, so an owned
+  // lead's owner never changes just because it sorts to the top here.
+  const LEAD_PRIORITY_RANK = `
+    (CASE
+       WHEN l.status NOT IN ('won','lost','disqualified')
+            AND l.follow_up_date IS NOT NULL
+            AND datetime(l.follow_up_date) <= datetime('now', 'localtime') THEN 1
+       WHEN l.status NOT IN ('won','lost','disqualified') AND ${awaitingReplySql(null)} THEN 2
+       WHEN l.status = 'new' THEN 3
+       WHEN l.status NOT IN ('won','lost','disqualified') THEN 4
+       ELSE 5
+     END)`;
+
   const LEAD_SORTS = {
     last_activity: 'last_activity_at DESC',
     created: 'COALESCE(l.source_created_at, l.created_at) DESC',
@@ -553,6 +571,17 @@ module.exports = function registerCrm(app, db, deps) {
     follow_up: 'l.follow_up_date IS NULL, l.follow_up_date ASC',
     value: 'l.value_estimate IS NULL, l.value_estimate DESC',
     status: `l.status ASC, last_activity_at DESC`,
+    // Tie-break per bucket: earliest-due callback first within bucket 1,
+    // longest-waiting customer first within bucket 2 (oldest inbound = most
+    // overdue for a reply), oldest-in first within bucket 3 (same FIFO the
+    // pull-queue itself uses), stalest-touched first within bucket 4.
+    priority: `
+      ${LEAD_PRIORITY_RANK} ASC,
+      l.follow_up_date ASC,
+      awaiting_minutes DESC,
+      COALESCE(l.source_created_at, l.created_at) ASC,
+      last_activity_at ASC
+    `,
   };
 
   app.get('/api/crm/leads', requireAuth, (req, res) => {

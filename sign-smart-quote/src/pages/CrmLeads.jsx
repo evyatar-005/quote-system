@@ -46,6 +46,10 @@ const STATUS_TONE = {
 };
 
 const SORTS = [
+  {
+    key: "priority", label: "מי הבא בתור",
+    hint: "סדר עבודה אחד, לא רק תאריך: קודם ליד שהפולואפ שלו כבר הגיע/עבר (הבטחנו לחזור), אחר כך ליד שהלקוח כתב בו ביוזמתו ועדיין מחכה לתשובה, אחר כך ליד חדש שאף אחד לא נגע בו, ולבסוף כל השאר לפי מי שהכי הזמן ללא מגע. לא משנה בעלות — רק סדר תצוגה.",
+  },
   { key: "last_activity", label: "פעילות אחרונה" },
   { key: "created", label: "נוצר לאחרונה" },
   { key: "follow_up", label: "פולואפ קרוב" },
@@ -435,7 +439,7 @@ export default function CrmLeads() {
             <Select value={sort} onValueChange={setSort}>
               <SelectTrigger dir="rtl" className="w-[180px]"><SelectValue /></SelectTrigger>
               <SelectContent dir="rtl">
-                {SORTS.map((s) => <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>)}
+                {SORTS.map((s) => <SelectItem key={s.key} value={s.key} title={s.hint}>{s.label}</SelectItem>)}
               </SelectContent>
             </Select>
 
