@@ -186,6 +186,11 @@ export default function CrmLeads() {
   const [awaitingCount, setAwaitingCount] = useState(null);
   const [awaitingLate, setAwaitingLate] = useState(null);
   const [awaitingLongest, setAwaitingLongest] = useState(null);
+  // Conversations from customers nobody ever opened a lead for. They cannot
+  // appear in the leads table by definition — there is no lead row — so they
+  // are fetched separately and rendered as their own clearly-separated
+  // section, rather than being silently missing from a filtered view.
+  const [leadless, setLeadless] = useState([]);
 
   const reloadSummary = useCallback(() => {
     crmLeads.list({ status: "new", open: "1", limit: 1 })
@@ -218,6 +223,22 @@ export default function CrmLeads() {
   }, []);
 
   useEffect(() => { reloadSummary(); }, [reloadSummary]);
+
+  // Only meaningful for the two awaiting views — those are the ones counted
+  // over conversations, so those are the ones where the leads table alone
+  // under-reports. Every other chip is a pure lead query with nothing missing.
+  useEffect(() => {
+    if (filter !== "awaiting" && filter !== "awaiting_overdue") {
+      setLeadless([]);
+      return;
+    }
+    let cancelled = false;
+    inbox.listConversations({ filter, without_lead: 1 })
+      .then((rows) => { if (!cancelled) setLeadless(Array.isArray(rows) ? rows : []); })
+      // A failure here must not blank the leads table beside it.
+      .catch(() => { if (!cancelled) setLeadless([]); });
+    return () => { cancelled = true; };
+  }, [filter]);
 
   // Clicking a tile jumps straight to that slice — status "new" doesn't have
   // its own chip, so it also clears any campaign/monday pick that would
@@ -662,6 +683,52 @@ export default function CrmLeads() {
                 </div>
               )}
             </>
+          )}
+
+          {/* Customers waiting on us that nobody opened a lead for. Kept as a
+              separate block on purpose rather than merged into the table
+              above: these have no lead, so they have no status, no owner and
+              no campaign, and dropping them into those columns as blanks
+              would read as "a lead with missing data" instead of "no lead
+              exists". This section is the difference between the tile's
+              conversation count and the lead count beside it. */}
+          {leadless.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 pt-2">
+                <span className="text-sm font-semibold text-slate-700">ללא ליד</span>
+                <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
+                  {leadless.length}
+                </span>
+                <span className="text-xs text-slate-500">
+                  לקוחות שכתבו לנו ואף אחד לא פתח להם ליד — הם לא מופיעים בטבלה שלמעלה כי אין להם ליד במערכת
+                </span>
+              </div>
+              <div className="border border-amber-300 rounded-xl divide-y divide-amber-100 overflow-hidden bg-amber-50/40">
+                {leadless.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => navigate(`/crm/inbox?conversation=${c.id}`)}
+                    className="w-full text-right px-4 py-2.5 grid grid-cols-[minmax(0,2fr)_120px_minmax(0,1fr)] gap-4 items-center hover:bg-amber-50 transition-colors"
+                  >
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium text-slate-800 truncate">
+                        {c.customer_name || c.customer_phone || "לא ידוע"}
+                      </span>
+                      <span className="block text-xs text-slate-500 truncate" dir="ltr">
+                        {c.customer_phone || ""}
+                      </span>
+                    </span>
+                    <span className="text-[11px] px-2 py-0.5 rounded-full border border-amber-300 text-amber-800 bg-white whitespace-nowrap">
+                      לא נפתח ליד
+                    </span>
+                    <span className="text-xs text-slate-500 truncate">
+                      {c.minutes_waiting != null ? `ממתין ${waitLabel(c.minutes_waiting)}` : "—"}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
         </div>
       </div>

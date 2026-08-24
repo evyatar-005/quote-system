@@ -152,6 +152,20 @@ module.exports = function registerInbox(app, db, deps) {
         break; // 'all' / absent
     }
 
+    // "Nobody ever opened a lead for this customer." Deliberately checked
+    // against the CUSTOMER, not just c.lead_id: a thread can be unlinked while
+    // the same person already has an open lead from another conversation, and
+    // listing them as lead-less would be wrong. Closed outcomes don't count —
+    // a customer whose only lead was lost months ago genuinely has no live
+    // lead for the message they just sent.
+    if (req.query.without_lead === '1') {
+      where.push(`c.lead_id IS NULL AND NOT EXISTS (
+        SELECT 1 FROM crm_leads gl
+         WHERE gl.customer_id = c.customer_id
+           AND gl.status NOT IN ('won','lost','disqualified')
+      )`);
+    }
+
     let sql = `
       SELECT c.*, cu.display_name AS customer_name, cu.phone_e164 AS customer_phone,
              l.username AS lock_username, l.expires_at AS lock_expires_at,
