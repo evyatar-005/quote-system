@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Loader2, Save, MessageCircle, Send } from "lucide-react";
 import { toast } from "sonner";
-import { getInforuConfig, saveInforuConfig, listInforuTemplates, sendTestTemplate, testInforuChats, importInforuHistory } from "@/api/inforuClient";
+import { getInforuConfig, saveInforuConfig, listInforuTemplates, sendTestTemplate, testInforuChats, importInforuHistory, fixInforuTimestamps } from "@/api/inforuClient";
 import { whatsapp } from "@/api/inboxClient";
 import CostSectionCard from "./CostSectionCard";
 
@@ -29,6 +29,21 @@ export default function InforuSettingsSection() {
   const [chatsResult, setChatsResult] = useState(null);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState(null);
+  const [fixing, setFixing] = useState(false);
+
+  // Messages imported before inforuTs() knew InforU sends Israel wall time
+  // landed 2-3 hours in the future. Re-derived from the raw payload.
+  const runFixTimestamps = async () => {
+    setFixing(true);
+    try {
+      const r = await fixInforuTimestamps();
+      toast.success("תוקנו " + r.fixed + " מתוך " + r.checked + " הודעות");
+      refreshStatus();
+    } catch (err) {
+      toast.error(err?.message || "התיקון נכשל");
+    }
+    setFixing(false);
+  };
 
   const runImport = async () => {
     setImporting(true);
@@ -296,6 +311,10 @@ export default function InforuSettingsSection() {
                   <Button size="sm" variant="outline" onClick={runImport} disabled={importing} className="gap-1.5 mr-2">
                     {importing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
                     ייבא היסטוריה (30 יום) לתיבת השיחות
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={runFixTimestamps} disabled={fixing} className="gap-1.5 mr-2">
+                    {fixing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                    תקן שעות של הודעות שיובאו
                   </Button>
                   {importResult && (
                     <div className={`mt-2 text-[11px] ${importResult.ok ? "text-emerald-700" : "text-red-600"}`}>

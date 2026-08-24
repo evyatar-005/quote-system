@@ -137,6 +137,16 @@ async function getWhatsAppChats(db, { fromDateTime, toDateTime, phoneNumbers, la
   });
 }
 
+// Public URL for a uid returned by uploadFile. SendWhatsAppChat accepts only
+// MessageMedia (a link) — there is no file-uid parameter on the chat call —
+// so this is what lets a file we hold in memory be sent as a real attachment
+// without publishing it from our own server.
+function fileUrl(db, uid) {
+  const row = db.prepare(`SELECT base_url FROM inforu_credentials WHERE id = 1`).get();
+  const base = ((row && row.base_url) || DEFAULT_BASE_URL).replace(/\/$/, '');
+  return `${base}/api/v2/Files/Get/${encodeURIComponent(uid)}`;
+}
+
 // DESTRUCTIVE READ: whatever comes back is deleted from InforU's queue. The
 // caller must persist the raw response before parsing it.
 async function pullData(db, { type, batchSize = 500, phoneNumber }) {
@@ -147,4 +157,4 @@ async function pullData(db, { type, batchSize = 500, phoneNumber }) {
   });
 }
 
-module.exports = { sendChat, sendTemplate, getTemplateList, uploadFile, pullData, getWhatsAppChats, DEFAULT_BASE_URL };
+module.exports = { sendChat, sendTemplate, getTemplateList, uploadFile, fileUrl, pullData, getWhatsAppChats, DEFAULT_BASE_URL };

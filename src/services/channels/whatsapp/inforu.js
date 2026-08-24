@@ -109,22 +109,37 @@ async function sendMedia(db, { toE164: to, url, filename, caption, messageId }) 
   }
 }
 
-// Used by the Drive materials sender on GreenAPI. On InforU, SendWhatsAppChat
-// only accepts a MediaMedia URL, not an uploaded file uid — an uploaded file
-// can only be attached via SendWhatsApp (the template call), which is a
-// different flow (opens/requires the window rather than living inside it).
-// Phase 1: fail loudly instead of silently sending a captionless/fileless
-// message. Revisit once Drive-to-InforU is actually needed.
-async function sendMediaUpload(db, { toE164: to }) {
+// The Drive-materials path: we hold the file's bytes, not a public URL.
+//
+// SendWhatsAppChat accepts ONLY `MessageMedia`, a link — confirmed against
+// their docs, there is no file-uid parameter on the chat call. So this used to
+// refuse outright, and "חומרי שיווק" simply never sent on InforU.
+//
+// The way through is their own file store: POST /api/v2/Files/Upload takes the
+// bytes and hands back a uid, and Utilities → Get File serves that uid over
+// HTTP. That gives us a link to a file InforU is already hosting, which is
+// exactly what MessageMedia wants — no public URL of our own, no exposing the
+// Drive document, and the customer receives a real attachment.
+async function sendMediaUpload(db, { toE164: to, fileBuffer, mimeType, filename, caption, messageId }) {
   const g = gate(db, to);
   if (g.error) return g.error;
-  return {
-    ok: false,
-    providerMessageId: null,
-    status: 'failed',
-    error: 'שליחת קובץ ב-InforU מחייבת תבנית מאושרת עם מדיה — לא נתמך בשלב זה',
-    retryable: false,
-  };
+  try {
+    // 6h: long enough for WhatsApp to fetch and for a retry, short enough that
+    // a marketing document isn't left served indefinitely.
+    const uid = await client.uploadFile(db, {
+      fileBuffer, contentType: mimeType, fileName: filename, expirationInMinutes: 360,
+    });
+    if (!uid) {
+      return { ok: false, providerMessageId: null, status: 'failed', error: 'העלאת הקובץ ל-InforU לא החזירה מזהה', retryable: true };
+    }
+    const url = client.fileUrl(db, uid);
+    await client.sendChat(db, { phone: g.phone, message: caption || filename || '', mediaUrl: url, customerMessageId: messageId });
+    // urlFile is echoed back so the drainer can record what was sent on our own
+    // timeline — same contract GreenAPI's sendMediaUpload already returns.
+    return { ...success(messageId), urlFile: url };
+  } catch (err) {
+    return failure(err);
+  }
 }
 
 // The only way to message someone outside the window — and therefore the only

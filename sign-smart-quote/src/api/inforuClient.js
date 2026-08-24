@@ -66,6 +66,11 @@ export async function importInforuHistory({ days } = {}) {
   return request('/api/inforu/import-history', { method: 'POST', body: { days } });
 }
 
+/** One-shot repair of imported message timestamps stored as Israel time. */
+export async function fixInforuTimestamps() {
+  return request('/api/inforu/fix-timestamps', { method: 'POST' });
+}
+
 /** Sends an approved template — the only way to open a 24h session window. */
 export async function sendTestTemplate({ to, templateId, parameters }) {
   return request('/api/inforu/test-template', { method: 'POST', body: { to, templateId, parameters } });

@@ -26,15 +26,41 @@ const { resolveConversation } = require('./outbox');
 const { findOrCreateCustomerByPhone } = require('./inbound');
 const { publish } = require('../../crm/realtime');
 
-// InforU sends '2026-08-24T11:11:28.707' with no timezone marker. SQLite's
-// CURRENT_TIMESTAMP — what every other row in crm_messages uses — is UTC in
-// 'YYYY-MM-DD HH:MM:SS'. Cross-checked against a template we sent at 16:52
-// Israel time, which InforU reported as 13:52, so their clock is UTC too.
-// Normalizing here keeps imported rows sortable against locally-created ones;
-// mixing 'T' and ' ' separators would break ORDER BY outright.
+// What Asia/Jerusalem's UTC offset was at a given instant. Computed rather
+// than hardcoded to +2/+3 because the import reaches back over DST boundaries,
+// and a fixed guess would put half the year's messages off by an hour.
+function israelOffsetMs(date) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Jerusalem', hour12: false,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  }).formatToParts(date).reduce((a, p) => { a[p.type] = p.value; return a; }, {});
+  const asUTC = Date.UTC(parts.year, parts.month - 1, parts.day,
+    parts.hour === '24' ? 0 : parts.hour, parts.minute, parts.second);
+  return asUTC - date.getTime();
+}
+
+// InforU sends '2026-08-24T16:51:28.707' with no timezone marker, and it is
+// ISRAEL WALL TIME — verified against a real thread: messages WhatsApp shows
+// at 16:51 came back as 16:51. crm_messages.created_at is UTC everywhere else
+// (SQLite CURRENT_TIMESTAMP), and the thread renders it as UTC, so storing
+// their string as-is pushed every imported message 3 hours into the future.
+//
+// Converted here, at the single point the value enters the system, rather than
+// compensating in the UI — the column has one meaning and imported rows have
+// to sort correctly against locally-created ones.
 function inforuTs(s) {
   if (!s) return null;
-  return String(s).replace('T', ' ').replace(/\.\d+/, '').replace('Z', '').slice(0, 19);
+  const clean = String(s).replace('T', ' ').replace(/\.\d+/, '').replace('Z', '').slice(0, 19);
+  const m = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/.exec(clean);
+  if (!m) return clean; // unexpected shape — better stored raw than dropped
+  const [, y, mo, d, h, mi, sec] = m.map(Number);
+  // Two passes: the first offset is looked up at the wrong instant near a DST
+  // boundary, and re-deriving it from the corrected instant settles it.
+  let utc = Date.UTC(y, mo - 1, d, h, mi, sec);
+  utc -= israelOffsetMs(new Date(utc));
+  utc = Date.UTC(y, mo - 1, d, h, mi, sec) - israelOffsetMs(new Date(utc));
+  return new Date(utc).toISOString().slice(0, 19).replace('T', ' ');
 }
 
 // Their docs say Direction is "Incoming"/"Outgoing"; the live API actually
@@ -79,7 +105,16 @@ async function syncInforuChats(db, { fromDateTime, toDateTime, phoneNumbers } = 
 
   const tx = db.transaction(() => {
     for (const chat of results) {
-      for (const m of (chat.Messages || [])) {
+      // InforU returns newest-first. crm_messages has no ordering of its own —
+      // the thread renders by id, i.e. insertion order — so inserting in the
+      // order received reversed every conversation on screen. Messages sent
+      // inside the same minute made it obvious: "כבר שבוע / אתם לא עונים /
+      // הלו יש מישהו?" read bottom-to-top against the customer's own WhatsApp.
+      // Sorted oldest-first so ids ascend with time, which is what the thread
+      // (and the "last message" preview) assume.
+      const ordered = [...(chat.Messages || [])]
+        .sort((a, b) => String(a.TimeSent || '').localeCompare(String(b.TimeSent || '')));
+      for (const m of ordered) {
         messages += 1;
         const e164 = toE164(m.PhoneNumber);
         // No usable phone means no conversation to attach to. Counted rather

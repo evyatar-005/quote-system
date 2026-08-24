@@ -5,7 +5,7 @@
 // deps: { requireAuth, requireAdmin }
 
 const client = require('../services/inforu/client');
-const { syncInforuChats } = require('../services/channels/whatsapp/inforuChatSync');
+const { syncInforuChats, inforuTs } = require('../services/channels/whatsapp/inforuChatSync');
 
 module.exports = function registerInforu(app, db, deps) {
   const { requireAuth, requireAdmin } = deps;
@@ -231,6 +231,43 @@ module.exports = function registerInforu(app, db, deps) {
       const result = await syncInforuChats(db, { fromDateTime: from });
       console.log(`[POST /api/inforu/import-history] ${days}d: ${JSON.stringify(result)}`);
       res.json({ ok: true, days, from, ...result });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
+    }
+  });
+
+  // Repairs messages imported before inforuTs() knew their timestamps were
+  // Israel wall time, not UTC — those landed 2-3 hours in the future. Re-derives
+  // created_at from raw_json.TimeSent, which was stored verbatim precisely so a
+  // parsing mistake could be undone. Only touches rows whose stored value still
+  // disagrees with the corrected one, so running it twice changes nothing.
+  app.post('/api/inforu/fix-timestamps', requireAdmin, (req, res) => {
+    try {
+      const rows = db.prepare(
+        `SELECT id, created_at, raw_json FROM crm_messages
+          WHERE provider = 'inforu' AND raw_json IS NOT NULL`
+      ).all();
+      let fixed = 0;
+      const upd = db.prepare(`UPDATE crm_messages SET created_at = ? WHERE id = ?`);
+      const tx = db.transaction(() => {
+        for (const r of rows) {
+          let raw; try { raw = JSON.parse(r.raw_json); } catch (_) { continue; }
+          if (!raw || !raw.TimeSent) continue;
+          const corrected = inforuTs(raw.TimeSent);
+          if (corrected && corrected !== r.created_at) { upd.run(corrected, r.id); fixed += 1; }
+        }
+      });
+      tx();
+      // Conversation timestamps are derived from the messages, so they have to
+      // be recomputed or the inbox keeps sorting by the old, wrong values.
+      db.exec(`
+        UPDATE crm_conversations SET
+          last_message_at  = (SELECT MAX(created_at) FROM crm_messages WHERE conversation_id = crm_conversations.id),
+          last_inbound_at  = (SELECT MAX(created_at) FROM crm_messages WHERE conversation_id = crm_conversations.id AND direction = 'in'),
+          last_outbound_at = (SELECT MAX(created_at) FROM crm_messages WHERE conversation_id = crm_conversations.id AND direction = 'out')
+        WHERE EXISTS (SELECT 1 FROM crm_messages WHERE conversation_id = crm_conversations.id AND provider = 'inforu')`);
+      console.log(`[POST /api/inforu/fix-timestamps] corrected ${fixed} of ${rows.length}`);
+      res.json({ ok: true, checked: rows.length, fixed });
     } catch (err) {
       res.status(400).json({ ok: false, error: err.message });
     }
