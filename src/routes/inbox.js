@@ -12,6 +12,7 @@ const { getActiveWhatsApp } = require('../services/channels');
 const { publish, subscribe } = require('../services/crm/realtime');
 const { slotCount, crmSettingsRow } = require('../services/crm/leadClaims');
 const { pickAgentForLead } = require('../services/crm/leadRouting');
+const { createItemForLead } = require('../services/crm/mondayCreateItem');
 const { drainNow } = require('../services/crm/jobs');
 const { CLOSED_SQL } = require('../services/crm/leadStatuses');
 
@@ -402,6 +403,11 @@ module.exports = function registerInbox(app, db, deps) {
       });
 
       const leadId = tx();
+      // A WhatsApp lead has to reach the board too — the sales team works from
+      // monday, and until now a lead created here was invisible to them.
+      // Fire-and-forget, like every other outbound integration on this path.
+      createItemForLead(db, leadId)
+        .catch(err => console.error(`[inbox lead] monday item creation failed for #${leadId}:`, err.message));
       publish('conversation.updated', { conversationId: id });
       // Derived, never stored: "missing details" must stop being true the
       // moment someone fills the email in, and a stored flag would go stale

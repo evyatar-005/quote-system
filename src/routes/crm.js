@@ -29,6 +29,8 @@ function quoteEconomics(quote) {
   return { cost, revenue, profit: revenue - cost };
 }
 
+const { createItemForLead } = require('../services/crm/mondayCreateItem');
+
 module.exports = function registerCrm(app, db, deps) {
   const { requireAuth, requireAdmin } = deps;
 
@@ -1045,6 +1047,11 @@ module.exports = function registerCrm(app, db, deps) {
       `INSERT INTO crm_leads (${cols.join(', ')}) VALUES (${cols.map(c => '@' + c).join(', ')})`
     ).run(row);
     touchLead(lastInsertRowid, req.user.username);
+    // Mirror the lead onto the monday board the team actually works from.
+    // Fire-and-forget: a monday outage must never fail creating the lead here,
+    // and the service already refuses leads that came FROM monday.
+    createItemForLead(db, lastInsertRowid)
+      .catch(err => console.error(`[POST /api/crm/leads] monday item creation failed for #${lastInsertRowid}:`, err.message));
     res.status(201).json(db.prepare(`SELECT * FROM crm_leads WHERE id = ?`).get(lastInsertRowid));
   });
 
