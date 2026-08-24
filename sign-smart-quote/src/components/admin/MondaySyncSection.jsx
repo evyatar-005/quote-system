@@ -120,7 +120,23 @@ export default function MondaySyncSection() {
   const pullNow = async (id) => {
     try {
       const r = await mondaySync.pullNow(id);
-      toast.success(`נמשכו ${r.pulled} פריטים, ${r.created} לידים חדשים`);
+      // statusPulled was computed by the server and then thrown away here, so
+      // a pull that updated statuses looked identical to one that did nothing
+      // ("0 לידים חדשים") — which is the whole point of the pull side, since
+      // the sync is idempotent and re-pulling a known board creates nothing
+      // by design. Reported explicitly, including the zero case, so "nothing
+      // changed" is a statement rather than an absence.
+      const statuses = r.statusPulled ?? 0;
+      const parts = [
+        `נמשכו ${r.pulled} פריטים`,
+        `${r.created} לידים חדשים`,
+        `${statuses} סטטוסים עודכנו`,
+      ];
+      if (r.created === 0 && statuses === 0) {
+        toast.success(`${parts.join(", ")} — הכול כבר מסונכרן`);
+      } else {
+        toast.success(parts.join(", "));
+      }
       load();
     } catch (err) {
       toast.error(err.message || "המשיכה נכשלה");
