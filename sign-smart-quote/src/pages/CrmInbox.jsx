@@ -36,6 +36,9 @@ const FILTERS = [
   ["all", "הכל"],
   ["mine", "שלי"],
   ["free", "פנויות"],
+  // Survives the thread being opened and read — only an actual reply clears
+  // it, unlike "באיחור" which is driven by unread_count.
+  ["awaiting", "ממתינות לתשובה"],
   ["overdue", "באיחור"],
 ];
 
@@ -74,6 +77,17 @@ export default function CrmInbox() {
     if (!fromUrl) return;
     setActiveId(Number(fromUrl));
     setSearchParams((prev) => { prev.delete("conversation"); return prev; }, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ?filter=awaiting — how the leads screen's "בהמתנה לתשובה" tiles drill in.
+  // Those tiles count conversations, so this is the screen that can show all
+  // of them; the leads list would drop every conversation without a lead.
+  useEffect(() => {
+    const f = searchParams.get("filter");
+    if (!f) return;
+    setFilters((prev) => ({ ...prev, filter: f }));
+    setSearchParams((prev) => { prev.delete("filter"); return prev; }, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const Sidebar = user?.role === "agent" ? AgentSidebar : ManagerSidebar;

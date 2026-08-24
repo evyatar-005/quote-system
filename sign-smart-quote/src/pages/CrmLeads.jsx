@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Search, Loader2, Target, Phone, MessageCircle, AlertTriangle, CalendarClock, Sparkles, SlidersHorizontal } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 import { crmLeads, crmAgents, crmCampaignList } from "@/api/crmClient";
+import { inbox } from "@/api/inboxClient";
 import { relativeTime } from "@/lib/leadPriority";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -143,6 +144,7 @@ function followUpLabel(s) {
 
 export default function CrmLeads() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const isAdmin = user?.role === "admin";
   const Sidebar = user?.role === "agent" ? AgentSidebar : ManagerSidebar;
 
@@ -191,18 +193,21 @@ export default function CrmLeads() {
         setOverdueSoonest(rows[0]?.follow_up_date ?? null);
       })
       .catch(() => {});
-    // sort=last_activity puts the most recent first, so the LONGEST wait is
-    // the last page, not the first — pull the count here and read the longest
-    // wait off the late query below instead, which is the one that matters.
-    crmLeads.list({ awaiting: "1", limit: 1 })
+    // Counted over CONVERSATIONS, not leads — this was the bug. The tiles used
+    // the leads query, which can only see a conversation that maps to a lead
+    // (crm_conversations.lead_id, or a customer that has one). A person who
+    // messages the business WhatsApp without anyone creating a lead for them
+    // is invisible to it: locally 3 conversations were awaiting a reply and
+    // the tile said 1. The inbox was right and the tile was wrong, which is
+    // the worst way for a number to be wrong — it says "nobody is waiting".
+    inbox.listConversations({ filter: "awaiting", limit: 1 })
       .then((rows) => setAwaitingCount(rows[0]?.total_count ?? 0))
       .catch(() => {});
-    crmLeads.list({ awaiting: "overdue", sort: "created", limit: 200 })
+    inbox.listConversations({ filter: "awaiting_overdue" })
       .then((rows) => {
         setAwaitingLate(rows[0]?.total_count ?? 0);
-        // awaiting_minutes rides on every row (routes/crm.js); the biggest one
-        // in the page is the headline "someone has been waiting THIS long".
-        const longest = rows.reduce((max, r) => Math.max(max, r.awaiting_minutes || 0), 0);
+        // minutes_waiting rides on every conversation row (routes/inbox.js).
+        const longest = rows.reduce((max, r) => Math.max(max, r.minutes_waiting || 0), 0);
         setAwaitingLongest(longest || null);
       })
       .catch(() => {});
@@ -227,12 +232,12 @@ export default function CrmLeads() {
     setAssignee("");
     listRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
+  // These two tiles count conversations, so they open the inbox — the screen
+  // that can actually show all of them. Sending them to the leads list below
+  // would silently drop every conversation without a lead, which is exactly
+  // the discrepancy that made the tile wrong in the first place.
   const openAwaiting = (key) => {
-    setFilter(key);
-    setStatus("");
-    setCampaign("");
-    setAssignee("");
-    listRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    navigate(`/crm/inbox?filter=${key === "awaiting_overdue" ? "awaiting_overdue" : "awaiting"}`);
   };
 
   const chips = useMemo(() => FILTERS.filter((f) => isAdmin || !f.adminOnly), [isAdmin]);

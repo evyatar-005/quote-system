@@ -50,7 +50,12 @@ module.exports = function registerInbox(app, db, deps) {
     // agent/admin now requires a full name (routes/auth.js), so this only
     // guards accounts that predate that rule.
     const user = db.prepare(`SELECT full_name FROM users WHERE username = ?`).get(username);
-    const name = user && user.full_name && user.full_name.trim();
+    // First name only. A customer reading "*אביתר אבינועם* מפרינטלה:" gets a
+    // formal full name where a person would just say their first — and the
+    // surname is noise the customer has no use for. The full name is still
+    // what the CRM shows internally on each bubble (sent_by_name), so the team
+    // can still tell two agents with the same first name apart.
+    const name = user && user.full_name && user.full_name.trim().split(/\s+/)[0];
     if (!name) return text;
     if (text.includes(name)) return text;
     const line = (s.agent_signature_template || '*{agent}*').replace(/\{agent\}/g, name);
@@ -124,6 +129,18 @@ module.exports = function registerInbox(app, db, deps) {
       case 'overdue':
         where.push(IS_OVERDUE_SQL);
         break;
+      // "The customer wrote and nobody has answered" — read off the two
+      // timestamps rather than unread_count, so opening a thread and walking
+      // away doesn't clear it. Only an actual outbound reply does. Same rule
+      // the leads screen's tiles use, which is the point: they now count the
+      // SAME thing, from the same table.
+      case 'awaiting':
+        where.push(`c.last_inbound_at IS NOT NULL AND (c.last_outbound_at IS NULL OR c.last_inbound_at > c.last_outbound_at)`);
+        break;
+      case 'awaiting_overdue':
+        where.push(`c.last_inbound_at IS NOT NULL AND (c.last_outbound_at IS NULL OR c.last_inbound_at > c.last_outbound_at)
+                    AND ${MINUTES_WAITING_SQL} >= @overdueMinutes`);
+        break;
       default:
         break; // 'all' / absent
     }
@@ -139,7 +156,10 @@ module.exports = function registerInbox(app, db, deps) {
              (SELECT m.direction FROM crm_messages m WHERE m.conversation_id = c.id ORDER BY m.id DESC LIMIT 1) AS last_direction,
              (SELECT m.message_type FROM crm_messages m WHERE m.conversation_id = c.id ORDER BY m.id DESC LIMIT 1) AS last_type,
              CASE WHEN c.last_inbound_at IS NULL THEN NULL ELSE ${MINUTES_WAITING_SQL} END AS minutes_waiting,
-             CASE WHEN ${IS_OVERDUE_SQL} THEN 1 ELSE 0 END AS is_overdue
+             CASE WHEN ${IS_OVERDUE_SQL} THEN 1 ELSE 0 END AS is_overdue,
+             -- Rides on every row so a caller that only needs the count can
+             -- ask for LIMIT 1 instead of paging 200 rows to count them.
+             COUNT(*) OVER() AS total_count
       FROM crm_conversations c
       LEFT JOIN customers cu ON cu.id = c.customer_id
       LEFT JOIN crm_conversation_locks l ON l.conversation_id = c.id AND l.expires_at > CURRENT_TIMESTAMP`;
