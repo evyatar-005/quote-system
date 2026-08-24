@@ -134,26 +134,25 @@ export default function MondaySyncSection() {
         `${statuses} סטטוסים עודכנו`,
       ];
       if (r.created === 0 && statuses === 0) {
-        // "0 סטטוסים עודכנו" has several different causes and the admin has no
-        // way to tell them apart from the outside. The server now reports why,
-        // so say it instead of the reassuring-but-useless "הכול כבר מסונכרן".
-        let why = "";
-        if (!r.hasStatusColumn) {
-          why = "לא הוגדרה עמודת סטטוס לבורד";
-        } else if (!r.mappedLabelCount) {
-          why = "אף תווית לא ממופה";
-        } else if (r.unmappedLabels?.length) {
-          const top = r.unmappedLabels.map((u) => `״${u.label}״ (${u.count})`).join(", ");
-          why = `תוויות שאינן ממופות: ${top}`;
-        } else if (r.skippedNotNew) {
-          why = `${r.skippedNotNew} לידים כבר לא בסטטוס ״חדש״ — סטטוס מקומי לא נדרס`;
-        } else if (r.itemsWithoutLead) {
-          why = `${r.itemsWithoutLead} פריטים אינם מקושרים לליד`;
-        } else if (!r.itemsWithLabel) {
-          why = "לאף פריט אין ערך בעמודת הסטטוס";
-        } else {
-          why = "הכול כבר מסונכרן";
+        // Report EVERY cause that actually applies, with its count — not the
+        // first one an if-chain happens to catch. A board can have a handful
+        // of unmapped labels AND a hundred leads an agent already moved past
+        // 'new'; naming only the unmapped ones points at the smaller problem
+        // and hides the reason nothing changed.
+        const reasons = [];
+        if (!r.hasStatusColumn) reasons.push("לא הוגדרה עמודת סטטוס לבורד");
+        else if (!r.mappedLabelCount) reasons.push("אף תווית לא ממופה");
+        if (r.skippedNotNew) {
+          reasons.push(`${r.skippedNotNew} לידים כבר לא בסטטוס ״חדש״ — הסטטוס המקומי נשמר בכוונה`);
         }
+        if (r.unmappedLabels?.length) {
+          const total = r.unmappedLabels.reduce((n, u) => n + u.count, 0);
+          const top = r.unmappedLabels.map((u) => `״${u.label}״ (${u.count})`).join(", ");
+          reasons.push(`${total} פריטים עם תוויות שאינן ממופות: ${top}`);
+        }
+        if (r.itemsWithoutLead) reasons.push(`${r.itemsWithoutLead} פריטים אינם מקושרים לליד`);
+        if (!r.itemsWithLabel && r.hasStatusColumn) reasons.push("לאף פריט אין ערך בעמודת הסטטוס");
+        const why = reasons.length ? reasons.join(" · ") : "הכול כבר מסונכרן";
         toast.success(`${parts.join(", ")} — ${why}`, { duration: 12000 });
       } else {
         toast.success(parts.join(", "));
