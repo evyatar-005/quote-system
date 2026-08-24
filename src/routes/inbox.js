@@ -11,6 +11,7 @@ const { isSessionOpen } = require('../services/channels/whatsapp/sessionWindow')
 const { getActiveWhatsApp } = require('../services/channels');
 const { publish, subscribe } = require('../services/crm/realtime');
 const { slotCount, crmSettingsRow } = require('../services/crm/leadClaims');
+const { drainNow } = require('../services/crm/jobs');
 
 module.exports = function registerInbox(app, db, deps) {
   const { requireAuth, requireAdmin } = deps;
@@ -435,6 +436,10 @@ module.exports = function registerInbox(app, db, deps) {
         }) };
       }
       publish('message.created', { conversationId: id, messageId: result.messageId });
+      // Send it now rather than waiting up to 5s for the drainer's timer —
+      // the agent is watching the thread, and the delay was long enough for
+      // the customer to send two more messages before ours went out.
+      drainNow(db);
       res.status(201).json(db.prepare(`SELECT * FROM crm_messages WHERE id = ?`).get(result.messageId));
     } catch (err) {
       res.status(err.status || 400).json({ error: err.message, code: err.code });

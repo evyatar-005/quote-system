@@ -8,6 +8,7 @@
 const { claimNext, claimFill, releaseClaim, slotCount, crmSettingsRow } = require('../services/crm/leadClaims');
 const { buildLeadContext } = require('../services/crm/leadContext');
 const { enqueue, resolveConversation } = require('../services/channels/whatsapp/outbox');
+const { drainNow } = require('../services/crm/jobs');
 const { updateItemColumn } = require('../services/crm/mondaySync');
 
 module.exports = function registerLeadQueue(app, db, deps) {
@@ -122,6 +123,8 @@ module.exports = function registerLeadQueue(app, db, deps) {
         priority: 10,
       });
       if (result.skipped) return res.status(400).json({ error: `השליחה נחסמה: ${result.reason}` });
+      // Agent-initiated 1:1 send — go out now, not on the next 5s tick.
+      drainNow(db);
       res.json({ ok: true, ...result });
     } catch (err) {
       res.status(err.status || 400).json({ error: err.message });
@@ -149,6 +152,8 @@ module.exports = function registerLeadQueue(app, db, deps) {
         priority: 10,
       });
       if (result.skipped) return res.status(400).json({ error: `השליחה נחסמה: ${result.reason}` });
+      // Agent-initiated 1:1 send — go out now, not on the next 5s tick.
+      drainNow(db);
       res.json({ ok: true, ...result });
     } catch (err) {
       res.status(err.status || 400).json({ error: err.message });

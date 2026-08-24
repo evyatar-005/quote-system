@@ -30,16 +30,18 @@ let nextAllowedBulkSendAt = 0;
 let inforuPulling = false;
 let inforuChatSyncing = false;
 
-// 30s: GetWhatsAppChats is a read over a time window, not a queue drain, so
-// polling it costs the same whether or not anything arrived — no reason to
-// hammer it every 10s the way the pull did.
-const INFORU_CHAT_SYNC_MS = 30 * 1000;
+// 10s. At 30s an agent could be reading a reply on their phone half a minute
+// before the CRM showed it, which is long enough to answer twice or to answer
+// something the customer had already followed up on. 6 calls/minute is modest
+// against InforU's limits, and the call costs the same whether or not anything
+// arrived — it is a windowed read, not a queue drain.
+const INFORU_CHAT_SYNC_MS = 10 * 1000;
 
 // The window re-read on every tick. Deliberately far wider than the interval:
 // the read is idempotent (OR IGNORE on WhatsAppMessageId), so overlap is free,
 // while a gap would lose messages permanently. Also covers a message InforU
 // records slightly late, and a few minutes of downtime, with no catch-up logic.
-const INFORU_CHAT_SYNC_WINDOW_MIN = 30;
+const INFORU_CHAT_SYNC_WINDOW_MIN = 20;
 
 // Reads InforU's CHAT store rather than the PullData queue — see
 // channels/whatsapp/inforuChatSync.js for why the queue was unusable on this
@@ -420,4 +422,22 @@ async function mondayPusherTick(db) {
   }
 }
 
-module.exports = { startCrmJobs };
+// Drains the queue NOW instead of waiting up to QUEUE_TICK_MS for the timer.
+// A 1:1 reply is a person watching the screen: five seconds of nothing after
+// pressing send reads as broken, and it let the customer get two messages in
+// before ours left. The tick stays as the safety net for retries and bulk.
+//
+// Only ever drains priority <= 10 (1:1 traffic). Bulk keeps its pacing —
+// firing a campaign the instant it's queued is exactly what the jitter and the
+// daily cap exist to prevent.
+//
+// Deliberately fire-and-forget: the HTTP request that enqueued the message has
+// already returned 200, and the row is durable in wa_send_queue either way, so
+// a failure here is picked up by the next tick rather than surfaced twice.
+function drainNow(db) {
+  setImmediate(() => {
+    waQueueDrainerTick(db).catch(err => console.error('[crm jobs] drainNow failed:', err.message));
+  });
+}
+
+module.exports = { startCrmJobs, drainNow };
