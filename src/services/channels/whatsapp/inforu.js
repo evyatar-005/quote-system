@@ -123,7 +123,7 @@ async function sendMedia(db, { toE164: to, url, filename, caption, messageId }) 
 // already, and handing that to InforU is both simpler and cheaper than
 // round-tripping the bytes through us at all. driveFileId is passed through by
 // the drainer for exactly this.
-async function sendMediaUpload(db, { toE164: to, driveFileId, filename, caption, messageId }) {
+async function sendMediaUpload(db, { toE164: to, driveFileId, filename, mimeType, caption, messageId }) {
   const g = gate(db, to);
   if (g.error) return g.error;
   if (!driveFileId) {
@@ -133,9 +133,25 @@ async function sendMediaUpload(db, { toE164: to, driveFileId, filename, caption,
       retryable: false,
     };
   }
+  // SendWhatsAppChat's MessageMedia is documented as "link to media
+  // (image\voice)" — it does NOT carry documents. InforU rejects a PDF with
+  // StatusId -2216 "Invalid Media Format" no matter how the link is built, so
+  // this is caught here and explained rather than sent to fail. Attaching a
+  // document on InforU is only possible through an approved template
+  // (MessageMediaFileUid), which is a different flow entirely.
+  const IMAGE_EXT = /\.(jpe?g|png|gif|webp|bmp)$/i;
+  const looksLikeImage = IMAGE_EXT.test(filename || '') || /^image\//i.test(mimeType || '');
+  if (!looksLikeImage) {
+    return {
+      ok: false, providerMessageId: null, status: 'failed',
+      error: `InforU תומך בשליחת תמונות בלבד בשיחה — "${filename || 'הקובץ'}" אינו תמונה. ניתן לשלוח מסמך רק דרך תבנית מאושרת עם קובץ.`,
+      retryable: false,
+    };
+  }
+
   // uc?export=download is the direct-content URL for a link-shared file; the
-  // /file/d/…/view form returns Drive's HTML viewer, which WhatsApp would
-  // attach as an HTML page instead of the document.
+  // /file/d/…/view form returns Drive's HTML viewer, which would arrive as an
+  // HTML page instead of the image.
   const url = `https://drive.google.com/uc?export=download&id=${encodeURIComponent(driveFileId)}`;
   try {
     await client.sendChat(db, { phone: g.phone, message: caption || filename || '', mediaUrl: url, customerMessageId: messageId });
