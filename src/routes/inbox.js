@@ -261,7 +261,16 @@ module.exports = function registerInbox(app, db, deps) {
   app.get('/api/inbox/conversations/:id/messages', requireAuth, (req, res) => {
     let conversation = conversationWithLock(req.params.id);
     if (!conversation) return res.status(404).json({ error: 'שיחה לא נמצאה' });
-    const messages = db.prepare(`SELECT * FROM crm_messages WHERE conversation_id = ? ORDER BY id ASC LIMIT 500`).all(conversation.id);
+    // sent_by is a username; the thread needs a person's name. Joined here
+    // rather than resolved client-side so it works for agents too — the agent
+    // list endpoint is admin-only, and every role needs to see who replied on
+    // a conversation the whole team shares.
+    const messages = db.prepare(
+      `SELECT m.*, u.full_name AS sent_by_name
+         FROM crm_messages m
+         LEFT JOIN users u ON u.username = m.sent_by
+        WHERE m.conversation_id = ? ORDER BY m.id ASC LIMIT 500`
+    ).all(conversation.id);
     // Fetching the thread IS reading it — reset unread_count here so it
     // never drifts, regardless of which screen opened the thread (this
     // endpoint is the one thing CrmInbox.jsx and the lead workspace's

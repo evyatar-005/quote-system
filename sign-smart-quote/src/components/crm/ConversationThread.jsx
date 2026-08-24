@@ -412,6 +412,26 @@ export default function ConversationThread({ conversationId, headerExtra, hideLe
                   className="relative max-w-[65%] rounded-lg px-2.5 py-1.5 text-sm shadow-sm"
                   style={{ background: out ? WA.out : WA.in, borderRadius: 8 }}
                 >
+                  {/* Who sent it, inside the CRM. The customer already sees an
+                      agent signature prefixed to the text (withSignature in
+                      routes/inbox.js), but sent_by was stored and rendered
+                      nowhere — so on a conversation several agents worked, the
+                      one thing nobody could tell was who said what. That is
+                      exactly the shared-inbox question this screen exists for.
+                      Only on outbound: inbound is always the customer. */}
+                  {out && m.sent_by && (
+                    <div className="text-[10px] font-semibold mb-0.5" style={{ color: WA.green }}>
+                      {m.sent_by_name || m.sent_by}
+                    </div>
+                  )}
+                  {/* Sent from InforU's own web chat rather than here — imported
+                      by the chat sync, so it has no sent_by. Saying so is the
+                      honest answer; a blank would read as "sent by nobody". */}
+                  {out && !m.sent_by && m.provider === "inforu" && (
+                    <div className="text-[10px] mb-0.5" style={{ color: WA.meta }}>
+                      נשלח מממשק InforU
+                    </div>
+                  )}
                   {m.message_type === "document" && m.media_url ? (
                     <a
                       href={m.media_url}
