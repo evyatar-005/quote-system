@@ -244,6 +244,21 @@ export default function CrmLeads() {
     navigate(`/crm/inbox?filter=${key === "awaiting_overdue" ? "awaiting_overdue" : "awaiting"}`);
   };
 
+  // Same slice, filtered into the LEADS table below instead of navigating
+  // away. Deliberately a second, separate action rather than a replacement:
+  // the tile counts conversations, and the leads table can only show the
+  // ones that actually have a lead behind them — so this list is legitimately
+  // shorter, and swapping the tile over to it would resurrect the old
+  // "the tile says nobody is waiting" bug. The count difference is spelled
+  // out to the user rather than hidden.
+  const filterAwaitingInTable = (key) => {
+    setFilter(key);
+    setStatus("");
+    setCampaign("");
+    setAssignee("");
+    listRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   const chips = useMemo(() => FILTERS.filter((f) => isAdmin || !f.adminOnly), [isAdmin]);
   const activeChip = useMemo(() => chips.find((f) => f.key === filter), [chips, filter]);
   // Hidden filters need a visible count, or a campaign left selected quietly
@@ -388,7 +403,19 @@ export default function CrmLeads() {
                 <MessageCircle className="w-4 h-4" />
               </span>
               <span className="min-w-0">
-                <span className="block text-xs text-slate-500">בהמתנה לתשובה</span>
+                <span className="flex items-center gap-1.5">
+                  <span className="text-xs text-slate-500">בהמתנה לתשובה</span>
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    title="סינון בטבלת הלידים למטה (רק לידים — המספר עשוי להיות נמוך יותר)"
+                    onClick={(e) => { e.stopPropagation(); filterAwaitingInTable("awaiting"); }}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.stopPropagation(); e.preventDefault(); filterAwaitingInTable("awaiting"); } }}
+                    className="text-[10px] px-1.5 py-0.5 rounded-full border border-slate-300 text-slate-500 hover:bg-slate-100 cursor-pointer"
+                  >
+                    בטבלה
+                  </span>
+                </span>
                 <span className="block text-xl font-bold">
                   {awaitingCount === null ? <Loader2 className="w-4 h-4 animate-spin text-slate-300" /> : awaitingCount}
                 </span>
@@ -405,7 +432,19 @@ export default function CrmLeads() {
                 <AlertTriangle className="w-4 h-4" />
               </span>
               <span className="min-w-0">
-                <span className="block text-xs text-slate-500">באיחור בתשובה</span>
+                <span className="flex items-center gap-1.5">
+                  <span className="text-xs text-slate-500">באיחור בתשובה</span>
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    title="סינון בטבלת הלידים למטה (רק לידים — המספר עשוי להיות נמוך יותר)"
+                    onClick={(e) => { e.stopPropagation(); filterAwaitingInTable("awaiting_overdue"); }}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.stopPropagation(); e.preventDefault(); filterAwaitingInTable("awaiting_overdue"); } }}
+                    className="text-[10px] px-1.5 py-0.5 rounded-full border border-slate-300 text-slate-500 hover:bg-slate-100 cursor-pointer"
+                  >
+                    בטבלה
+                  </span>
+                </span>
                 <span className="flex items-baseline gap-2">
                   <span className="text-xl font-bold">
                     {awaitingLate === null ? <Loader2 className="w-4 h-4 animate-spin text-slate-300" /> : awaitingLate}

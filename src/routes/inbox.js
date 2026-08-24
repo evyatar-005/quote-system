@@ -166,10 +166,20 @@ module.exports = function registerInbox(app, db, deps) {
              CASE WHEN ${IS_OVERDUE_SQL} THEN 1 ELSE 0 END AS is_overdue,
              -- Rides on every row so a caller that only needs the count can
              -- ask for LIMIT 1 instead of paging 200 rows to count them.
-             COUNT(*) OVER() AS total_count
+             COUNT(*) OVER() AS total_count,
+             -- Who owns this thread. c.assigned_to is only a username, and a
+             -- list that says "sapir" instead of a person's name is unreadable
+             -- to a manager scanning who is sitting on unanswered customers.
+             -- Falls back to the LEAD's owner: a conversation created before
+             -- anyone claimed it has no assigned_to of its own, but the lead
+             -- behind it does, and that is still the answer to "whose is this".
+             COALESCE(au.full_name, c.assigned_to, lau.full_name, ld.assigned_to) AS assigned_to_name
       FROM crm_conversations c
       LEFT JOIN customers cu ON cu.id = c.customer_id
-      LEFT JOIN crm_conversation_locks l ON l.conversation_id = c.id AND l.expires_at > CURRENT_TIMESTAMP`;
+      LEFT JOIN crm_conversation_locks l ON l.conversation_id = c.id AND l.expires_at > CURRENT_TIMESTAMP
+      LEFT JOIN users au ON au.username = c.assigned_to
+      LEFT JOIN crm_leads ld ON ld.id = c.lead_id
+      LEFT JOIN users lau ON lau.username = ld.assigned_to`;
     if (where.length) sql += ` WHERE ${where.join(' AND ')}`;
     // Deliberate deviation from WhatsApp's pure recency order: a conversation
     // that has been waiting past the manager's threshold outranks a fresher

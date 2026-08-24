@@ -211,6 +211,16 @@ export default function CrmInbox() {
                             {preview || c.customer_phone}
                           </span>
                           <span className="flex items-center gap-1.5 shrink-0">
+                            {/* Who owns this thread. Without it a manager
+                                looking at "ממתינות לתשובה" can see that 11
+                                customers are waiting but not who is supposed
+                                to be answering them — which is the one thing
+                                that list is for. */}
+                            {c.assigned_to_name && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600 whitespace-nowrap max-w-[90px] truncate">
+                                {c.assigned_to_name}
+                              </span>
+                            )}
                             {/* Overdue badge + a red (not green) unread count, so
                                 the whole row reads as one urgency signal. */}
                             {c.is_overdue && (
