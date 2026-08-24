@@ -216,9 +216,18 @@ async function pullBoard(db, boardMap, ownerUsername) {
     const out = new Map();
     let sv = {};
     try { sv = JSON.parse(boardMap.status_values || '{}'); } catch (_) { sv = {}; }
-    for (const [internal, label] of Object.entries(sv)) {
-      const trimmed = (label || '').toString().trim();
-      if (trimmed) out.set(trimmed, internal);
+    // A value may be a single label (the original shape) or a LIST of labels.
+    // Real boards use several labels that all mean the same thing to us —
+    // "לא רלוונטי - מחיר / מרחק / אחר" are three ways of saying lost, and
+    // "ניסיון ליצירת קשר 1 / 2", "נשלחה הודעה ווצאפ" and "פולואפ" all mean
+    // contacted. One-label-per-status could not express that, so every item
+    // carrying an unmapped label was left at 'new' forever — which is why a
+    // whole board could read as "לידים חדשים" long after it had been worked.
+    for (const [internal, value] of Object.entries(sv)) {
+      for (const label of (Array.isArray(value) ? value : [value])) {
+        const trimmed = (label || '').toString().trim();
+        if (trimmed) out.set(trimmed, internal);
+      }
     }
     return out;
   })();
@@ -342,7 +351,12 @@ async function pushBoard(db, boardMap) {
 
   let pushed = 0;
   for (const row of rows) {
-    const label = statusValues[row.lead_status];
+    // Pushing is one-to-one by nature: many labels can mean "lost" to us, but
+    // we must write exactly one back. The FIRST mapped label is the canonical
+    // one — it is what the editor lists first and what an admin sees as the
+    // primary spelling for that status.
+    const mapped = statusValues[row.lead_status];
+    const label = (Array.isArray(mapped) ? mapped[0] : mapped);
     if (!label) continue; // no mapped monday label for this internal status — skip silently
     try {
       await mondayRequest(

@@ -31,12 +31,14 @@ import { toast } from "sonner";
 // default filter and whether the assignee column/filter is shown.
 const PAGE_SIZE = 50;
 
-const STATUS_LABELS = {
+// Exported so the monday status-mapping editor renders the exact same badge
+// palette as the leads table — one source of truth for status colour/wording.
+export const STATUS_LABELS = {
   new: "חדש", contacted: "יצרנו קשר", quoted: "נשלחה הצעה",
   won: "זכינו", lost: "אבדנו", disqualified: "לא רלוונטי",
 };
 
-const STATUS_TONE = {
+export const STATUS_TONE = {
   new: "bg-blue-50 text-blue-700 border-blue-200",
   contacted: "bg-amber-50 text-amber-700 border-amber-200",
   quoted: "bg-violet-50 text-violet-700 border-violet-200",

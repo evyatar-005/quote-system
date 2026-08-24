@@ -5,9 +5,10 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from "@/components/ui/command";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, Save, RefreshCw, Trash2, Plus, GitMerge, Check, ChevronsUpDown } from "lucide-react";
+import { Loader2, Save, RefreshCw, Trash2, Plus, GitMerge, Check, ChevronsUpDown, X } from "lucide-react";
 import { toast } from "sonner";
 import { listMondayBoards } from "@/api/mondayClient";
+import { STATUS_LABELS, STATUS_TONE } from "@/pages/CrmLeads";
 import { mondaySync, crmSettings } from "@/api/mondaySyncClient";
 import CostSectionCard from "./CostSectionCard";
 
@@ -27,9 +28,11 @@ export default function MondaySyncSection() {
   const [phoneCol, setPhoneCol] = useState("");
   const [emailCol, setEmailCol] = useState("");
   const [statusCol, setStatusCol] = useState("");
-  const [statusWon, setStatusWon] = useState("");
-  const [statusLost, setStatusLost] = useState("");
-  const [statusQuoted, setStatusQuoted] = useState("");
+  // One entry per internal status, each holding a LIST of board labels — a
+  // real board spells the same meaning several ways ("לא רלוונטי - מחיר / מרחק /
+  // אחר" are all "lost"), and one-label-per-status left every other label
+  // unmapped, so those items stayed 'new' forever.
+  const [statusMap, setStatusMap] = useState({});
   const [quoteFileCol, setQuoteFileCol] = useState("");
   const [followUpCol, setFollowUpCol] = useState("");
   const [creating, setCreating] = useState(false);
@@ -43,9 +46,7 @@ export default function MondaySyncSection() {
   // permanently unable to push status or pull follow-up dates. All five boards
   // here are in exactly that state. These make an existing map fully editable.
   const [editStatusCol, setEditStatusCol] = useState("");
-  const [editStatusWon, setEditStatusWon] = useState("");
-  const [editStatusLost, setEditStatusLost] = useState("");
-  const [editStatusQuoted, setEditStatusQuoted] = useState("");
+  const [editStatusMap, setEditStatusMap] = useState({});
   const [editFollowUpCol, setEditFollowUpCol] = useState("");
   const [editPhoneCol, setEditPhoneCol] = useState("");
   const [editEmailCol, setEditEmailCol] = useState("");
@@ -105,10 +106,10 @@ export default function MondaySyncSection() {
         board_name: boardName,
         column_map: { name: nameCol || undefined, phone: phoneCol || undefined, email: emailCol || undefined, quote_file: quoteFileCol || undefined, follow_up: followUpCol || undefined },
         status_column_id: statusCol || null,
-        status_values: { won: statusWon || undefined, lost: statusLost || undefined, quoted: statusQuoted || undefined },
+        status_values: serializeStatusValues(statusMap),
       });
       toast.success("הבורד מופה בהצלחה");
-      setSelectedBoardId(""); setColumns([]); setQuoteFileCol("");
+      setSelectedBoardId(""); setColumns([]); setQuoteFileCol(""); setStatusMap({});
       load();
     } catch (err) {
       toast.error(err.message || "מיפוי הבורד נכשל");
@@ -179,9 +180,7 @@ export default function MondaySyncSection() {
       setEditStatusCol(board.status_column_id || "");
       let sv = {};
       try { sv = JSON.parse(board.status_values || "{}"); } catch (_) { sv = {}; }
-      setEditStatusWon(sv.won || "");
-      setEditStatusLost(sv.lost || "");
-      setEditStatusQuoted(sv.quoted || "");
+      setEditStatusMap(normalizeStatusValues(sv));
     } catch (err) {
       toast.error(err.message || "טעינת העמודות מהבורד נכשלה");
     }
@@ -202,11 +201,7 @@ export default function MondaySyncSection() {
           follow_up: editFollowUpCol || undefined,
         },
         status_column_id: editStatusCol || null,
-        status_values: {
-          won: editStatusWon || undefined,
-          lost: editStatusLost || undefined,
-          quoted: editStatusQuoted || undefined,
-        },
+        status_values: serializeStatusValues(editStatusMap),
       });
       // Re-seed the form from the SERVER's response and keep it open, rather
       // than closing and trusting a refetch. Closing on save made a failed or
@@ -222,9 +217,7 @@ export default function MondaySyncSection() {
       setEditQuoteFileCol(savedMap.quote_file || "");
       setEditFollowUpCol(savedMap.follow_up || "");
       setEditStatusCol(saved.status_column_id || "");
-      setEditStatusWon(savedStatus.won || "");
-      setEditStatusLost(savedStatus.lost || "");
-      setEditStatusQuoted(savedStatus.quoted || "");
+      setEditStatusMap(normalizeStatusValues(savedStatus));
       toast.success("המיפוי נשמר");
       load();
     } catch (err) {
@@ -270,7 +263,13 @@ export default function MondaySyncSection() {
             // the agents do ever reaches monday. Spelled out here because it is
             // the one part of the sync that cannot report its own failure.
             const statusValues = (() => { try { return JSON.parse(b.status_values || "{}"); } catch (_) { return {}; } })();
-            const mappedStatuses = ["won", "lost", "quoted"].filter((k) => statusValues[k]);
+            const normalized = normalizeStatusValues(statusValues);
+            // Honest counts for the many-to-one model: how many of the six
+            // internal statuses carry at least one board label, and how many
+            // labels are mapped in total. "3 מתוך 3" meant nothing once a
+            // single status can hold a whole list of labels.
+            const mappedStatuses = INTERNAL_STATUSES.filter((k) => (normalized[k] || []).length);
+            const totalLabels = mappedStatuses.reduce((n, k) => n + normalized[k].length, 0);
             const pushOff = !b.status_column_id || mappedStatuses.length === 0;
             return (
               <div key={b.id} className="border border-black rounded-xl px-3 py-2 text-sm space-y-2">
@@ -290,14 +289,16 @@ export default function MondaySyncSection() {
                           {!b.status_column_id ? "לא נבחרה עמודת סטטוס" : "אף סטטוס לא מופה לתווית בבורד"}.
                           שינויי סטטוס ב-CRM לא יגיעו לבורד.
                         </span>
-                      ) : mappedStatuses.length < 3 ? (
+                      ) : mappedStatuses.length < INTERNAL_STATUSES.length ? (
                         <span className="text-amber-600">
-                          דחיפת סטטוס חלקית — ממופים {mappedStatuses.length} מתוך 3
-                          (חסר: {["won", "lost", "quoted"].filter((k) => !statusValues[k])
-                            .map((k) => ({ won: "זכינו", lost: "אבדנו", quoted: "נשלחה הצעה" }[k])).join(", ")})
+                          מיפוי חלקי — {mappedStatuses.length} מתוך {INTERNAL_STATUSES.length} סטטוסים ממופים
+                          ({totalLabels} תוויות בסה"כ). חסר: {INTERNAL_STATUSES.filter((k) => !(normalized[k] || []).length)
+                            .map((k) => STATUS_LABELS[k]).join(", ")}
                         </span>
                       ) : (
-                        <span className="text-emerald-600">דחיפת סטטוס פעילה — כל 3 הסטטוסים ממופים</span>
+                        <span className="text-emerald-600">
+                          כל {INTERNAL_STATUSES.length} הסטטוסים ממופים ({totalLabels} תוויות בסה"כ)
+                        </span>
                       )}
                     </div>
                   </div>
@@ -329,16 +330,13 @@ export default function MondaySyncSection() {
                             דחיפת סטטוס חזרה ל-monday
                           </div>
                           <ColumnPicker label="עמודת הסטטוס בבורד" columns={editColumns} value={editStatusCol} onChange={setEditStatusCol} />
-                          {editStatusCol && (() => {
-                            const statusLabels = editColumns.find((c) => c.id === editStatusCol)?.labels || [];
-                            return (
-                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                <StatusValuePicker label='ערך הסטטוס עבור "זכינו"' labels={statusLabels} value={editStatusWon} onChange={setEditStatusWon} />
-                                <StatusValuePicker label='ערך הסטטוס עבור "אבדנו"' labels={statusLabels} value={editStatusLost} onChange={setEditStatusLost} />
-                                <StatusValuePicker label='ערך הסטטוס עבור "נשלחה הצעה"' labels={statusLabels} value={editStatusQuoted} onChange={setEditStatusQuoted} />
-                              </div>
-                            );
-                          })()}
+                          {editStatusCol && (
+                            <StatusMappingEditor
+                              labels={editColumns.find((c) => c.id === editStatusCol)?.labels || []}
+                              value={editStatusMap}
+                              onChange={setEditStatusMap}
+                            />
+                          )}
                         </div>
 
                         <div className="flex items-center gap-2">
@@ -401,18 +399,17 @@ export default function MondaySyncSection() {
               label="עמודת סטטוס (לדחיפה חזרה)"
               columns={columns}
               value={statusCol}
-              onChange={(v) => { setStatusCol(v); setStatusWon(""); setStatusLost(""); setStatusQuoted(""); }}
+              onChange={(v) => { setStatusCol(v); setStatusMap({}); }}
             />
-            {statusCol && (() => {
-              const statusLabels = columns.find((c) => c.id === statusCol)?.labels || [];
-              return (
-                <>
-                  <StatusValuePicker label='ערך הסטטוס עבור "זכינו"' labels={statusLabels} value={statusWon} onChange={setStatusWon} />
-                  <StatusValuePicker label='ערך הסטטוס עבור "אבדנו"' labels={statusLabels} value={statusLost} onChange={setStatusLost} />
-                  <StatusValuePicker label='ערך הסטטוס עבור "נשלחה הצעה"' labels={statusLabels} value={statusQuoted} onChange={setStatusQuoted} />
-                </>
-              );
-            })()}
+            {statusCol && (
+              <div className="sm:col-span-2">
+                <StatusMappingEditor
+                  labels={columns.find((c) => c.id === statusCol)?.labels || []}
+                  value={statusMap}
+                  onChange={setStatusMap}
+                />
+              </div>
+            )}
             <div className="sm:col-span-2">
               <Button onClick={createMap} disabled={creating} className="gap-2">
                 {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
@@ -480,28 +477,148 @@ function ColumnPicker({ label, columns, value, onChange }) {
   );
 }
 
-// If the chosen status column has a real label bank (fetched from monday's
-// own settings_str — see fetchBoardColumns), show a dropdown of THOSE exact
-// values instead of a free-text guess. Falls back to a plain input when the
-// column type has no label bank (or none was found).
-function StatusValuePicker({ label, labels, value, onChange }) {
-  if (labels && labels.length) {
-    return (
-      <div className="space-y-1.5">
-        <label className="text-xs text-slate-500">{label}</label>
-        <Select value={value} onValueChange={onChange}>
-          <SelectTrigger><SelectValue placeholder="ללא" /></SelectTrigger>
-          <SelectContent>
-            {labels.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
-          </SelectContent>
-        </Select>
-      </div>
-    );
+// --- Status mapping: MANY board labels -> ONE internal status ----------------
+
+// The CRM's own six statuses, in pipeline order, so the editor reads like the
+// funnel top-down instead of in whatever order the saved JSON happens to be.
+const INTERNAL_STATUSES = ["new", "contacted", "quoted", "won", "lost", "disqualified"];
+
+// Saved data comes in two shapes: the legacy single string ("עסקה נסגרה") and
+// the current array. Everything else here works in arrays only, so this is the
+// single place the legacy shape is tolerated — reading is lenient, saving
+// (serializeStatusValues) always writes arrays.
+function normalizeStatusValues(raw) {
+  const out = {};
+  for (const [internal, value] of Object.entries(raw || {})) {
+    const list = (Array.isArray(value) ? value : [value])
+      .map((l) => (l == null ? "" : String(l).trim()))
+      .filter(Boolean);
+    if (list.length) out[internal] = Array.from(new Set(list));
   }
+  return out;
+}
+
+// Statuses with no labels are omitted entirely rather than sent as empty
+// arrays — the backend already treats "absent" as unmapped, and an empty array
+// would only be a second way of spelling the same thing.
+function serializeStatusValues(map) {
+  const out = {};
+  for (const k of INTERNAL_STATUSES) {
+    const list = (map && map[k]) || [];
+    if (list.length) out[k] = list;
+  }
+  return out;
+}
+
+// One row per internal status: its coloured CRM badge plus a chip list of every
+// board label that should map onto it. Same add/remove interaction as
+// RecipientsEditor (Enter or the + button adds, X removes), with clickable
+// suggestions drawn from the status column's real label bank when monday gave
+// us one (fetchColumns returns `labels` per column).
+function StatusMappingEditor({ labels, value, onChange }) {
+  const map = value || {};
+  // A board label may only mean ONE thing, so anything already used elsewhere
+  // is hidden from the other rows' suggestions — mapping the same label twice
+  // would make the pull direction depend on Map insertion order.
+  const used = new Set(INTERNAL_STATUSES.flatMap((k) => map[k] || []));
+
+  const setFor = (internal, list) => onChange({ ...map, [internal]: list });
+  const add = (internal, label) => {
+    const clean = (label || "").trim();
+    if (!clean || used.has(clean)) return;
+    setFor(internal, [...(map[internal] || []), clean]);
+  };
+  const remove = (internal, label) =>
+    setFor(internal, (map[internal] || []).filter((l) => l !== label));
+
   return (
-    <div className="space-y-1.5">
-      <label className="text-xs text-slate-500">{label}</label>
-      <Input dir="rtl" value={value} onChange={(e) => onChange(e.target.value)} placeholder="הזן ערך ידנית" />
+    <div className="space-y-2" dir="rtl">
+      <div className="text-xs text-slate-500">
+        לכל סטטוס פנימי אפשר לשייך כמה תוויות מהבורד. במשיכה — כל אחת מהן תזוהה כסטטוס הזה.
+        בדחיפה חזרה ל-monday נכתבת <b>התווית הראשונה</b> בלבד (מסומנת ב-★).
+      </div>
+      {!labels.length && (
+        <div className="text-xs text-amber-600">
+          לעמודה זו אין רשימת תוויות מוכנה — יש להקליד את שם התווית ידנית, בדיוק כפי שהיא מופיעה בבורד.
+        </div>
+      )}
+      {INTERNAL_STATUSES.map((internal) => (
+        <StatusMappingRow
+          key={internal}
+          internal={internal}
+          chips={map[internal] || []}
+          suggestions={labels.filter((l) => !used.has(l))}
+          onAdd={(l) => add(internal, l)}
+          onRemove={(l) => remove(internal, l)}
+        />
+      ))}
+    </div>
+  );
+}
+
+function StatusMappingRow({ internal, chips, suggestions, onAdd, onRemove }) {
+  const [input, setInput] = useState("");
+  // Reuses CrmLeads' palette so a status looks identical here and in the leads
+  // table — the mapping is meant to be scannable by colour.
+  const tone = STATUS_TONE[internal] || STATUS_TONE.new;
+  const submit = () => { onAdd(input); setInput(""); };
+
+  return (
+    <div className="border border-slate-200 rounded-xl p-2.5 space-y-2">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className={`text-[11px] px-2 py-0.5 rounded-full border shrink-0 ${tone}`}>
+          {STATUS_LABELS[internal] || internal}
+        </span>
+        {chips.length === 0 ? (
+          <span className="text-[11px] text-slate-400">לא ממופה</span>
+        ) : (
+          chips.map((label, i) => (
+            <span
+              key={label}
+              className={`flex items-center gap-1.5 text-xs rounded-full border pr-2 pl-1 py-0.5 ${tone}`}
+            >
+              {/* The first chip is the one pushed back to monday, so the
+                  canonical spelling is visible without reading the note. */}
+              {i === 0 && <span title="התווית שתיכתב חזרה ל-monday">★</span>}
+              {label}
+              <button
+                type="button"
+                onClick={() => onRemove(label)}
+                className="p-0.5 rounded-full hover:bg-black/10"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          ))
+        )}
+      </div>
+      <div className="flex gap-2">
+        <Input
+          dir="rtl"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); submit(); } }}
+          placeholder="שם התווית בבורד"
+          className="flex-1 h-8 text-xs"
+        />
+        <Button type="button" size="sm" variant="outline" onClick={submit} className="gap-1 shrink-0">
+          <Plus className="w-3.5 h-3.5" /> הוסף
+        </Button>
+      </div>
+      {!!suggestions.length && (
+        <div className="flex flex-wrap gap-1">
+          {suggestions.map((l) => (
+            <button
+              key={l}
+              type="button"
+              onClick={() => onAdd(l)}
+              className="text-[11px] px-2 py-0.5 rounded-full border border-dashed border-slate-300 text-slate-500 hover:bg-slate-50"
+            >
+              + {l}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
