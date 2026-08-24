@@ -365,7 +365,9 @@ module.exports = function registerCrm(app, db, deps) {
 
   // Merges `into_id` <- `req.params.id`'s data: re-points leads/quotes to the
   // surviving customer and tombstones the loser via merged_into_id.
-  app.post('/api/crm/customers/:id/merge', requireAuth, (req, res) => {
+  // Admin-only: merging tombstones the loser and re-points its leads/quotes,
+  // with no un-merge path — not something any CRM user should be able to do.
+  app.post('/api/crm/customers/:id/merge', requireAdmin, (req, res) => {
     const loserId = parseInt(req.params.id, 10);
     const winnerId = parseInt((req.body || {}).into_id, 10);
     if (!winnerId || winnerId === loserId) return res.status(400).json({ error: 'into_id required and must differ' });

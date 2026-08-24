@@ -14,6 +14,11 @@ const { slotCount, crmSettingsRow } = require('../services/crm/leadClaims');
 const { pickAgentForLead } = require('../services/crm/leadRouting');
 const { drainNow } = require('../services/crm/jobs');
 
+// Must stay in sync with SESSION_TTL_MS in routes/auth.js — the SSE stream
+// below authenticates its own token (EventSource can't send headers) and has
+// to apply the exact same expiry rule as userFromRequest.
+const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
 module.exports = function registerInbox(app, db, deps) {
   const { requireAuth, requireAdmin } = deps;
 
@@ -564,6 +569,17 @@ module.exports = function registerInbox(app, db, deps) {
     if (!token) return res.status(401).end();
     const session = db.prepare(`SELECT * FROM sessions WHERE token = ?`).get(token);
     if (!session) return res.status(401).end();
+    // Same 7-day absolute TTL userFromRequest (routes/auth.js) enforces on every
+    // other route — replicated here because registerInbox is only handed
+    // { requireAuth, requireAdmin }, not userFromRequest. Without it a leaked
+    // token stayed valid forever on this one endpoint. SQLite's CURRENT_TIMESTAMP
+    // is "YYYY-MM-DD HH:MM:SS" (UTC) — normalize to ISO 8601 so it isn't parsed
+    // as local time. Expired rows are deleted lazily, exactly as auth.js does.
+    const age = Date.now() - new Date(session.created_at.replace(' ', 'T') + 'Z').getTime();
+    if (age > SESSION_TTL_MS) {
+      db.prepare(`DELETE FROM sessions WHERE token = ?`).run(token);
+      return res.status(401).end();
+    }
     const user = db.prepare(`SELECT * FROM users WHERE id = ?`).get(session.user_id);
     if (!user) return res.status(401).end();
     subscribe(res, { username: user.username });

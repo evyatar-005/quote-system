@@ -44,7 +44,7 @@ function publicUser(u) {
   // canAccessCrm mirrors the server-side gate exactly (see server.js): the
   // flag alone, with no role bypass — so a revoked מנהל מכירות loses the CRM
   // group from their sidebar too, instead of seeing links that 403.
-  return { id: u.id, username: u.username, full_name: u.full_name, email: u.email, role: u.role, mustChangePassword: !!u.must_change_password, canViewCosts: !!u.can_view_costs, canSendCampaigns: !!u.can_send_campaigns, canAccessCrm: !!u.can_access_crm };
+  return { id: u.id, username: u.username, full_name: u.full_name, email: u.email, role: u.role, mustChangePassword: !!u.must_change_password, canViewCosts: !!u.can_view_costs, canSendCampaigns: !!u.can_send_campaigns, canAccessCrm: !!u.can_access_crm, canDeleteQuotes: !!u.can_delete_quotes };
 }
 
 // ── idempotent seed of the two demo users ────────────────────────────────────
@@ -328,9 +328,9 @@ module.exports = function registerAuth(app, db) {
   });
 
   // ── Admin user management ─────────────────────────────────────────────────────
-  const allUsers    = db.prepare(`SELECT id, username, full_name, email, role, can_view_costs, can_send_campaigns, can_access_crm FROM users ORDER BY id`);
-  const insertUser  = db.prepare(`INSERT INTO users (username, password_hash, full_name, email, role, can_access_crm, must_change_password) VALUES (?, ?, ?, ?, ?, ?, 1)`);
-  const updateUser  = db.prepare(`UPDATE users SET full_name = ?, email = ?, role = ?, can_view_costs = ?, can_send_campaigns = ?, can_access_crm = ? WHERE id = ?`);
+  const allUsers    = db.prepare(`SELECT id, username, full_name, email, role, can_view_costs, can_send_campaigns, can_access_crm, can_delete_quotes FROM users ORDER BY id`);
+  const insertUser  = db.prepare(`INSERT INTO users (username, password_hash, full_name, email, role, can_access_crm, can_view_costs, must_change_password) VALUES (?, ?, ?, ?, ?, ?, ?, 1)`);
+  const updateUser  = db.prepare(`UPDATE users SET full_name = ?, email = ?, role = ?, can_view_costs = ?, can_send_campaigns = ?, can_access_crm = ?, can_delete_quotes = ? WHERE id = ?`);
   const updatePassword = db.prepare(`UPDATE users SET password_hash = ?, must_change_password = 1 WHERE id = ?`);
   const deleteUserStmt = db.prepare(`DELETE FROM users WHERE id = ?`);
   const ROLES = new Set(['admin', 'agent', 'operations']);
@@ -370,7 +370,13 @@ module.exports = function registerAuth(app, db) {
     // and a manager who silently can't see it is the exact confusion this
     // permission caused before it had a toggle. Anyone else starts closed.
     // Either way it's just the starting value; הגדרות משתמשים owns it after.
-    const { lastInsertRowid } = insertUser.run(username.trim(), hashPassword(password), full_name, normalizedEmail, role, role === 'admin' ? 1 : 0);
+    // can_view_costs is now ENFORCED server-side (entities.js strips cost fields
+    // from quote payloads without it), so a new מנהל מכירות starting closed would
+    // silently lose the analytics and profitability screens their role exists for.
+    // Granted on creation for admins only — same starting-value convention as
+    // can_access_crm above. Deliberately NOT extended to can_send_campaigns: a
+    // 200-recipient blast stays opt-in for everyone.
+    const { lastInsertRowid } = insertUser.run(username.trim(), hashPassword(password), full_name, normalizedEmail, role, role === 'admin' ? 1 : 0, role === 'admin' ? 1 : 0);
     const created = userById.get(lastInsertRowid);
     console.log(`[POST /api/admin/users] id=${created.id} "${created.username}" (${created.role})`);
     res.status(201).json({ user: publicUser(created) });
@@ -401,7 +407,23 @@ module.exports = function registerAuth(app, db) {
     // Deliberately not re-derived from `role`: changing someone's role must not
     // silently hand back CRM access that was revoked on purpose.
     const canAccessCrm = req.body.can_access_crm !== undefined ? (req.body.can_access_crm ? 1 : 0) : existing.can_access_crm;
-    updateUser.run(full_name, email, role, canViewCosts, canSendCampaigns, canAccessCrm, id);
+    const canDeleteQuotes = req.body.can_delete_quotes !== undefined ? (req.body.can_delete_quotes ? 1 : 0) : existing.can_delete_quotes;
+
+    // Demoting the last remaining admin locks the whole organisation out of
+    // every settings screen — including this one, which is the only way back.
+    // Deleting yourself was already blocked; changing your own role away from
+    // admin was not, which was the same lockout by another route.
+    if (existing.role === 'admin' && role !== 'admin') {
+      const otherAdmins = db.prepare(`SELECT COUNT(*) n FROM users WHERE role = 'admin' AND id != ?`).get(id).n;
+      if (otherAdmins === 0) {
+        return res.status(409).json({ error: 'זהו מנהל המכירות האחרון — שינוי התפקיד שלו ינעל את כולם מחוץ להגדרות. יש למנות מנהל נוסף קודם.' });
+      }
+      if (req.user.id === id) {
+        return res.status(409).json({ error: 'אי אפשר להוריד לעצמך את תפקיד מנהל המכירות. בקש ממנהל אחר לעשות זאת.' });
+      }
+    }
+
+    updateUser.run(full_name, email, role, canViewCosts, canSendCampaigns, canAccessCrm, canDeleteQuotes, id);
     const updated = userById.get(id);
     console.log(`[PUT /api/admin/users/${id}] role="${updated.role}"`);
     res.json({ user: publicUser(updated) });

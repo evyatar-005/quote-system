@@ -188,6 +188,15 @@ try { db.exec('ALTER TABLE users ADD COLUMN last_seen_at TEXT'); } catch (_) {}
 try { db.exec('ALTER TABLE customers ADD COLUMN first_name TEXT'); } catch (_) {}
 try { db.exec('ALTER TABLE customers ADD COLUMN last_name TEXT'); } catch (_) {}
 
+// Quote deletion used to be hardcoded to one username in routes/entities.js.
+// Seeded here to exactly the account that already had it, so this migration
+// changes nobody's access — it only turns an invisible literal into a grant
+// that ניהול משתמשים can show and an admin can move.
+try {
+  db.exec('ALTER TABLE users ADD COLUMN can_delete_quotes INTEGER NOT NULL DEFAULT 0');
+  db.prepare(`UPDATE users SET can_delete_quotes = 1 WHERE username = ?`).run('evyatar');
+} catch (_) {}
+
 // Lets a daily report schedule skip specific weekdays (e.g. Friday/Saturday,
 // when there's no business activity to report on) — NULL/empty means every
 // day, preserving existing schedules' behavior. See scheduledReports.js.

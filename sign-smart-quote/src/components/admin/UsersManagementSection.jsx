@@ -36,10 +36,10 @@ const PERMISSIONS = [
     label: "עלויות",
     icon: DollarSign,
     grants: "צפייה במרכיבי העלות, הרווח והרווחיות של הצעה (״הצג מרכיבי עלות״ בחלון פרטי ההצעה). בלי ההרשאה הכפתור נעול והמשתמש רואה מחירי מכירה בלבד.",
-    // Honest labelling matters more than a tidy screen: this toggle only
-    // hides the button. The server returns the same cost fields to every
-    // authenticated caller, so it is a convenience control, not protection.
-    caveat: "כרגע זו הסתרה בממשק בלבד — נתוני העלות עדיין נשלחים מהשרת לכל משתמש מחובר.",
+    // Now genuinely enforced: routes/entities.js strips the cost-bearing keys
+    // out of a quote's calculation_data before sending it, so revoking this
+    // withholds the data itself rather than merely hiding a button.
+    caveat: "נאכף בשרת — נתוני העלות לא נשלחים כלל למשתמש בלי ההרשאה. מנהל מכירות חדש מקבל אותה אוטומטית.",
   },
   {
     key: "can_send_campaigns",
@@ -53,6 +53,12 @@ const PERMISSIONS = [
     icon: MessagesSquare,
     grants: "הגישה לכל מודול ה-CRM: ״היום שלי״, לידים, לקוחות, תיבת השיחות והדיוור. בלי ההרשאה המודול לא מופיע בתפריט כלל, גם למנהל מכירות.",
     caveat: "לא חל על תפקיד ״תפעול״ — משתמש תפעול חסום מה-CRM בכל מקרה, גם אם המתג דלוק.",
+  },
+  {
+    key: "can_delete_quotes",
+    label: "מחיקת הצעות",
+    icon: Trash2,
+    grants: "מחיקה סופית של הצעת מחיר מהמערכת. הרשאה צרה בכוונה — היא לא מגיעה עם תפקיד מנהל מכירות, ויש להעניק אותה במפורש.",
   },
 ];
 
@@ -113,7 +119,11 @@ export default function UsersManagementSection() {
       toast.success("ההרשאה עודכנה");
       loadUsers();
     } catch (err) {
-      toast.error("שגיאה בעדכון ההרשאה");
+      // The server refuses to demote the last admin (or yourself) with a
+      // specific Hebrew explanation — swallowing it behind a generic message
+      // left the admin staring at a dropdown that silently snapped back.
+      toast.error(err?.message || "שגיאה בעדכון ההרשאה");
+      loadUsers();
     }
   };
 
@@ -404,8 +414,8 @@ export default function UsersManagementSection() {
               חדש. יש להדליק אותן ידנית כאן.
             </p>
             <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-              שים לב: מחיקת הצעת מחיר אינה נגזרת מתפקיד או מהרשאה — היא מוגבלת בקוד לחשבון בודד,
-              ולכן היא לא מופיעה כמתג במסך הזה.
+              שים לב: מנהל המכירות האחרון לא יכול לרדת מהתפקיד, ומנהל לא יכול להוריד את התפקיד
+              מעצמו — אחרת אף אחד לא היה יכול להיכנס להגדרות ולתקן.
             </p>
           </div>
         </details>

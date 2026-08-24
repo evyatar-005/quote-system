@@ -9,9 +9,14 @@ const { ensureMorningClient, closeSupersededQuoteDocument } = require('../servic
 const { resolveRecipe } = require('../services/production/resolveRecipe');
 const { notifyAdminsOfSentQuote } = require('../services/notifyAdmins');
 
-// Quote deletion is deliberately narrower than "any admin" — restricted to
-// this one account by explicit request, not tied to the admin role itself.
-const QUOTE_DELETE_USERNAME = 'evyatar';
+// Quote deletion is deliberately narrower than "any admin" — by explicit
+// request it is not tied to the admin role. It used to be hardcoded to a
+// single username, which meant the capability silently followed whoever
+// happened to hold that name and vanished if the account was ever renamed.
+// It is now a real per-user permission (users.can_delete_quotes), seeded on
+// migration to exactly the account that had it before, so behaviour is
+// unchanged while the grant is visible and manageable in ניהול משתמשים.
+const QUOTE_DELETE_LEGACY_USERNAME = 'evyatar';
 
 // Entities backed by a plain table (generic CRUD).
 const REGISTRY = {
@@ -42,6 +47,11 @@ const REGISTRY = {
 const ADMIN_WRITE = new Set([
   'PriceTier', 'StickerPriceTier', 'PaintSurchargeTier',
   'LightboxSizeTier', 'LightboxSellingPrice', 'PricingConfig', 'KapaPriceTier', 'KapaDeal', 'RollupPriceTier', 'LokobondAreaTier', 'GlassPriceTier', 'NumberPriceTier', 'GraphicsPriceTier',
+  // Campaign was missing here, so it fell through to the generic requireAuth
+  // tier: any CRM-enabled user could create, edit and DELETE crm_campaigns
+  // rows through /api/entities/Campaign/:id — completely bypassing the
+  // can_send_campaigns permission that guards every /api/campaigns/* route.
+  'Campaign',
 ]);
 
 // Production recipe (תפ"י) entities: editable by 'operations' role staff
@@ -270,6 +280,46 @@ module.exports = function registerEntities(app, db, deps) {
     return created;
   }
 
+  // can_view_costs used to be enforced ONLY by hiding a button in the client
+  // (QuotesArchive.jsx) — the server happily returned every cost, margin and
+  // profit figure to anyone authenticated, so the "permission" protected
+  // nothing that anyone reading the network tab couldn't see.
+  //
+  // Costs live inside the calculation_data JSON blob (there are no cost
+  // columns on signshop_quotes), so enforcement means rewriting that blob.
+  // Only the cost/profit-bearing keys are removed: selling prices, sizes,
+  // product types, quantities and SKUs all stay, because the same blob is
+  // what "שכפל" reconstructs a quote from and what every price-only screen
+  // reads. Stripping the whole field would break both for ordinary agents.
+  const COST_KEYS = [
+    'totalCostAll', 'totalCostPerUnit', 'rawMaterialCost', 'rawMaterialBeforeWaste',
+    'wasteAmount', 'laborCost', 'overheadCost', 'baseCost',
+    'profitPerUnit', 'profitMarginPct', 'breakdown', 'extrasBreakdown',
+  ];
+
+  function stripCosts(value) {
+    if (Array.isArray(value)) return value.map(stripCosts);
+    if (value && typeof value === 'object') {
+      const out = {};
+      for (const [k, v] of Object.entries(value)) {
+        if (COST_KEYS.includes(k)) continue;
+        out[k] = stripCosts(v);
+      }
+      return out;
+    }
+    return value;
+  }
+
+  // Mutates the row in place. A malformed blob is left untouched rather than
+  // blanked — failing closed here would break the quote for its own author.
+  function applyCostVisibility(row, user) {
+    if (!row || !row.calculation_data || (user && user.can_view_costs)) return row;
+    try {
+      row.calculation_data = JSON.stringify(stripCosts(JSON.parse(row.calculation_data)));
+    } catch (_) {}
+    return row;
+  }
+
   function quoteRowById(id) {
     const r = db.prepare(`SELECT * FROM signshop_quotes WHERE id = ?`).get(id);
     if (r) r.created_date = r.created_at;
@@ -308,7 +358,10 @@ module.exports = function registerEntities(app, db, deps) {
     }
     if (limit && Number.isInteger(+limit)) sql += ` LIMIT ${parseInt(limit, 10)}`;
     const rows = db.prepare(sql).all(...params);
-    for (const r of rows) r.created_date = r.created_at;
+    for (const r of rows) {
+      r.created_date = r.created_at;
+      applyCostVisibility(r, req.user);
+    }
     res.json(rows);
   }
 
@@ -331,7 +384,7 @@ module.exports = function registerEntities(app, db, deps) {
       for (const c of setCols) row[c] = body[c];
       db.prepare(`UPDATE signshop_quotes SET ${setCols.map(c => `${c} = @${c}`).join(', ')} WHERE id = @id`).run(row);
     }
-    res.json(quoteRowById(id));
+    res.json(applyCostVisibility(quoteRowById(id), res.req && res.req.user));
   }
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -533,11 +586,12 @@ module.exports = function registerEntities(app, db, deps) {
       return requireAuth(req, res, () => res.status(405).json({ error: 'read-only' }));
     }
     if (name === 'Quote') {
-      // Restricted to a single named account, not the whole admin role — by
-      // explicit request, so quote deletion isn't something every manager
-      // account can do, only this one.
+      // Still deliberately narrower than the admin role — but driven by a
+      // grantable permission rather than a username literal, so renaming the
+      // account can't silently hand the capability to someone else (or take
+      // it away from its owner). See QUOTE_DELETE_LEGACY_USERNAME above.
       return requireAuth(req, res, () => {
-        if (req.user.username !== QUOTE_DELETE_USERNAME) {
+        if (!req.user.can_delete_quotes) {
           return res.status(403).json({ error: 'forbidden' });
         }
         db.prepare(`DELETE FROM signshop_quotes WHERE id = ?`).run(id);

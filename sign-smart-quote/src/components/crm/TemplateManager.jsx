@@ -24,7 +24,7 @@ export default function TemplateManager() {
   const [editing, setEditing] = useState(null); // {id?, name, body}
   const [saving, setSaving] = useState(false);
 
-  const canWrite = user?.role === "admin" || !!user?.can_send_campaigns;
+  const canWrite = user?.role === "admin" || !!user?.canSendCampaigns;
 
   const load = useCallback(async () => {
     setLoading(true);
