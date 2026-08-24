@@ -151,6 +151,43 @@ export default function MondaySyncSection() {
     }
   };
 
+  // "Start the CRM from today". Kept visually and behaviourally apart from
+  // everything else here: it deletes rows rather than syncing them, and the
+  // only safe version of that is preview → explicit typed confirmation.
+  const [reset, setReset] = useState(null);
+  const [resetBusy, setResetBusy] = useState(false);
+  const [resetConfirm, setResetConfirm] = useState("");
+
+  const previewReset = async () => {
+    setResetBusy(true);
+    setResetConfirm("");
+    try {
+      setReset(await mondaySync.leadResetPreview());
+    } catch (err) {
+      toast.error(err.message || "בדיקת הניקוי נכשלה");
+    } finally {
+      setResetBusy(false);
+    }
+  };
+
+  const applyReset = async () => {
+    setResetBusy(true);
+    try {
+      const r = await mondaySync.leadResetApply(reset.doomed);
+      toast.success(`${r.deleted} לידים נמחקו · גיבוי נשמר בשרת`, { duration: 12000 });
+      setReset(null);
+      setResetConfirm("");
+      load();
+    } catch (err) {
+      toast.error(err.message || "הניקוי נכשל");
+      // The server refuses a count that no longer matches — re-read so the
+      // screen shows the truth instead of the number the admin just typed.
+      previewReset();
+    } finally {
+      setResetBusy(false);
+    }
+  };
+
   const pullNow = async (id) => {
     try {
       const r = await mondaySync.pullNow(id);
@@ -359,6 +396,98 @@ export default function MondaySyncSection() {
                   בצע עדכון ל-{backfill.matched} לידים
                 </Button>
                 <Button variant="ghost" onClick={() => setBackfill(null)}>ביטול</Button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Destructive. Red rather than amber, and placed last, because unlike
+          everything above it this REMOVES data instead of reconciling it. */}
+      <div className="rounded-xl border-2 border-red-300 bg-red-50/40 p-4 space-y-3">
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-red-800">התחלה מהיום — ניקוי היסטוריית לידים</div>
+            <p className="text-xs text-slate-600 mt-0.5 max-w-2xl">
+              מוחק לידים שנמשכו ממנדיי מבורדים שכבר אינם מחוברים. הם אינם קיימים בשום בורד, אי אפשר
+              לסנכרן או לתקן אותם, והם מעוותים כל ספירה ואחוז סגירה במסכי האנליטיקה.
+              <strong className="text-red-800"> נשארים: </strong>
+              הלידים מהבורד המחובר, וכל ליד שנוצר במערכת עצמה (ווצאפ נכנס או ידני).
+              הצעות מחיר והזמנות אינן מושפעות כלל. גיבוי מלא נשמר בשרת לפני המחיקה.
+            </p>
+          </div>
+          <Button variant="outline" onClick={previewReset} disabled={resetBusy} className="gap-2 shrink-0">
+            {resetBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+            בדוק מה יימחק
+          </Button>
+        </div>
+
+        {reset && (
+          <div className="rounded-lg border border-red-300 bg-white p-3 space-y-3 text-xs">
+            <div className="font-semibold text-slate-800">
+              {reset.doomed} לידים יימחקו · {reset.kept} יישארו (מתוך {reset.total})
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <p className="font-semibold text-red-800 mb-1">יימחקו — לפי סטטוס</p>
+                {reset.byStatus.length === 0 ? (
+                  <p className="text-slate-400">אין מה למחוק</p>
+                ) : (
+                  <ul className="space-y-0.5">
+                    {reset.byStatus.map((b) => (
+                      <li key={b.status} className="flex items-center gap-2">
+                        <span className={`px-2 py-0.5 rounded-full border ${STATUS_TONE[b.status] || ""}`}>
+                          {STATUS_LABELS[b.status] || b.status}
+                        </span>
+                        <span className="text-slate-500">{b.n}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div>
+                <p className="font-semibold text-emerald-800 mb-1">יישארו</p>
+                <ul className="space-y-0.5 text-slate-600">
+                  <li>{reset.keptOnBoard} מהבורד המחובר</li>
+                  {reset.keptNonMonday.map((k) => (
+                    <li key={k.source}>{k.n} שנוצרו במערכת ({k.source})</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+
+            {reset.conversationsAffected > 0 && (
+              <p className="text-slate-500">
+                {reset.conversationsAffected} שיחות ווצאפ מקושרות ללידים האלה — השיחות עצמן
+                יישמרו במלואן ורק הקישור לליד יוסר.
+              </p>
+            )}
+
+            {reset.doomed > 0 && (
+              <div className="border-t border-red-200 pt-2 space-y-2">
+                <label className="block text-slate-700">
+                  לאישור, הקלד את המספר <strong>{reset.doomed}</strong>:
+                </label>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Input
+                    value={resetConfirm}
+                    onChange={(e) => setResetConfirm(e.target.value)}
+                    placeholder={String(reset.doomed)}
+                    dir="ltr"
+                    className="w-32 bg-background"
+                  />
+                  <Button
+                    variant="destructive"
+                    onClick={applyReset}
+                    disabled={resetBusy || resetConfirm.trim() !== String(reset.doomed)}
+                    className="gap-2"
+                  >
+                    {resetBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                    מחק {reset.doomed} לידים
+                  </Button>
+                  <Button variant="ghost" onClick={() => { setReset(null); setResetConfirm(""); }}>ביטול</Button>
+                </div>
               </div>
             )}
           </div>

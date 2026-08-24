@@ -31,6 +31,13 @@ export const mondaySync = {
   // Retroactive status completion from stored monday snapshots — preview and
   // apply are separate calls so thousands of leads are never changed unseen.
   backfillPreview() { return request('/api/monday-sync/backfill/preview'); },
+  // "Start from today" — deletes monday history whose board is gone. The apply
+  // call echoes back the count the preview showed, so a stale screen cannot
+  // authorise a delete against a different number of rows.
+  leadResetPreview() { return request('/api/crm/lead-reset/preview'); },
+  leadResetApply(confirmCount) {
+    return request('/api/crm/lead-reset', { method: 'POST', body: { confirm_count: confirmCount } });
+  },
   backfillApply() { return request('/api/monday-sync/backfill', { method: 'POST' }); },
   fetchColumns(boardId) { return request(`/api/monday-sync/boards/${boardId}/columns`); },
   createBoardMap(data) { return request('/api/monday-sync/boards', { method: 'POST', body: data }); },

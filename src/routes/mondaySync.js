@@ -6,6 +6,8 @@
 
 const { fetchBoardColumns, pullBoard, pushBoard, logSync } = require('../services/crm/mondaySync');
 const mondayBackfill = require('../services/crm/mondayBackfill');
+const leadReset = require('../services/crm/leadReset');
+const path = require('path');
 
 module.exports = function registerMondaySync(app, db, deps) {
   const { requireAdmin } = deps;
@@ -84,6 +86,37 @@ module.exports = function registerMondaySync(app, db, deps) {
     const result = mondayBackfill.apply(db);
     console.log(`[POST /api/monday-sync/backfill] ${result.updated} lead(s) updated by ${req.user.username}`);
     res.json(result);
+  });
+
+  // ── "Start the CRM from today" ────────────────────────────────────────────
+  // Deletes monday history whose board is no longer connected. Preview and
+  // apply are separate, and apply writes a full JSON backup of every deleted
+  // row before touching anything — foreign keys are on, so the delete itself
+  // is clean, but nothing in SQLite brings the rows back.
+  app.get('/api/crm/lead-reset/preview', requireAdmin, (req, res) => {
+    res.json(leadReset.preview(db));
+  });
+
+  app.post('/api/crm/lead-reset', requireAdmin, (req, res) => {
+    // A destructive bulk action must not be reachable by a stray click or a
+    // replayed request: the caller has to echo back the exact number the
+    // preview showed, so an out-of-date screen can never authorise a delete.
+    const expected = leadReset.preview(db).doomed;
+    const confirmed = parseInt(req.body && req.body.confirm_count, 10);
+    if (confirmed !== expected) {
+      return res.status(409).json({
+        error: `המספר שאושר (${confirmed || 0}) אינו תואם למצב הנוכחי (${expected}). רענן את התצוגה המקדימה ונסה שוב.`,
+        expected,
+      });
+    }
+    try {
+      const result = leadReset.apply(db, { backupDir: path.join(__dirname, '../../backups') });
+      console.log(`[POST /api/crm/lead-reset] ${result.deleted} lead(s) deleted by ${req.user.username}`);
+      res.json(result);
+    } catch (err) {
+      console.error('[POST /api/crm/lead-reset] failed:', err.message);
+      res.status(400).json({ error: err.message });
+    }
   });
 
   app.delete('/api/monday-sync/boards/:id', requireAdmin, (req, res) => {
