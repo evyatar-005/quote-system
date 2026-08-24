@@ -6,8 +6,13 @@ import { leadQueue } from "@/api/leadQueueClient";
 import { toast } from "sonner";
 
 // CRM Phase 5 §7/§8 — the Drive-connected marketing-materials folder, with
-// one-click WhatsApp send. The customer always receives an actual file
-// (sendMediaUpload via the outbox), never a link — see CLAUDE.md.
+// one-click WhatsApp send.
+//
+// Files are still sent as real attachments (sendMediaUpload via the outbox).
+// Folders send their Drive link instead: a folder is a set, so one browsable
+// link beats six separate attachments — and on InforU it's the only thing that
+// works at all for anything but an image, since their chat API carries
+// images/voice only and rejects a PDF outright.
 //
 // Quick links (Instagram, website, catalog, ...) live in the same panel —
 // admin-managed in AdminDashboard's "crm" tab (QuickLinksSection) — since
@@ -43,6 +48,32 @@ export default function DriveMaterialsPanel({ leadId }) {
     try {
       await leadQueue.sendDriveFile(leadId, file.id, file.name);
       toast.success(`${file.name} נשלח ללקוח`);
+    } catch (err) {
+      toast.error(err.message || "השליחה נכשלה");
+    } finally {
+      setSendingId(null);
+    }
+  };
+
+  // Sends the folder's own Drive link as a message, instead of pushing files
+  // one at a time. Two reasons this is the better default:
+  //
+  //  - InforU's chat API carries images and voice only — a PDF comes back
+  //    "Invalid Media Format" no matter how it's sent (their documented limit,
+  //    not ours). A link works for every file type.
+  //  - A folder is usually a set — "פולטי אור מעוצבים" is a catalogue, not one
+  //    picture. Sending six separate attachments to say that is worse for the
+  //    customer than one link they can browse.
+  //
+  // Goes through sendQuickLink, which is just "send this text", so nothing new
+  // is needed server-side. The folder must be inside the shared root, which the
+  // whole materials folder already is.
+  const sendFolder = async (folder) => {
+    setSendingId(`folder-${folder.id}`);
+    try {
+      const url = `https://drive.google.com/drive/folders/${folder.id}`;
+      await leadQueue.sendQuickLink(leadId, `${folder.name}\n${url}`);
+      toast.success(`הקישור ל"${folder.name}" נשלח ללקוח`);
     } catch (err) {
       toast.error(err.message || "השליחה נכשלה");
     } finally {
@@ -104,14 +135,28 @@ export default function DriveMaterialsPanel({ leadId }) {
         ) : (
           files.map((f) =>
             f.isFolder ? (
-              <button
-                key={f.id}
-                onClick={() => openFolder(f.id)}
-                className="w-full text-right flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50 text-sm"
-              >
-                <FolderOpen className="w-4 h-4 text-amber-500 shrink-0" />
-                <span className="truncate">{f.name}</span>
-              </button>
+              <div key={f.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50">
+                {/* The name still opens the folder — sending it is the new
+                    action, not a replacement for browsing into it. */}
+                <button
+                  onClick={() => openFolder(f.id)}
+                  className="text-right flex items-center gap-2 text-sm flex-1 min-w-0"
+                >
+                  <FolderOpen className="w-4 h-4 text-amber-500 shrink-0" />
+                  <span className="truncate">{f.name}</span>
+                </button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-6 text-[11px] gap-1 shrink-0"
+                  title="שולח ללקוח קישור לתיקייה כולה"
+                  disabled={sendingId === `folder-${f.id}`}
+                  onClick={() => sendFolder(f)}
+                >
+                  {sendingId === `folder-${f.id}` ? <Loader2 className="w-3 h-3 animate-spin" /> : <Link2 className="w-3 h-3" />}
+                  שלח קישור
+                </Button>
+              </div>
             ) : (
               <div key={f.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50">
                 {f.mimeType?.startsWith("image/") && f.thumbnailLink ? (
