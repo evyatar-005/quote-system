@@ -181,6 +181,32 @@ module.exports = function registerInforu(app, db, deps) {
         messageCount: messages.length,
         inbound: messages.filter(m => m.Direction === 'Incoming').length,
         outbound: messages.filter(m => m.Direction === 'Outgoing').length,
+        // The first run reported 335 messages but 150 Outgoing + 0 Incoming,
+        // so 185 carry a Direction this code doesn't recognise — and those are
+        // very likely the inbound ones under a different spelling. Never guess
+        // the vocabulary: report exactly which values the account actually
+        // returns, with counts, and filter on the real ones.
+        directions: Object.entries(
+          messages.reduce((acc, m) => {
+            const k = m.Direction === undefined ? '(undefined)' : String(m.Direction);
+            acc[k] = (acc[k] || 0) + 1;
+            return acc;
+          }, {})
+        ).map(([value, count]) => ({ value, count })),
+        // A sample from each direction bucket, so the non-Outgoing ones can be
+        // read directly rather than inferred from their label.
+        samplePerDirection: Object.values(
+          messages.reduce((acc, m) => {
+            const k = String(m.Direction);
+            if (!acc[k]) {
+              acc[k] = {
+                direction: k, at: m.TimeSent, phone: m.PhoneNumber,
+                text: (m.MessageText || '').slice(0, 120), id: m.WhatsAppMessageId,
+              };
+            }
+            return acc;
+          }, {})
+        ),
         // A small sample rather than the whole payload: enough to confirm the
         // shape and see real text, without dumping every conversation.
         sample: messages.slice(0, 5).map(m => ({

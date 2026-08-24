@@ -278,6 +278,17 @@ export default function InforuSettingsSection() {
                         <div className={chatsResult.messageCount > 0 ? "text-emerald-700" : "text-amber-700"}>
                           {chatsResult.messageCount > 0 ? "✓" : "⚠"} התקבלו {chatsResult.chatCount} שיחות ·{" "}
                           {chatsResult.messageCount} הודעות ({chatsResult.inbound} נכנסות, {chatsResult.outbound} יוצאות)
+                          {chatsResult.directions?.length > 0 && (
+                            <div className="mt-1 text-slate-600">
+                              ערכי Direction בפועל:{" "}
+                              {chatsResult.directions.map(d => `${d.value}=${d.count}`).join(" · ")}
+                            </div>
+                          )}
+                          {chatsResult.samplePerDirection?.length > 0 && (
+                            <pre className="mt-1 bg-white border border-slate-200 rounded p-2 overflow-auto max-h-40 text-[10px] whitespace-pre-wrap" dir="ltr">
+                              {chatsResult.samplePerDirection.map(s => `[${s.direction}] ${s.at} ${s.phone}: ${s.text}`).join("\n")}
+                            </pre>
+                          )}
                           {chatsResult.sample?.length > 0 && (
                             <pre className="mt-1 bg-white border border-slate-200 rounded p-2 overflow-auto max-h-52 text-[10px] whitespace-pre-wrap" dir="ltr">
                               {chatsResult.sample.map(s => `${s.at} ${s.direction} ${s.phone}: ${s.text}`).join("\n")}
