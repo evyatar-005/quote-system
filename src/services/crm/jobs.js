@@ -415,6 +415,17 @@ async function mondayPollerTick(db) {
 }
 
 async function mondayPusherTick(db) {
+  // Gated on the SAME setting as the poller. The admin toggle is labelled
+  // "סנכרון אוטומטי" and states that turning it off still allows pulling and
+  // pushing manually — but only the poller ever honoured it, so the pusher
+  // kept writing to monday every tick with the switch off. That is dangerous
+  // while an admin is editing the status mapping: pushing is one-to-one, so
+  // it rewrites every item whose lead status is mapped, collapsing distinct
+  // board labels onto the canonical one. Turning the switch off must actually
+  // stop automatic writes to someone else's board.
+  const settings = db.prepare(`SELECT monday_poll_enabled FROM crm_settings WHERE id = 1`).get();
+  if (!settings || !settings.monday_poll_enabled) return;
+
   const boards = db.prepare(`SELECT * FROM monday_board_map WHERE push_enabled = 1 AND status_column_id IS NOT NULL`).all();
   for (const board of boards) {
     try {
