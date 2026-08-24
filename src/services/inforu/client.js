@@ -116,6 +116,27 @@ async function uploadFile(db, { fileBuffer, contentType, fileName, expirationInM
   return (data && (data.FileUid || data.MediaFileUid || data.Uid)) || null;
 }
 
+// Reads the CHAT store — the same conversations the InforU web UI shows —
+// rather than the PullData queue. Three things make it fundamentally better
+// for us than the pull:
+//   1. NOT destructive. Nothing is consumed, so it is safe to call from a dev
+//      machine, and two instances can't steal each other's messages.
+//   2. Returns BOTH directions. The pull only ever exposed inbound, so a reply
+//      an agent sent from InforU's own UI was invisible to us.
+//   3. Has real history. FromDateTime reaches backwards, so existing
+//      conversations can be imported, not just messages arriving from now on.
+// Every message carries WhatsAppMessageId — a stable id the pull never had,
+// which is what makes repeated syncing idempotent.
+async function getWhatsAppChats(db, { fromDateTime, toDateTime, phoneNumbers, lastMessageDatetime, chatId }) {
+  return call(db, '/api/v2/WhatsApp/GetWhatsAppChats', {
+    FromDateTime: fromDateTime,
+    ...(toDateTime ? { ToDateTime: toDateTime } : {}),
+    ...(lastMessageDatetime ? { LastMessageDatetime: lastMessageDatetime } : {}),
+    ...(chatId ? { ChatId: chatId } : {}),
+    ...(phoneNumbers && phoneNumbers.length ? { PhoneNumbers: phoneNumbers } : {}),
+  });
+}
+
 // DESTRUCTIVE READ: whatever comes back is deleted from InforU's queue. The
 // caller must persist the raw response before parsing it.
 async function pullData(db, { type, batchSize = 500, phoneNumber }) {
@@ -126,4 +147,4 @@ async function pullData(db, { type, batchSize = 500, phoneNumber }) {
   });
 }
 
-module.exports = { sendChat, sendTemplate, getTemplateList, uploadFile, pullData, DEFAULT_BASE_URL };
+module.exports = { sendChat, sendTemplate, getTemplateList, uploadFile, pullData, getWhatsAppChats, DEFAULT_BASE_URL };

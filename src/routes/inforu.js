@@ -158,6 +158,41 @@ module.exports = function registerInforu(app, db, deps) {
   // The only way to open a session window for a first end-to-end test —
   // POST /api/whatsapp/test only sends free-form text, which InforU will
   // correctly refuse outside an open window.
+  // Read-only probe of GetWhatsAppChats — the chat store behind InforU's own
+  // web UI, as opposed to the PullData queue that has returned an empty list
+  // 8,276 times. Safe to call repeatedly: unlike the pull it consumes nothing.
+  // Exists as its own endpoint so the question "can we read the messages that
+  // are visibly sitting in their chat?" can be answered from the admin screen
+  // in one click, before any of it is wired into the inbox.
+  app.post('/api/inforu/test-chats', requireAdmin, async (req, res) => {
+    const days = Math.min(Math.max(parseInt(req.body?.days, 10) || 7, 1), 90);
+    const from = new Date(Date.now() - days * 86400000).toISOString().slice(0, 19).replace('T', ' ');
+    try {
+      const data = await client.getWhatsAppChats(db, {
+        fromDateTime: from,
+        ...(req.body?.phone ? { phoneNumbers: [String(req.body.phone)] } : {}),
+      });
+      const results = (data && data.Results) || [];
+      const messages = results.flatMap(r => r.Messages || []);
+      res.json({
+        ok: true,
+        from,
+        chatCount: results.length,
+        messageCount: messages.length,
+        inbound: messages.filter(m => m.Direction === 'Incoming').length,
+        outbound: messages.filter(m => m.Direction === 'Outgoing').length,
+        // A small sample rather than the whole payload: enough to confirm the
+        // shape and see real text, without dumping every conversation.
+        sample: messages.slice(0, 5).map(m => ({
+          at: m.TimeSent, phone: m.PhoneNumber, direction: m.Direction,
+          text: (m.MessageText || '').slice(0, 120), id: m.WhatsAppMessageId,
+        })),
+      });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message, from });
+    }
+  });
+
   app.post('/api/inforu/test-template', requireAdmin, async (req, res) => {
     const { to, templateId, parameters } = req.body || {};
     if (!to || !templateId) return res.status(400).json({ error: 'to and templateId required' });

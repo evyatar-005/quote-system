@@ -56,6 +56,11 @@ export async function listInforuTemplates() {
   return request('/api/inforu/templates');
 }
 
+/** Read-only probe of GetWhatsAppChats — the store behind InforU's own chat UI. */
+export async function testInforuChats({ days, phone } = {}) {
+  return request('/api/inforu/test-chats', { method: 'POST', body: { days, phone } });
+}
+
 /** Sends an approved template — the only way to open a 24h session window. */
 export async function sendTestTemplate({ to, templateId, parameters }) {
   return request('/api/inforu/test-template', { method: 'POST', body: { to, templateId, parameters } });

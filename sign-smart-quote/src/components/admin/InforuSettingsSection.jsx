@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Loader2, Save, MessageCircle, Send } from "lucide-react";
 import { toast } from "sonner";
-import { getInforuConfig, saveInforuConfig, listInforuTemplates, sendTestTemplate } from "@/api/inforuClient";
+import { getInforuConfig, saveInforuConfig, listInforuTemplates, sendTestTemplate, testInforuChats } from "@/api/inforuClient";
 import { whatsapp } from "@/api/inboxClient";
 import CostSectionCard from "./CostSectionCard";
 
@@ -25,6 +25,21 @@ export default function InforuSettingsSection() {
   const [pullEnabled, setPullEnabled] = useState(false);
   const [savingPull, setSavingPull] = useState(false);
   const [pullStatus, setPullStatus] = useState(null);
+  const [chatsTesting, setChatsTesting] = useState(false);
+  const [chatsResult, setChatsResult] = useState(null);
+
+  // Non-destructive by nature (GetWhatsAppChats consumes nothing), so this
+  // needs no confirmation and can be re-run freely.
+  const runChatsTest = async () => {
+    setChatsTesting(true);
+    setChatsResult(null);
+    try {
+      setChatsResult(await testInforuChats({ days: 7 }));
+    } catch (err) {
+      setChatsResult({ ok: false, error: err?.message || "הבדיקה נכשלה" });
+    }
+    setChatsTesting(false);
+  };
 
   // Inbound is a background poll, so its state changes without anything on
   // this screen being touched — it has to refresh itself or it shows a stale
@@ -247,6 +262,35 @@ export default function InforuSettingsSection() {
                     {pullStatus.total_items_ever ?? 0} הודעות התקבלו מ-InforU בסך הכל
                   </span>
                 </div>
+                {/* GetWhatsAppChats reads the store behind InforU's own chat
+                    UI — where the messages demonstrably are — instead of the
+                    PullData queue that keeps answering {"Count":0,"List":[]}.
+                    Read-only and non-destructive, so this button is safe to
+                    press as often as you like. */}
+                <div className="pt-1">
+                  <Button size="sm" variant="outline" onClick={runChatsTest} disabled={chatsTesting} className="gap-1.5">
+                    {chatsTesting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MessageCircle className="w-3.5 h-3.5" />}
+                    בדוק קריאת שיחות (7 ימים אחרונים)
+                  </Button>
+                  {chatsResult && (
+                    <div className="mt-2 text-[11px]">
+                      {chatsResult.ok ? (
+                        <div className={chatsResult.messageCount > 0 ? "text-emerald-700" : "text-amber-700"}>
+                          {chatsResult.messageCount > 0 ? "✓" : "⚠"} התקבלו {chatsResult.chatCount} שיחות ·{" "}
+                          {chatsResult.messageCount} הודעות ({chatsResult.inbound} נכנסות, {chatsResult.outbound} יוצאות)
+                          {chatsResult.sample?.length > 0 && (
+                            <pre className="mt-1 bg-white border border-slate-200 rounded p-2 overflow-auto max-h-52 text-[10px] whitespace-pre-wrap" dir="ltr">
+                              {chatsResult.sample.map(s => `${s.at} ${s.direction} ${s.phone}: ${s.text}`).join("\n")}
+                            </pre>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-red-600">⚠ {chatsResult.error}</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 {pullStatus.total_items_ever === 0 && (
                   <div className="text-[11px] text-amber-700">
                     מעולם לא התקבלה אף הודעה. החיבור תקין — כלומר ההודעות של הלקוחות
