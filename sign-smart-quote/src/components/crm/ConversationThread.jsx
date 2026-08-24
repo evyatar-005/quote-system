@@ -57,6 +57,7 @@ function StatusTicks({ status }) {
   if (status === "delivered") return <CheckCheck className="w-3.5 h-3.5" style={{ color: WA.meta }} />;
   if (status === "sent") return <Check className="w-3.5 h-3.5" style={{ color: WA.meta }} />;
   if (status === "failed") return <span className="text-[10px] text-red-500">נכשל</span>;
+  if (status === "queued") return <Clock className="w-3 h-3" style={{ color: WA.meta }} />;
   return <Clock className="w-3 h-3" style={{ color: WA.meta }} />;
 }
 
@@ -485,6 +486,16 @@ export default function ConversationThread({ conversationId, headerExtra, hideLe
                     </a>
                   ) : (
                     <div className="whitespace-pre-wrap break-words text-slate-900 leading-snug">{m.body}</div>
+                  )}
+                  {/* Why it failed, in the bubble. "נכשל" alone told an agent
+                      nothing actionable — the reason (a closed 24h window, an
+                      invalid number, a provider rejection) is already stored on
+                      the row and was rendered nowhere, so every failure meant
+                      asking someone to read the server log. */}
+                  {out && m.status === "failed" && m.error_message && (
+                    <div className="text-[10px] text-red-600 mt-0.5 whitespace-pre-wrap break-words">
+                      {m.error_message}
+                    </div>
                   )}
                   {/* Timestamp + ticks tucked into the bubble's bottom-left,
                       WhatsApp-style. */}

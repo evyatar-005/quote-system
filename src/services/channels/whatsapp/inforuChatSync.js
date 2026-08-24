@@ -131,6 +131,46 @@ async function syncInforuChats(db, { fromDateTime, toDateTime, phoneNumbers } = 
         const dir = directionOf(m);
         const media = mediaOf(m);
 
+        // A message WE sent comes back from InforU too, under a different id —
+        // theirs is WhatsAppMessageId, ours is the crm_messages row. Inserting
+        // it blindly duplicated every outbound reply: once as the agent's own
+        // bubble, once labelled "נשלח מממשק InforU".
+        //
+        // sendChat plants crm_messages.id as CustomerMessageId, and
+        // GetWhatsAppChats echoes it back — so it identifies our own row
+        // exactly. Adopt the WhatsApp id onto it instead of creating a second
+        // message, which also means later syncs recognise it by that id.
+        const ours = m.CustomerMessageId && db.prepare(
+          `SELECT id, provider_message_id FROM crm_messages WHERE id = ?`
+        ).get(Number(m.CustomerMessageId));
+        if (ours) {
+          if (!ours.provider_message_id) {
+            db.prepare(`UPDATE crm_messages SET provider_message_id = ?, provider = 'inforu' WHERE id = ?`)
+              .run(String(m.WhatsAppMessageId), ours.id);
+          }
+          touched.add(conversationId);
+          continue;
+        }
+
+        // Fallback for sends made before CustomerMessageId was echoed, and for
+        // any provider that drops it: same conversation, same direction, same
+        // text, within two minutes, and already attributed to an agent. Narrow
+        // enough that it can't collapse two genuinely different messages.
+        if (dir === 'out' && m.MessageText) {
+          const dup = db.prepare(
+            `SELECT id FROM crm_messages
+              WHERE conversation_id = ? AND direction = 'out' AND sent_by IS NOT NULL
+                AND body = ? AND ABS(strftime('%s', created_at) - strftime('%s', ?)) <= 120
+              LIMIT 1`
+          ).get(conversationId, m.MessageText, inforuTs(m.TimeSent));
+          if (dup) {
+            db.prepare(`UPDATE crm_messages SET provider_message_id = COALESCE(provider_message_id, ?) WHERE id = ?`)
+              .run(String(m.WhatsAppMessageId), dup.id);
+            touched.add(conversationId);
+            continue;
+          }
+        }
+
         const { changes } = insertMessage.run({
           conversation_id: conversationId,
           direction: dir,
