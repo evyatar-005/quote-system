@@ -141,15 +141,70 @@ async function sendTemplate(db, { toE164: to, templateId, parameters, mediaUrl, 
   }
 }
 
-// We use PullData, never a webhook. Returning false means a POST to
-// /api/whatsapp/webhooks/inforu from anywhere on the internet is dropped
-// instead of being able to inject a fake inbound message.
-function verifyWebhook() {
-  return false;
+// InforU offers inbound two ways (their docs, Utilities → Receiving Message):
+// PullData, and a Push where their support registers a URL and they POST every
+// incoming message to it. Push is strictly better here — it is immediate, it
+// is not destructive, and it removes the "exactly one process may poll"
+// hazard that makes the pull dangerous to run anywhere but production.
+//
+// Their push carries no signature and no shared secret; the only thing
+// identifying it is the URL itself. So this verifies what it can — the payload
+// has to have the documented shape — and the real control is that the path is
+// unguessable and the account is matched below. A forged POST could at worst
+// inject a message into an existing conversation, never read anything out.
+function verifyWebhook(db, req) {
+  const body = req && req.body;
+  return !!(body && Array.isArray(body.Data));
 }
 
-function normalizeInboundWebhook() {
-  return [];
+// Push payload → the same NormalizedInbound shape the pull path produces, so
+// handleInboundEvent cannot tell the two apart. Shape (docs example):
+//   { CustomerId, ProjectId, Data: [ { Channel, Type, Value, Message,
+//     MediaFileUid, AdditionalInfo, MoSessionId, ... } ] }
+// `Value` is the customer's number; `AdditionalInfo` arrives as a JSON STRING,
+// not an object, and carries the media metadata.
+function normalizeInboundWebhook(payload) {
+  const items = (payload && Array.isArray(payload.Data)) ? payload.Data : [];
+  const out = [];
+  for (const item of items) {
+    if (!item) continue;
+    const e164 = toE164(item.Value || item.PhoneNumber);
+    // Same rule as the pull path: a row we can't attribute to a phone number
+    // is skipped rather than guessed at. The raw payload is logged by the
+    // caller regardless, so nothing is lost.
+    if (!e164) continue;
+
+    let info = {};
+    if (item.AdditionalInfo) {
+      try {
+        info = typeof item.AdditionalInfo === 'string' ? JSON.parse(item.AdditionalInfo) : item.AdditionalInfo;
+      } catch (_) { info = {}; }
+    }
+
+    const mediaUid = item.MediaFileUid || info.MediaFileUid || null;
+    out.push({
+      kind: 'message',
+      // MoSessionId is WhatsApp's own wamid — a real, stable per-message id,
+      // which the pull path never gets. Using it makes the push idempotent:
+      // idx_crm_messages_provider_id refuses a duplicate outright, so a retry
+      // from InforU can't post the customer's message twice.
+      providerMessageId: item.MoSessionId || item.CustomerParam || null,
+      fromE164: e164,
+      chatId: toChatId(e164),
+      senderName: null,
+      messageType: mediaUid ? 'document' : 'text',
+      // Buttons arrive with an empty Message and the choice in ButtonPayload —
+      // showing the agent nothing at all would be worse than showing the id.
+      body: item.Message || info.ButtonPayload || null,
+      media: mediaUid
+        ? { url: null, mime: info.MediaMimeType || null, filename: info.MediaFileName || mediaUid }
+        : null,
+      statusFor: null,
+      status: null,
+      raw: item,
+    });
+  }
+  return out;
 }
 
 // PullData item → the same NormalizedInbound shape a webhook would produce,

@@ -66,6 +66,20 @@ module.exports = function registerWhatsapp(app, db, deps) {
           console.error(`[whatsapp webhook] ${providerName}: signature/token verification failed`);
           return;
         }
+        // Persist the raw payload BEFORE parsing, exactly like the InforU pull
+        // does — a bug in normalizeInboundWebhook must never be able to lose a
+        // customer's message, and unlike a pull there is no queue left holding
+        // a copy. Also the only way to see a payload whose shape we guessed
+        // wrong: a push that parses to zero events is otherwise invisible.
+        if (providerName === 'inforu') {
+          try {
+            const events = (req.body && Array.isArray(req.body.Data)) ? req.body.Data.length : 0;
+            db.prepare(`INSERT INTO inforu_pull_log (pull_type, raw_json, item_count) VALUES (?, ?, ?)`)
+              .run('PushIncomingWhatsapp', JSON.stringify(req.body || {}), events);
+          } catch (err) {
+            console.error('[whatsapp webhook] inforu: could not log raw push payload:', err.message);
+          }
+        }
         const events = provider.normalizeInboundWebhook(req.body, req.headers) || [];
         for (const event of events) {
           const result = handleInboundEvent(db, providerName, event);
