@@ -280,6 +280,10 @@ async function waQueueDrainerTick(db) {
       result = await provider.sendMediaUpload(db, {
         toE164: row.to_e164, fileBuffer: file.buffer, mimeType: file.mimeType,
         filename: payload.filename || file.filename, caption: payload.caption, messageId: row.message_id,
+        // InforU can't take bytes — it fetches a URL itself — so it needs the
+        // Drive id to build the link-shared file's public URL. GreenAPI ignores
+        // this and uploads the buffer as before.
+        driveFileId: payload.driveFileId,
       });
       if (result.ok && result.urlFile && row.message_id) {
         // Internal only — the URL never reaches the customer, it just lets

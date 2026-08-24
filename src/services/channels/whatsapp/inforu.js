@@ -109,30 +109,35 @@ async function sendMedia(db, { toE164: to, url, filename, caption, messageId }) 
   }
 }
 
-// The Drive-materials path: we hold the file's bytes, not a public URL.
+// The Drive-materials path. GreenAPI takes the file's bytes and uploads them;
+// InforU cannot — SendWhatsAppChat accepts only `MessageMedia`, a URL that
+// WhatsApp fetches itself. There is no file-uid parameter on the chat call.
 //
-// SendWhatsAppChat accepts ONLY `MessageMedia`, a link — confirmed against
-// their docs, there is no file-uid parameter on the chat call. So this used to
-// refuse outright, and "חומרי שיווק" simply never sent on InforU.
+// Their own file store looked like the way around that, and isn't: Files/Get
+// is a POST returning base64 behind Basic auth, not something WhatsApp can
+// pull. An earlier version of this built a GET URL for it that could never
+// have worked.
 //
-// The way through is their own file store: POST /api/v2/Files/Upload takes the
-// bytes and hands back a uid, and Utilities → Get File serves that uid over
-// HTTP. That gives us a link to a file InforU is already hosting, which is
-// exactly what MessageMedia wants — no public URL of our own, no exposing the
-// Drive document, and the customer receives a real attachment.
-async function sendMediaUpload(db, { toE164: to, fileBuffer, mimeType, filename, caption, messageId }) {
+// What does work is that the Drive folder is already shared "anyone with the
+// link" (services/google/driveClient.js) — so the file has a public URL
+// already, and handing that to InforU is both simpler and cheaper than
+// round-tripping the bytes through us at all. driveFileId is passed through by
+// the drainer for exactly this.
+async function sendMediaUpload(db, { toE164: to, driveFileId, filename, caption, messageId }) {
   const g = gate(db, to);
   if (g.error) return g.error;
+  if (!driveFileId) {
+    return {
+      ok: false, providerMessageId: null, status: 'failed',
+      error: 'שליחת קובץ ב-InforU מחייבת קובץ מגוגל דרייב (הספק מושך את הקובץ בעצמו מקישור)',
+      retryable: false,
+    };
+  }
+  // uc?export=download is the direct-content URL for a link-shared file; the
+  // /file/d/…/view form returns Drive's HTML viewer, which WhatsApp would
+  // attach as an HTML page instead of the document.
+  const url = `https://drive.google.com/uc?export=download&id=${encodeURIComponent(driveFileId)}`;
   try {
-    // 6h: long enough for WhatsApp to fetch and for a retry, short enough that
-    // a marketing document isn't left served indefinitely.
-    const uid = await client.uploadFile(db, {
-      fileBuffer, contentType: mimeType, fileName: filename, expirationInMinutes: 360,
-    });
-    if (!uid) {
-      return { ok: false, providerMessageId: null, status: 'failed', error: 'העלאת הקובץ ל-InforU לא החזירה מזהה', retryable: true };
-    }
-    const url = client.fileUrl(db, uid);
     await client.sendChat(db, { phone: g.phone, message: caption || filename || '', mediaUrl: url, customerMessageId: messageId });
     // urlFile is echoed back so the drainer can record what was sent on our own
     // timeline — same contract GreenAPI's sendMediaUpload already returns.
