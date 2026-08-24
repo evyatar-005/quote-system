@@ -134,7 +134,27 @@ export default function MondaySyncSection() {
         `${statuses} סטטוסים עודכנו`,
       ];
       if (r.created === 0 && statuses === 0) {
-        toast.success(`${parts.join(", ")} — הכול כבר מסונכרן`);
+        // "0 סטטוסים עודכנו" has several different causes and the admin has no
+        // way to tell them apart from the outside. The server now reports why,
+        // so say it instead of the reassuring-but-useless "הכול כבר מסונכרן".
+        let why = "";
+        if (!r.hasStatusColumn) {
+          why = "לא הוגדרה עמודת סטטוס לבורד";
+        } else if (!r.mappedLabelCount) {
+          why = "אף תווית לא ממופה";
+        } else if (r.unmappedLabels?.length) {
+          const top = r.unmappedLabels.map((u) => `״${u.label}״ (${u.count})`).join(", ");
+          why = `תוויות שאינן ממופות: ${top}`;
+        } else if (r.skippedNotNew) {
+          why = `${r.skippedNotNew} לידים כבר לא בסטטוס ״חדש״ — סטטוס מקומי לא נדרס`;
+        } else if (r.itemsWithoutLead) {
+          why = `${r.itemsWithoutLead} פריטים אינם מקושרים לליד`;
+        } else if (!r.itemsWithLabel) {
+          why = "לאף פריט אין ערך בעמודת הסטטוס";
+        } else {
+          why = "הכול כבר מסונכרן";
+        }
+        toast.success(`${parts.join(", ")} — ${why}`, { duration: 12000 });
       } else {
         toast.success(parts.join(", "));
       }

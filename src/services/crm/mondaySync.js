@@ -248,6 +248,15 @@ async function pullBoard(db, boardMap, ownerUsername) {
 
   let created = 0;
   let statusPulled = 0;
+  // Diagnostics. "0 סטטוסים עודכנו" has several very different causes — a
+  // label nobody mapped, an item never linked to a lead, or a lead an agent
+  // already moved past 'new' (which the update deliberately refuses to touch).
+  // Without these the admin cannot tell which one they are looking at, and
+  // the mapping screen gives no hint either.
+  let itemsWithLabel = 0;
+  let skippedNotNew = 0;
+  let itemsWithoutLead = 0;
+  const unmappedLabels = new Map();
   const tx = db.transaction(() => {
     for (const item of items) {
       const name = columnMap.name ? columnText(item.column_values, columnMap.name) : item.name;
@@ -279,6 +288,11 @@ async function pullBoard(db, boardMap, ownerUsername) {
         // pulled before this column existed — required for queue ordering.
         db.prepare(`UPDATE monday_item_map SET monday_created_at = COALESCE(monday_created_at, ?) WHERE id = ?`)
           .run(mondayTs(item.created_at), existingMap.id);
+        if (boardLabel) {
+          itemsWithLabel += 1;
+          if (!boardStatus) unmappedLabels.set(boardLabel, (unmappedLabels.get(boardLabel) || 0) + 1);
+        }
+        if (!existingMap.lead_id) itemsWithoutLead += 1;
         if (existingMap.lead_id) {
           db.prepare(`UPDATE crm_leads SET source_created_at = COALESCE(source_created_at, ?) WHERE id = ?`)
             .run(mondayTs(item.created_at), existingMap.lead_id);
@@ -290,9 +304,13 @@ async function pullBoard(db, boardMap, ownerUsername) {
           // is the only moment we can see that a lead was progressed on the
           // board. The statement itself refuses to touch anything past 'new'.
           if (boardStatus) {
-            statusPulled += updateStatusFromBoard.run({
+            const changed = updateStatusFromBoard.run({
               id: existingMap.lead_id, status: boardStatus, now: new Date().toISOString(),
             }).changes;
+            statusPulled += changed;
+            // Mapped correctly, but the lead is no longer 'new' — an agent
+            // already decided here, and the board must not overrule that.
+            if (!changed) skippedNotNew += 1;
           }
         }
         continue;
@@ -334,8 +352,20 @@ async function pullBoard(db, boardMap, ownerUsername) {
   });
   tx();
 
-  logSync(db, { direction: 'pull', board_id: boardMap.board_id, success: true, response_json: { itemCount: items.length, created, statusPulled } });
-  return { pulled: items.length, created, statusPulled };
+  const diagnostics = {
+    itemsWithLabel,
+    itemsWithoutLead,
+    skippedNotNew,
+    hasStatusColumn: !!boardMap.status_column_id,
+    mappedLabelCount: statusByLabel.size,
+    // Top offenders only — a board can have dozens of one-off labels and the
+    // point is to name the ones actually costing status updates.
+    unmappedLabels: Array.from(unmappedLabels.entries())
+      .sort((a, b) => b[1] - a[1]).slice(0, 8)
+      .map(([label, count]) => ({ label, count })),
+  };
+  logSync(db, { direction: 'pull', board_id: boardMap.board_id, success: true, response_json: { itemCount: items.length, created, statusPulled, ...diagnostics } });
+  return { pulled: items.length, created, statusPulled, ...diagnostics };
 }
 
 // Pushes any lead whose status changed since it was last written to the
