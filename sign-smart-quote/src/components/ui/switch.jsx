@@ -13,7 +13,14 @@ const Switch = React.forwardRef(({ className, ...props }, ref) => (
     ref={ref}>
     <SwitchPrimitives.Thumb
       className={cn(
-        "pointer-events-none block h-4 w-4 rounded-full bg-background border border-black/20 shadow-lg ring-0 transition-transform data-[state=checked]:translate-x-4 data-[state=unchecked]:translate-x-0"
+        // translate-x is a PHYSICAL direction and this app is RTL: the thumb
+        // already sits at the right edge when off, so translating it further
+        // right on check pushed it out of the track and overflow-hidden clipped
+        // it away entirely. An "on" switch therefore rendered as a plain
+        // coloured pill with no thumb at all, leaving colour as the only
+        // difference between on and off. margin-inline-start is logical, so it
+        // moves the thumb the correct way in both directions.
+        "pointer-events-none block h-4 w-4 rounded-full bg-background border border-black/20 shadow-lg ring-0 transition-[margin] data-[state=checked]:ms-4 data-[state=unchecked]:ms-0"
       )} />
   </SwitchPrimitives.Root>
 ))
