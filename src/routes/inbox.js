@@ -11,6 +11,7 @@ const { isSessionOpen } = require('../services/channels/whatsapp/sessionWindow')
 const { getActiveWhatsApp } = require('../services/channels');
 const { publish, subscribe } = require('../services/crm/realtime');
 const { slotCount, crmSettingsRow } = require('../services/crm/leadClaims');
+const { pickAgentForLead } = require('../services/crm/leadRouting');
 const { drainNow } = require('../services/crm/jobs');
 
 module.exports = function registerInbox(app, db, deps) {
@@ -194,6 +195,41 @@ module.exports = function registerInbox(app, db, deps) {
     ).all(conversation.customer_id));
   });
 
+  // Best-effort starting values for the "צור ליד" form. Everything here is
+  // already-known data (the customer row built from the inbound WhatsApp
+  // message), never a guess: the agent still confirms every field. Splitting
+  // display_name on the first space is the one inference, and only when no
+  // explicit first/last name was ever captured — a WhatsApp profile name is
+  // free text, so the agent is expected to correct it.
+  app.get('/api/inbox/conversations/:id/lead-prefill', requireAuth, (req, res) => {
+    const conversation = db.prepare(`SELECT * FROM crm_conversations WHERE id = ?`).get(req.params.id);
+    if (!conversation) return res.status(404).json({ error: 'שיחה לא נמצאה' });
+
+    const customer = conversation.customer_id
+      ? db.prepare(`SELECT * FROM customers WHERE id = ?`).get(conversation.customer_id)
+      : null;
+
+    let firstName = customer?.first_name || '';
+    let lastName = customer?.last_name || '';
+    if (!firstName && !lastName && customer?.display_name) {
+      const parts = String(customer.display_name).trim().split(/\s+/);
+      firstName = parts.shift() || '';
+      lastName = parts.join(' ');
+    }
+
+    res.json({
+      first_name: firstName,
+      last_name: lastName,
+      // The phone is the one field that is genuinely authoritative here — it
+      // is the chat's own identity, normalized on inbound.
+      phone: customer?.phone_e164 || (conversation.chat_id ? fromChatId(conversation.chat_id) : '') || '',
+      email: customer?.email || '',
+      company: customer?.company || '',
+      address: customer?.address || '',
+      vat_id: customer?.vat_id || '',
+    });
+  });
+
   // Empty body creates a new lead; { lead_id } links an existing one.
   app.post('/api/inbox/conversations/:id/lead', requireAuth, (req, res) => {
     const id = parseInt(req.params.id, 10);
@@ -229,16 +265,71 @@ module.exports = function registerInbox(app, db, deps) {
         return res.json({ lead, conversation: conversationWithLock(id) });
       }
 
+      // Details the agent must capture before a lead exists at all. These are
+      // the same fields a quote needs, so the lead can become a quote later
+      // without chasing the customer again. Email is deliberately NOT
+      // required — it is almost never knowable from WhatsApp, and blocking on
+      // it would just stop real leads being recorded; the lead is flagged
+      // instead (see missing_details below).
+      const body = req.body || {};
+      const str = (v) => (v == null ? '' : String(v).trim());
+      const firstName = str(body.first_name);
+      const lastName = str(body.last_name);
+      const phone = str(body.phone);
+      const email = str(body.email);
+      const missingFields = [];
+      if (!firstName) missingFields.push('שם פרטי');
+      if (!lastName) missingFields.push('שם משפחה');
+      if (!phone) missingFields.push('טלפון');
+      if (missingFields.length) {
+        return res.status(400).json({ error: `חסרים פרטי חובה: ${missingFields.join(', ')}`, code: 'missing_required' });
+      }
+
       const settings = crmSettingsRow(db);
       const maxClaimed = settings.max_claimed_leads || 4;
       const ttlHours = settings.lead_claim_ttl_hours || 0;
 
+      // Who should actually own this lead — an agent working right now with
+      // the most room, or nobody (the pool). Resolved BEFORE the transaction:
+      // it only reads, and db.transaction() bodies here are strictly
+      // synchronous critical sections (see leadClaims.js).
+      const assignee = pickAgentForLead(db);
+
       const tx = db.transaction(() => {
-        // POST /api/crm/leads has no slot check — without this, "create lead"
-        // would be an unlimited back door around the queue's per-agent cap.
-        if (slotCount(db, me) >= maxClaimed) {
+        // A slot check still applies, but only when the lead is actually
+        // being given to somebody. pickAgentForLead already respects the cap;
+        // this is the belt-and-braces re-check inside the transaction, and it
+        // is what stops "create lead" being an unlimited back door around the
+        // queue's per-agent cap.
+        if (assignee && slotCount(db, assignee) >= maxClaimed) {
           throw Object.assign(new Error(`הגעת למקסימום ${maxClaimed} לידים במקביל`), { status: 409, code: 'slot_limit' });
         }
+
+        // The customer row was created from an inbound message and carries
+        // little more than a phone number — write back what the agent just
+        // confirmed. COALESCE-style guarding is deliberately NOT used: the
+        // agent's typed value is the corrected one and must win.
+        db.prepare(
+          `UPDATE customers
+              SET first_name = @first_name,
+                  last_name  = @last_name,
+                  display_name = @display_name,
+                  email    = COALESCE(NULLIF(@email, ''), email),
+                  company  = COALESCE(NULLIF(@company, ''), company),
+                  address  = COALESCE(NULLIF(@address, ''), address),
+                  vat_id   = COALESCE(NULLIF(@vat_id, ''), vat_id),
+                  updated_at = CURRENT_TIMESTAMP
+            WHERE id = @id`
+        ).run({
+          id: conversation.customer_id,
+          first_name: firstName,
+          last_name: lastName,
+          display_name: `${firstName} ${lastName}`.trim(),
+          email,
+          company: str(body.company),
+          address: str(body.address),
+          vat_id: str(body.vat_id),
+        });
         const lastIn = db.prepare(
           `SELECT body FROM crm_messages WHERE conversation_id = ? AND direction = 'in' ORDER BY id DESC LIMIT 1`
         ).get(id);
@@ -249,30 +340,48 @@ module.exports = function registerInbox(app, db, deps) {
         // and corrupt every funnel number. source distinguishes these from
         // monday-synced and manually-typed leads, which is the whole reason
         // auto-creation was rejected.
+        // assigned_to may be NULL — that is the "goes to the pool" outcome,
+        // and it is what makes the lead visible to the existing "משוך ליד"
+        // queue (which only offers leads with no owner).
         const leadId = db.prepare(
           `INSERT INTO crm_leads (customer_id, campaign_id, source, status, title, assigned_to)
            VALUES (?, NULL, 'whatsapp_inbound', 'new', ?, ?)`
-        ).run(conversation.customer_id, title, me).lastInsertRowid;
+        ).run(conversation.customer_id, title, assignee).lastInsertRowid;
 
-        const expiresAt = ttlHours > 0 ? new Date(Date.now() + ttlHours * 3600e3).toISOString() : null;
-        db.prepare(`INSERT INTO crm_lead_claims (lead_id, username, acquired_at, expires_at) VALUES (?, ?, CURRENT_TIMESTAMP, ?)`)
-          .run(leadId, me, expiresAt);
-        db.prepare(`INSERT INTO crm_lead_handling (lead_id, username, started_at) VALUES (?, ?, CURRENT_TIMESTAMP)`)
-          .run(leadId, me);
+        // A claim/handling row only makes sense for a lead someone actually
+        // owns. A pooled lead must stay unclaimed or the pull-queue would
+        // never offer it to anyone.
+        if (assignee) {
+          const expiresAt = ttlHours > 0 ? new Date(Date.now() + ttlHours * 3600e3).toISOString() : null;
+          db.prepare(`INSERT INTO crm_lead_claims (lead_id, username, acquired_at, expires_at) VALUES (?, ?, CURRENT_TIMESTAMP, ?)`)
+            .run(leadId, assignee, expiresAt);
+          db.prepare(`INSERT INTO crm_lead_handling (lead_id, username, started_at) VALUES (?, ?, CURRENT_TIMESTAMP)`)
+            .run(leadId, assignee);
+        }
+
+        const routedNote = assignee
+          ? `ליד נוצר משיחת ווצאפ ושויך אוטומטית ל-${assignee}`
+          : 'ליד נוצר משיחת ווצאפ ונכנס לבריכת הלידים';
         db.prepare(
           `INSERT INTO crm_activity_log (customer_id, lead_id, type, summary, actor)
-           VALUES (?, ?, 'note', 'ליד נוצר משיחת ווצאפ', ?)`
-        ).run(conversation.customer_id, leadId, me);
+           VALUES (?, ?, 'note', ?, ?)`
+        ).run(conversation.customer_id, leadId, routedNote, me);
         db.prepare(`UPDATE crm_conversations SET lead_id = ?, assigned_to = COALESCE(assigned_to, ?) WHERE id = ?`)
-          .run(leadId, me, id);
+          .run(leadId, assignee || me, id);
         return leadId;
       });
 
       const leadId = tx();
       publish('conversation.updated', { conversationId: id });
+      // Derived, never stored: "missing details" must stop being true the
+      // moment someone fills the email in, and a stored flag would go stale
+      // the first time a customer is edited from any other screen.
+      const customer = db.prepare(`SELECT email FROM customers WHERE id = ?`).get(conversation.customer_id);
       res.status(201).json({
         lead: db.prepare(`SELECT * FROM crm_leads WHERE id = ?`).get(leadId),
         conversation: conversationWithLock(id),
+        assigned_to: assignee,
+        missing_details: !(customer && customer.email),
       });
     } catch (err) {
       res.status(err.status || 400).json({ error: err.message, code: err.code });

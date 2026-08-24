@@ -174,6 +174,20 @@ try { db.exec('ALTER TABLE signshop_lokobond_area_tiers ADD COLUMN agent_min_pri
 // leaked/guessed default password can't be used past the first real login.
 try { db.exec('ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0'); } catch (_) {}
 
+// Presence — last time this user made an authenticated request. Needed by the
+// lead auto-router (services/crm/leadRouting.js): a lead must not be handed to
+// an agent who isn't working right now, and nothing in this system tracked
+// activity at all before. Deliberately derived from ordinary request traffic
+// rather than a dedicated heartbeat: no client change can forget to send it.
+try { db.exec('ALTER TABLE users ADD COLUMN last_seen_at TEXT'); } catch (_) {}
+
+// Split name fields. `display_name` stays the single source for display (and
+// is kept in sync), but a lead created from WhatsApp must capture first and
+// last name separately — a quote form asks for them apart, and splitting a
+// free-text display_name after the fact is guesswork.
+try { db.exec('ALTER TABLE customers ADD COLUMN first_name TEXT'); } catch (_) {}
+try { db.exec('ALTER TABLE customers ADD COLUMN last_name TEXT'); } catch (_) {}
+
 // Lets a daily report schedule skip specific weekdays (e.g. Friday/Saturday,
 // when there's no business activity to report on) — NULL/empty means every
 // day, preserving existing schedules' behavior. See scheduledReports.js.

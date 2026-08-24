@@ -3,6 +3,7 @@ import { Loader2, Lock, Unlock, Send, ShieldAlert, MessagesSquare, Check, CheckC
 import { useAuth } from "@/lib/AuthContext";
 import { inbox } from "@/api/inboxClient";
 import { templates } from "@/api/campaignsClient";
+import NewLeadDialog from "./NewLeadDialog";
 import { listInforuTemplates } from "@/api/inforuClient";
 import { useCrmEvents } from "@/lib/crmRealtime";
 import { Button } from "@/components/ui/button";
@@ -90,6 +91,7 @@ export default function ConversationThread({ conversationId, headerExtra, hideLe
   const [sending, setSending] = useState(false);
   const [leadCandidates, setLeadCandidates] = useState(null); // null = menu closed
   const [creatingLead, setCreatingLead] = useState(false);
+  const [leadFormOpen, setLeadFormOpen] = useState(false); // new-lead details dialog
   const [tpls, setTpls] = useState(null);
   const [tplOpen, setTplOpen] = useState(false);
   const [sendingTemplate, setSendingTemplate] = useState(false);
@@ -186,11 +188,13 @@ export default function ConversationThread({ conversationId, headerExtra, hideLe
   // An inbound message auto-creates a customer but never a lead, so a
   // conversation from an unknown number stays outside the queue and every
   // report until someone presses this. Deliberately manual.
-  const doCreateLead = async (leadId) => {
+  // Linking an existing lead — unchanged one-click path. The lead already
+  // carries its own customer details, so there is nothing to ask for.
+  const doLinkLead = async (leadId) => {
     setCreatingLead(true);
     try {
       await inbox.createLead(conversationId, leadId);
-      toast.success(leadId ? "השיחה שויכה לליד" : "ליד נוצר ושויך לשיחה");
+      toast.success("השיחה שויכה לליד");
       setLeadCandidates(null);
       loadThread(conversationId);
     } catch (err) {
@@ -200,13 +204,40 @@ export default function ConversationThread({ conversationId, headerExtra, hideLe
     }
   };
 
+  // A brand-new lead needs the customer details a quote is built from, so it
+  // goes through NewLeadDialog first — the server rejects a create without
+  // first/last name and phone.
+  const doCreateLead = async (details) => {
+    setCreatingLead(true);
+    try {
+      const res = await inbox.createLead(conversationId, null, details);
+      // Routing is the one thing the agent can't see from this panel: the lead
+      // may have gone to a specific agent or straight to the pool. Say which,
+      // and whether it landed flagged as incomplete (e.g. no email).
+      const where = res?.assigned_to ? `הליד שויך ל${res.assigned_to}` : "הליד נכנס לבריכת הלידים";
+      toast.success(res?.missing_details ? `${where} — מסומן כחסרים פרטים` : where);
+      setLeadCandidates(null);
+      setLeadFormOpen(false);
+      loadThread(conversationId);
+    } catch (err) {
+      // Covers the 409 "already has a lead" case too — the server's Hebrew
+      // message is more specific than anything we could write here. The dialog
+      // stays open so the agent can correct and retry.
+      toast.error(err.message || "הפעולה נכשלה");
+    } finally {
+      setCreatingLead(false);
+    }
+  };
+
   const openLeadMenu = async () => {
     try {
       const rows = await inbox.leadCandidates(conversationId);
-      // Nothing to link to — skip the menu entirely and just create.
-      if (!rows.length) return doCreateLead(null);
+      // Nothing to link to — skip the menu entirely and go straight to the form.
+      if (!rows.length) return setLeadFormOpen(true);
       setLeadCandidates(rows);
     } catch (err) {
+      // Losing the candidate list shouldn't block lead creation; fall through
+      // to the create form, which is the common case anyway.
       toast.error(err.message || "טעינת הלידים נכשלה");
     }
   };
@@ -348,7 +379,7 @@ export default function ConversationThread({ conversationId, headerExtra, hideLe
                       <button
                         key={l.id}
                         type="button"
-                        onClick={() => doCreateLead(l.id)}
+                        onClick={() => doLinkLead(l.id)}
                         className="w-full text-right text-xs py-1.5 px-1 hover:bg-slate-50"
                       >
                         <div className="truncate">{l.title || `ליד #${l.id}`}</div>
@@ -356,13 +387,23 @@ export default function ConversationThread({ conversationId, headerExtra, hideLe
                       </button>
                     ))}
                   </div>
-                  <button type="button" onClick={() => doCreateLead(null)} className="w-full text-xs text-primary font-medium pt-2 mt-1 border-t border-slate-200 hover:underline">
+                  <button type="button" onClick={() => { setLeadCandidates(null); setLeadFormOpen(true); }} className="w-full text-xs text-primary font-medium pt-2 mt-1 border-t border-slate-200 hover:underline">
                     צור ליד חדש בכל זאת
                   </button>
                   <button type="button" onClick={() => setLeadCandidates(null)} className="w-full text-[11px] pt-1" style={{ color: WA.meta }}>
                     ביטול
                   </button>
                 </div>
+              )}
+              {/* Rendered here but positioned `fixed` — the thread root is
+                  overflow-hidden and would clip an in-flow dialog. */}
+              {leadFormOpen && (
+                <NewLeadDialog
+                  conversationId={conversationId}
+                  submitting={creatingLead}
+                  onCancel={() => setLeadFormOpen(false)}
+                  onSubmit={doCreateLead}
+                />
               )}
             </div>
           )}

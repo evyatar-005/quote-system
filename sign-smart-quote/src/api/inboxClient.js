@@ -54,8 +54,17 @@ export const inbox = {
   leadCandidates(id) {
     return request(`/api/inbox/conversations/${id}/lead-candidates`);
   },
-  createLead(id, leadId) {
-    return request(`/api/inbox/conversations/${id}/lead`, { method: 'POST', body: leadId ? { lead_id: leadId } : {} });
+  // Best-effort suggestion for the new-lead form — whatever the customer row
+  // behind the conversation already knows. Every field may come back null.
+  leadPrefill(id) {
+    return request(`/api/inbox/conversations/${id}/lead-prefill`);
+  },
+  // Two shapes on one route: `{ lead_id }` links an existing lead, while the
+  // customer-details object creates a new one. `details` wins when both are
+  // passed so a caller can't accidentally send an empty create body.
+  createLead(id, leadId, details) {
+    const body = details ? details : (leadId ? { lead_id: leadId } : {});
+    return request(`/api/inbox/conversations/${id}/lead`, { method: 'POST', body });
   },
   sendMessage(id, bodyText) {
     return request(`/api/inbox/conversations/${id}/messages`, { method: 'POST', body: { body: bodyText } });

@@ -101,11 +101,32 @@ module.exports = function registerAuth(app, db) {
     return userById.get(session.user_id) || null;
   }
 
+  // Presence heartbeat, piggy-backed on ordinary authenticated traffic so no
+  // client can forget to send it. Throttled in memory to one write per user
+  // per minute: this runs on EVERY authenticated request, and an unthrottled
+  // UPDATE per request would turn every poll into a disk write. Purely
+  // advisory — used by the lead auto-router to avoid handing a lead to an
+  // agent who isn't working right now; never gates access.
+  const lastSeenWrittenAt = new Map();
+  const PRESENCE_WRITE_INTERVAL_MS = 60 * 1000;
+  function touchPresence(user) {
+    const now = Date.now();
+    const previous = lastSeenWrittenAt.get(user.username) || 0;
+    if (now - previous < PRESENCE_WRITE_INTERVAL_MS) return;
+    lastSeenWrittenAt.set(user.username, now);
+    try {
+      db.prepare(`UPDATE users SET last_seen_at = CURRENT_TIMESTAMP WHERE id = ?`).run(user.id);
+    } catch (err) {
+      console.error('[presence] failed to update last_seen_at:', err.message);
+    }
+  }
+
   // middleware
   function requireAuth(req, res, next) {
     const user = userFromRequest(req);
     if (!user) return res.status(401).json({ error: 'unauthorized' });
     req.user = user;
+    touchPresence(user);
     next();
   }
 
