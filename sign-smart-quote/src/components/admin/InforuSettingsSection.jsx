@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Loader2, Save, MessageCircle, Send } from "lucide-react";
 import { toast } from "sonner";
-import { getInforuConfig, saveInforuConfig, listInforuTemplates, sendTestTemplate, testInforuChats } from "@/api/inforuClient";
+import { getInforuConfig, saveInforuConfig, listInforuTemplates, sendTestTemplate, testInforuChats, importInforuHistory } from "@/api/inforuClient";
 import { whatsapp } from "@/api/inboxClient";
 import CostSectionCard from "./CostSectionCard";
 
@@ -27,6 +27,23 @@ export default function InforuSettingsSection() {
   const [pullStatus, setPullStatus] = useState(null);
   const [chatsTesting, setChatsTesting] = useState(false);
   const [chatsResult, setChatsResult] = useState(null);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState(null);
+
+  const runImport = async () => {
+    setImporting(true);
+    setImportResult(null);
+    try {
+      const r = await importInforuHistory({ days: 30 });
+      setImportResult(r);
+      if (r.imported) toast.success(`יובאו ${r.imported} הודעות לתיבת השיחות`);
+      else toast.info("לא נמצאו הודעות חדשות לייבוא");
+      refreshStatus();
+    } catch (err) {
+      setImportResult({ ok: false, error: err?.message || "הייבוא נכשל" });
+    }
+    setImporting(false);
+  };
 
   // Non-destructive by nature (GetWhatsAppChats consumes nothing), so this
   // needs no confirmation and can be re-run freely.
@@ -272,6 +289,21 @@ export default function InforuSettingsSection() {
                     {chatsTesting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MessageCircle className="w-3.5 h-3.5" />}
                     בדוק קריאת שיחות (7 ימים אחרונים)
                   </Button>
+                  {/* The background sync only looks 30 minutes back, so
+                      anything older than the switch to InforU needs this once.
+                      Re-running is harmless — the import is keyed on
+                      WhatsAppMessageId, so a second pass imports 0. */}
+                  <Button size="sm" variant="outline" onClick={runImport} disabled={importing} className="gap-1.5 mr-2">
+                    {importing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                    ייבא היסטוריה (30 יום) לתיבת השיחות
+                  </Button>
+                  {importResult && (
+                    <div className={`mt-2 text-[11px] ${importResult.ok ? "text-emerald-700" : "text-red-600"}`}>
+                      {importResult.ok
+                        ? `✓ נסרקו ${importResult.messages} הודעות · יובאו ${importResult.imported} חדשות (${importResult.inbound} נכנסות)${importResult.skipped ? ` · ${importResult.skipped} דולגו` : ""}`
+                        : `⚠ ${importResult.error}`}
+                    </div>
+                  )}
                   {chatsResult && (
                     <div className="mt-2 text-[11px]">
                       {chatsResult.ok ? (

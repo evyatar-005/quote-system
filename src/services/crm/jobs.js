@@ -9,6 +9,7 @@ const { publish } = require('./realtime');
 const { downloadFile } = require('../google/driveClient');
 const { DOCUMENT_TYPE } = require('../morning/mappings');
 const inforuClient = require('../inforu/client');
+const { syncInforuChats } = require('../channels/whatsapp/inforuChatSync');
 const { handleInboundEvent } = require('../channels/whatsapp/inbound');
 
 const POLL_TICK_MS = 60 * 1000;
@@ -27,6 +28,41 @@ let nextAllowedBulkSendAt = 0;
 // batch across two ticks and the second could run against a half-written DB.
 // Module-level and in-memory on purpose, same reasoning as nextAllowedBulkSendAt.
 let inforuPulling = false;
+let inforuChatSyncing = false;
+
+// 30s: GetWhatsAppChats is a read over a time window, not a queue drain, so
+// polling it costs the same whether or not anything arrived — no reason to
+// hammer it every 10s the way the pull did.
+const INFORU_CHAT_SYNC_MS = 30 * 1000;
+
+// The window re-read on every tick. Deliberately far wider than the interval:
+// the read is idempotent (OR IGNORE on WhatsAppMessageId), so overlap is free,
+// while a gap would lose messages permanently. Also covers a message InforU
+// records slightly late, and a few minutes of downtime, with no catch-up logic.
+const INFORU_CHAT_SYNC_WINDOW_MIN = 30;
+
+// Reads InforU's CHAT store rather than the PullData queue — see
+// channels/whatsapp/inforuChatSync.js for why the queue was unusable on this
+// account. Gated only on "is InforU the active provider and configured": no
+// opt-in switch, because unlike the pull this consumes nothing, so two
+// instances running it concurrently is harmless rather than destructive.
+async function inforuChatSyncTick(db) {
+  if (inforuChatSyncing) return;
+  const provider = getActiveWhatsApp(db);
+  if (provider.name !== 'inforu' || !provider.isConfigured(db)) return;
+
+  inforuChatSyncing = true;
+  try {
+    const from = new Date(Date.now() - INFORU_CHAT_SYNC_WINDOW_MIN * 60000)
+      .toISOString().slice(0, 19).replace('T', ' ');
+    const r = await syncInforuChats(db, { fromDateTime: from });
+    if (r.imported) {
+      console.log(`[crm jobs] inforuChatSync: imported ${r.imported} message(s), ${r.inbound} inbound`);
+    }
+  } finally {
+    inforuChatSyncing = false;
+  }
+}
 
 function startCrmJobs(db) {
   setInterval(() => {
@@ -43,6 +79,9 @@ function startCrmJobs(db) {
   setInterval(() => {
     inforuPullTick(db).catch(err => console.error('[crm jobs] inforuPull tick failed:', err.message));
   }, INFORU_PULL_TICK_MS);
+  setInterval(() => {
+    inforuChatSyncTick(db).catch(err => console.error('[crm jobs] inforuChatSync tick failed:', err.message));
+  }, INFORU_CHAT_SYNC_MS);
   console.log('[crm jobs] started (monday poller/pusher 60s, wa queue drainer 5s, idle sweeper 60s, inforu pull 10s)');
 }
 

@@ -61,6 +61,11 @@ export async function testInforuChats({ days, phone } = {}) {
   return request('/api/inforu/test-chats', { method: 'POST', body: { days, phone } });
 }
 
+/** One-shot backfill of existing InforU conversations into the CRM. */
+export async function importInforuHistory({ days } = {}) {
+  return request('/api/inforu/import-history', { method: 'POST', body: { days } });
+}
+
 /** Sends an approved template — the only way to open a 24h session window. */
 export async function sendTestTemplate({ to, templateId, parameters }) {
   return request('/api/inforu/test-template', { method: 'POST', body: { to, templateId, parameters } });

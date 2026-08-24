@@ -5,6 +5,7 @@
 // deps: { requireAuth, requireAdmin }
 
 const client = require('../services/inforu/client');
+const { syncInforuChats } = require('../services/channels/whatsapp/inforuChatSync');
 
 module.exports = function registerInforu(app, db, deps) {
   const { requireAuth, requireAdmin } = deps;
@@ -216,6 +217,22 @@ module.exports = function registerInforu(app, db, deps) {
       });
     } catch (err) {
       res.status(400).json({ ok: false, error: err.message, from });
+    }
+  });
+
+  // One-shot backfill of existing conversations. The background tick only ever
+  // looks 30 minutes back, so everything older than the moment InforU became
+  // the active provider needs this once. Safe to re-run over any window: the
+  // import is keyed on WhatsAppMessageId, so a second pass imports 0.
+  app.post('/api/inforu/import-history', requireAdmin, async (req, res) => {
+    const days = Math.min(Math.max(parseInt(req.body?.days, 10) || 30, 1), 365);
+    const from = new Date(Date.now() - days * 86400000).toISOString().slice(0, 19).replace('T', ' ');
+    try {
+      const result = await syncInforuChats(db, { fromDateTime: from });
+      console.log(`[POST /api/inforu/import-history] ${days}d: ${JSON.stringify(result)}`);
+      res.json({ ok: true, days, from, ...result });
+    } catch (err) {
+      res.status(400).json({ ok: false, error: err.message });
     }
   });
 

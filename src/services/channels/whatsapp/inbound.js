@@ -166,4 +166,4 @@ function handleInboundEvent(db, providerName, event) {
   return { conversationId: conversation.id, messageId };
 }
 
-module.exports = { handleInboundEvent };
+module.exports = { handleInboundEvent, findOrCreateCustomerByPhone };
