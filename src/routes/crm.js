@@ -630,6 +630,12 @@ module.exports = function registerCrm(app, db, deps) {
     // whole-day window, NOT "already due": a callback set for 16:00 must show
     // up in the morning list, otherwise the filter is useless before it's too
     // late. 'overdue' is the subset whose time has already passed.
+    // A callback on a deal that is already won or lost is not work anybody
+    // has to do, so no follow-up view may count one. This was missing here
+    // while the sibling `awaiting` filter below and My Day's own query both
+    // had it — after a bulk status import it made "פולואפ באיחור" report more
+    // items than there are open leads at all, dated months back.
+    if (follow_up) where.push(`l.status NOT IN (${CLOSED_SQL})`);
     if (follow_up === 'overdue') {
       where.push(`l.follow_up_date IS NOT NULL AND datetime(l.follow_up_date) <= datetime('now', 'localtime')`);
     } else if (follow_up === 'today') {
