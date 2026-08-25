@@ -589,6 +589,45 @@ module.exports = function registerCrm(app, db, deps) {
     `,
   };
 
+  // Must match NEW_LEADS_WINDOW_DAYS on the leads screen — a tile whose
+  // headline number is computed on a different window than the list it opens
+  // is worse than no tile.
+  const NEW_LEADS_WINDOW_DAYS = 30;
+  const newLeadsSince = () =>
+    new Date(Date.now() - NEW_LEADS_WINDOW_DAYS * 86400e3).toISOString().slice(0, 10);
+
+  // ── Headline counts for the leads screen ─────────────────────────────────
+  // One query per number, one request for all of them — the screen used to
+  // fire five separate list calls with limit=1 just to read total_count off
+  // each. Scoped exactly like the list itself: an agent sees only their own
+  // leads, so the tiles above the table can never disagree with the table.
+  app.get('/api/crm/leads/summary', requireAuth, (req, res) => {
+    const me = req.user.username;
+    const mine = req.user.role === 'admin'
+      ? ''
+      : `AND (l.assigned_to = @me OR EXISTS (SELECT 1 FROM crm_lead_claims k WHERE k.lead_id = l.id AND k.username = @me))`;
+    const count = (extra) => db.prepare(
+      `SELECT COUNT(*) n FROM crm_leads l WHERE 1=1 ${extra} ${mine}`
+    ).get({ me, since: newLeadsSince() }).n;
+
+    res.json({
+      // All-time totals — the shape of the database, not today's workload.
+      total: count(''),
+      won: count(`AND l.status IN (${WON_SQL})`),
+      lost: count(`AND l.status IN (${LOST_SQL})`),
+      closed: count(`AND l.status IN (${CLOSED_SQL})`),
+      open: count(`AND l.status NOT IN (${CLOSED_SQL})`),
+      // Current workload — open leads only, since a closed deal is not work.
+      newRecent: count(`AND l.status = 'new' AND l.status NOT IN (${CLOSED_SQL})
+                        AND date(COALESCE(l.source_created_at, l.created_at)) >= date(@since)`),
+      newTotal: count(`AND l.status = 'new'`),
+      followUpOverdue: count(`AND l.status NOT IN (${CLOSED_SQL})
+                              AND l.follow_up_date IS NOT NULL
+                              AND datetime(l.follow_up_date) <= datetime('now','localtime')`),
+      unassigned: count(`AND l.status NOT IN (${CLOSED_SQL}) AND l.assigned_to IS NULL`),
+    });
+  });
+
   app.get('/api/crm/leads', requireAuth, (req, res) => {
     const {
       status, assigned_to, customer_id, campaign_id, date_from, date_to, q,

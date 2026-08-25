@@ -175,6 +175,11 @@ export default function CrmLeads() {
   // a signal about today. The headline is now the recent window; the all-time
   // figure stays visible beside it so nothing is hidden, just demoted.
   const [newTotal, setNewTotal] = useState(null);
+  // All-time shape of the database (total / won / lost / open), fetched in one
+  // request alongside the workload numbers. Kept separate from the workload
+  // tiles below because they answer different questions: one is "what does the
+  // CRM hold", the other is "what has to be done today".
+  const [summary, setSummary] = useState(null);
   const [dateFrom, setDateFrom] = useState("");
   const [overdueCount, setOverdueCount] = useState(null);
   const [overdueSoonest, setOverdueSoonest] = useState(null);
@@ -193,11 +198,15 @@ export default function CrmLeads() {
   const [leadless, setLeadless] = useState([]);
 
   const reloadSummary = useCallback(() => {
-    crmLeads.list({ status: "new", open: "1", limit: 1, date_from: NEW_LEADS_SINCE() })
-      .then((rows) => setNewCount(rows[0]?.total_count ?? 0))
-      .catch(() => {});
-    crmLeads.list({ status: "new", open: "1", limit: 1 })
-      .then((rows) => setNewTotal(rows[0]?.total_count ?? 0))
+    // One call replaces the several limit=1 list requests this screen used to
+    // fire purely to read total_count off each.
+    crmLeads.summary()
+      .then((s) => {
+        setSummary(s);
+        setNewCount(s.newRecent);
+        setNewTotal(s.newTotal);
+        setOverdueCount(s.followUpOverdue);
+      })
       .catch(() => {});
     crmLeads.list({ follow_up: "overdue", sort: "follow_up", limit: 1 })
       .then((rows) => {
@@ -383,6 +392,30 @@ export default function CrmLeads() {
               below. Clicking one sets the matching filter and scrolls the
               list into view, so it reads as "drill down", not a separate
               report. */}
+          {/* All-time shape of the database. Separate row, quieter styling and
+              deliberately NOT clickable: these describe what the CRM holds,
+              they are not a queue anyone works from. Mixing them in with the
+              workload tiles below is what made a months-old backlog read as
+              today's to-do list. */}
+          {summary && (
+            <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
+              {[
+                { label: "סך הכל לידים", value: summary.total, tone: "text-slate-800" },
+                { label: "פתוחים", value: summary.open, tone: "text-blue-700" },
+                { label: "עסקאות שנסגרו", value: summary.won, tone: "text-emerald-700" },
+                { label: "לא רלוונטי / אבודים", value: summary.lost, tone: "text-slate-500" },
+                { label: "ללא נציג", value: summary.unassigned, tone: "text-amber-700" },
+              ].map((t) => (
+                <div key={t.label} className="rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-2.5">
+                  <span className="block text-[11px] text-slate-500">{t.label}</span>
+                  <span className={`block text-lg font-bold tabular-nums ${t.tone}`}>
+                    {t.value.toLocaleString("he-IL")}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
             <button
               type="button"

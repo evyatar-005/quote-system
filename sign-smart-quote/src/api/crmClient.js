@@ -82,6 +82,10 @@ export const crmLeads = {
   list(params) {
     return request(`/api/crm/leads${buildQuery(params)}`);
   },
+  // Every headline count in one request, scoped the same way the list is.
+  summary() {
+    return request('/api/crm/leads/summary');
+  },
   create(data) {
     return request('/api/crm/leads', { method: 'POST', body: data });
   },
