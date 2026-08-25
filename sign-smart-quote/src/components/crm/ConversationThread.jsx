@@ -474,7 +474,12 @@ export default function ConversationThread({ conversationId, headerExtra, hideLe
                       נשלח מממשק InforU
                     </div>
                   )}
-                  {m.message_type === "document" && m.media_url ? (
+                  {/* Only an ABSOLUTE url may become an href. A provider that
+                      hands back a bare file id would otherwise be rendered as a
+                      relative link, which the browser resolves against the
+                      current page — clicking a customer's document navigated to
+                      a 404 inside our own app instead of opening the file. */}
+                  {m.message_type === "document" && /^https?:\/\//i.test(m.media_url || "") ? (
                     <a
                       href={m.media_url}
                       target="_blank"
@@ -484,6 +489,18 @@ export default function ConversationThread({ conversationId, headerExtra, hideLe
                       <FileText className="w-4 h-4 shrink-0" />
                       {m.media_filename || "מסמך"}
                     </a>
+                  ) : m.message_type === "document" ? (
+                    // The document is real and arrived; we just have no
+                    // retrievable address for it. Saying so beats a link that
+                    // goes nowhere.
+                    <span
+                      className="flex items-center gap-2 text-slate-600"
+                      title="הקובץ הגיע מהספק ללא כתובת להורדה — יש לפתוח אותו ישירות בווצאפ"
+                    >
+                      <FileText className="w-4 h-4 shrink-0" />
+                      {m.media_filename || "מסמך"}
+                      <span className="text-[10px] text-amber-700">(לא ניתן לפתיחה מכאן)</span>
+                    </span>
                   ) : (
                     <div className="whitespace-pre-wrap break-words text-slate-900 leading-snug">{m.body}</div>
                   )}

@@ -72,13 +72,29 @@ function directionOf(m) {
   return String(m.Direction || '').toLowerCase().startsWith('out') ? 'out' : 'in';
 }
 
+// InforU does not always hand back a real URL here: some messages carry a bare
+// file id in MediaUrls instead. Storing that in media_url and rendering it as a
+// link produced an href the browser resolved against the current page, so an
+// agent clicking a customer's document landed on a 404 inside our own app.
+// Only an absolute http(s) URL is a URL; anything else is kept as the display
+// name so the message still shows that a document arrived.
+const isAbsoluteUrl = (v) => /^https?:\/\//i.test(String(v || '').trim());
+
 function mediaOf(m) {
   const info = m.AddtionalInfo || m.AdditionalInfo || {};
   const urls = Array.isArray(info.MediaUrls) ? info.MediaUrls : [];
   const tpl = info.WhatsappTemplateInfo || {};
-  const url = urls[0] || tpl.Media || null;
-  const name = tpl.MediaFileName || null;
-  return (url || name) ? { url: url || null, filename: name } : null;
+  const raw = urls[0] || tpl.Media || null;
+  const name = tpl.MediaFileName || info.MediaFileName || null;
+  const url = isAbsoluteUrl(raw) ? String(raw).trim() : null;
+  if (raw && !url) {
+    // Logged rather than silently dropped: InforU exposes no download-by-id
+    // call today, so the real shape of these values is what a future fetch
+    // would have to be built against.
+    console.warn(`[inforuChatSync] media reference is not a URL, cannot be opened: ${raw}`);
+  }
+  const filename = name || (raw && !url ? String(raw) : null);
+  return (url || filename) ? { url, filename } : null;
 }
 
 /**
