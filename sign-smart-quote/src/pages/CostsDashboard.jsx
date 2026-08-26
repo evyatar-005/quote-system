@@ -135,6 +135,7 @@ export default function CostsDashboard() {
   const [glassPriceTiers, setGlassPriceTiers] = useState([]);
   const [numberPriceTiers, setNumberPriceTiers] = useState([]);
   const [graphicsPriceTiers, setGraphicsPriceTiers] = useState([]);
+  const [vistaSizes, setVistaSizes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
@@ -153,7 +154,8 @@ export default function CostsDashboard() {
       base44.entities.GlassPriceTier.list(),
       base44.entities.NumberPriceTier.list(),
       base44.entities.GraphicsPriceTier.list(),
-    ]).then(([configs, tiers, stickerTiers, paintTiers, kapaTiers, rollupTiers, lokobondAreaTiers, glassTiers, numberTiers, graphicsTiers]) => {
+      base44.entities.VistaSize.list(),
+    ]).then(([configs, tiers, stickerTiers, paintTiers, kapaTiers, rollupTiers, lokobondAreaTiers, glassTiers, numberTiers, graphicsTiers, vistaSizeRows]) => {
       if (configs.length > 0) setConfig(configs[0]);
       setPriceTiers(tiers);
       setStickerPriceTiers(stickerTiers);
@@ -164,6 +166,7 @@ export default function CostsDashboard() {
       setGlassPriceTiers(glassTiers);
       setNumberPriceTiers(numberTiers);
       setGraphicsPriceTiers(graphicsTiers);
+      setVistaSizes(vistaSizeRows || []);
       setLoading(false);
     }).catch((err) => {
       console.error("[CostsDashboard] failed to load pricing data:", err);
@@ -266,6 +269,7 @@ export default function CostsDashboard() {
               glassPriceTiers={glassPriceTiers}
               numberPriceTiers={numberPriceTiers}
               graphicsPriceTiers={graphicsPriceTiers}
+              vistaSizes={vistaSizes}
               allTabs={TABS}
               initialBuilderState={initialBuilderState}
               sourceQuoteNumber={sourceQuoteNumber}

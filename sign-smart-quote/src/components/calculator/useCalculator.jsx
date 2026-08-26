@@ -129,7 +129,7 @@ function applyKapaDeal(qty, unitPrice, unitCost, override) {
   return { cost, selling: baseSelling + dealPrice };
 }
 
-export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknessMm, quantity = 1, productType, region = 'מרכז', includeInstallation = 'yes', delivery = 'pickup', priceTiers = [], stickerPriceTiers = [], paintSurchargeTiers = [], kapaPriceTiers = [], kapaTierId = null, rollupPriceTiers = [], rollupTierId = null, lokobondAreaTiers = [], glassPriceTiers = [], glassTierId = null, numberPriceTiers = [], numberTierId = null, graphicsPriceTiers = [], graphicsTierId = null, cutType = 'straight', standardShelves = 0, customShelves = 0, legsQty = 0, coloredShelfQty = 0, dealOverrides = null, elements, extras = [], enforceMinimumPrice = true, customPricePerSqm = null, orderAreaOverride = null }) {
+export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknessMm, quantity = 1, productType, region = 'מרכז', includeInstallation = 'yes', delivery = 'pickup', priceTiers = [], stickerPriceTiers = [], paintSurchargeTiers = [], kapaPriceTiers = [], kapaTierId = null, rollupPriceTiers = [], rollupTierId = null, lokobondAreaTiers = [], glassPriceTiers = [], glassTierId = null, numberPriceTiers = [], numberTierId = null, graphicsPriceTiers = [], graphicsTierId = null, vistaSizes = [], vistaSizeId = null, cutType = 'straight', standardShelves = 0, customShelves = 0, legsQty = 0, coloredShelfQty = 0, dealOverrides = null, elements, extras = [], enforceMinimumPrice = true, customPricePerSqm = null, orderAreaOverride = null }) {
   const W = widthM != null && widthM !== '' ? parseFloat(widthM) : (parseFloat(widthCm) || 0) / 100;
   const H = heightM != null && heightM !== '' ? parseFloat(heightM) : (parseFloat(heightCm) || 0) / 100;
   // A dimension must be a real positive number — "0", a blank field, or a
@@ -152,12 +152,19 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
   // Graphics (0000) — flat design-work time, sold as a fixed-price catalog row
   // like kapa/glass/numbers. No dimensions, no cost model (yet).
   const isGraphics = productType === 'graphics';
+  // Glow signs (004) — standard photoluminescent safety signs picked from a
+  // catalog. Dimensions come from the chosen catalog row (the agent can still
+  // override them), and the price is one global ₪/מ"ר for the entire family.
+  const isGlow = productType === 'glow_sign';
+  // Vista (014) — a vendor catalog item sold by the unit at the price an admin
+  // set on its row. No dimensions: the frame model already fixes the size.
+  const isVista = productType === 'vista_item';
   if (!config) return null;
   // Kapa / roll-up / glass / graphics are fixed-price catalog items chosen directly (מחיר קבוע × כמות) —
   // no dimensions needed. Everything else still needs width/height (+ thickness for logo/foamex).
   // Lokobond has a fixed 3mm thickness — the form always sends it, but don't require it here.
-  if (!isKapa && !isRollup && !isGlass && !isNumbers && !isGraphics && (!hasWidth || !hasHeight)) return null;
-  if (!isSticker && !isKapa && !isRollup && !isLokobond && !isGlass && !isPvcCarpet && !isNumbers && !isGraphics && !thicknessMm) return null;
+  if (!isKapa && !isRollup && !isGlass && !isNumbers && !isGraphics && !isVista && (!hasWidth || !hasHeight)) return null;
+  if (!isSticker && !isKapa && !isRollup && !isLokobond && !isGlass && !isPvcCarpet && !isNumbers && !isGraphics && !isGlow && !isVista && !thicknessMm) return null;
 
   const Q = parseInt(quantity) || 1;
   const area = (W || 0) * (H || 0);
@@ -496,6 +503,115 @@ export function calculate({ config, widthM, heightM, widthCm, heightCm, thicknes
       isKapa: false,
       isRollup: false,
       productFamily: 'numbers',
+      breakdown: {
+        salesAgentCommissionCost: round(salesAgentCommissionCost),
+        marketingCommissionCost: round(marketingCommissionCost),
+      },
+    };
+  }
+
+  // --- VISTA PATH (014) — fixed per-unit catalog price × quantity.
+  // Same commissions-only shape as the graphics family: no cost model for a
+  // bought-in vendor product yet. The row's price is the single source of
+  // truth, and a row an admin never priced refuses to quote. ---
+  if (isVista) {
+    // The price lives on the SIZE — one product ships in a dozen frame heights
+    // that don't cost the same, so the product row has no price to fall back on.
+    const size = vistaSizeId != null ? vistaSizes.find(t => String(t.id) === String(vistaSizeId)) : null;
+    if (!size) return null;
+
+    const sellingPricePerUnit = parseFloat(size.price) || 0;
+    const sellingPriceAll = sellingPricePerUnit * Q;
+
+    const salesAgentCommissionCost = sellingPriceAll * (parseFloat(config.sales_agent_commission_percent) || 0) / 100;
+    const marketingCommissionCost = sellingPriceAll * (parseFloat(config.marketing_commission_percent) || 0) / 100;
+    const totalCostAll = salesAgentCommissionCost + marketingCommissionCost;
+
+    const profitMarginPct = sellingPriceAll > 0 ? ((sellingPriceAll - totalCostAll) / sellingPriceAll) * 100 : 0;
+    const priceWithVat = sellingPriceAll * (1 + (parseFloat(config.vat_percent) || 18) / 100);
+
+    return {
+      area: 0,
+      totalArea: 0,
+      rawMaterialCost: 0,
+      rawMaterialBeforeWaste: 0,
+      wasteAmount: 0,
+      laborCost: 0,
+      overheadCost: 0,
+      baseCost: 0,
+      totalCostPerUnit: round(totalCostAll / Q),
+      totalCostAll: round(totalCostAll),
+      sellingPricePerUnit: round(sellingPricePerUnit),
+      sellingPriceAll: round(sellingPriceAll),
+      profitPerUnit: round((sellingPriceAll - totalCostAll) / Q),
+      profitMarginPct: round(profitMarginPct),
+      priceWithVat: round(priceWithVat),
+      extrasBreakdown: [],
+      isSticker: false,
+      isKapa: false,
+      isRollup: false,
+      productFamily: 'vista',
+      priceMissing: sellingPricePerUnit <= 0,
+      errorMessage: sellingPricePerUnit <= 0
+        ? `לא הוגדר מחיר למידה ${size.code} של מוצר ויסטה הזה. יש להגדיר אותו באדמין (מק"ט 014) לפני יצירת הצעת מחיר.`
+        : null,
+      breakdown: {
+        salesAgentCommissionCost: round(salesAgentCommissionCost),
+        marketingCommissionCost: round(marketingCommissionCost),
+      },
+    };
+  }
+
+  // --- GLOW-SIGN PATH (004) — area × one global ₪/מ"ר for the whole family.
+  // Deliberately NOT a per-row price list (explicit request): the catalog rows
+  // carry artwork + standard size only, so a rate change is one field in the
+  // admin config instead of 130 edits. No cost model yet — same
+  // commissions-only shape as the graphics family. ---
+  if (isGlow) {
+    const pricePerSqm = parseFloat(config.glow_price_per_sqm) || 0;
+    const minPrice = parseFloat(config.glow_min_price) || 0;
+    const rawPerUnit = area * pricePerSqm;
+    const minApplied = enforceMinimumPrice && minPrice > 0 && rawPerUnit < minPrice;
+    const sellingPricePerUnit = minApplied ? minPrice : rawPerUnit;
+    const sellingPriceAll = sellingPricePerUnit * Q;
+
+    const salesAgentCommissionCost = sellingPriceAll * (parseFloat(config.sales_agent_commission_percent) || 0) / 100;
+    const marketingCommissionCost = sellingPriceAll * (parseFloat(config.marketing_commission_percent) || 0) / 100;
+    const totalCostAll = salesAgentCommissionCost + marketingCommissionCost;
+
+    const profitMarginPct = sellingPriceAll > 0 ? ((sellingPriceAll - totalCostAll) / sellingPriceAll) * 100 : 0;
+    const priceWithVat = sellingPriceAll * (1 + (parseFloat(config.vat_percent) || 18) / 100);
+
+    return {
+      area: round(area),
+      totalArea: round(area * Q),
+      rawMaterialCost: 0,
+      rawMaterialBeforeWaste: 0,
+      wasteAmount: 0,
+      laborCost: 0,
+      overheadCost: 0,
+      baseCost: 0,
+      totalCostPerUnit: round(totalCostAll / Q),
+      totalCostAll: round(totalCostAll),
+      sellingPricePerUnit: round(sellingPricePerUnit),
+      sellingPriceAll: round(sellingPriceAll),
+      pricePerSqm,
+      minimumPriceApplied: minApplied,
+      profitPerUnit: round((sellingPriceAll - totalCostAll) / Q),
+      profitMarginPct: round(profitMarginPct),
+      priceWithVat: round(priceWithVat),
+      extrasBreakdown: [],
+      isSticker: false,
+      isKapa: false,
+      isRollup: false,
+      productFamily: 'glow',
+      // Never price silently off a missing rate — an unconfigured ₪/מ"ר would
+      // quote every glow sign at ₪0. Surface it as the same blocking error the
+      // other families use for an unpriced SKU.
+      priceMissing: pricePerSqm <= 0,
+      errorMessage: pricePerSqm <= 0
+        ? 'לא הוגדר מחיר למ"ר לשילוט פולט אור. יש להגדיר אותו באדמין (מק"ט 004) לפני יצירת הצעת מחיר.'
+        : null,
       breakdown: {
         salesAgentCommissionCost: round(salesAgentCommissionCost),
         marketingCommissionCost: round(marketingCommissionCost),

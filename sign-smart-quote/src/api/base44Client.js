@@ -126,6 +126,9 @@ const ENTITY_NAMES = [
   'GlassPriceTier',
   'NumberPriceTier',
   'GraphicsPriceTier',
+  'GlowSign',
+  'VistaProduct',
+  'VistaSize',
   'User',
   // Production recipes (תפ"י) — phase 1, template only, no timing.
   'Station',

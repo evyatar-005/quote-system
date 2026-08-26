@@ -45,6 +45,10 @@ export const mondaySync = {
   deleteBoardMap(id) { return request(`/api/monday-sync/boards/${id}`, { method: 'DELETE' }); },
   pullNow(id) { return request(`/api/monday-sync/boards/${id}/pull`, { method: 'POST' }); },
   pushNow(id) { return request(`/api/monday-sync/boards/${id}/push`, { method: 'POST' }); },
+  // לחיצה אחת = הקמפיין הסתיים + הסנכרון לבורד הזה כבוי, בטרנזקציה אחת.
+  setCampaignEnded(id, ended) {
+    return request(`/api/monday-sync/boards/${id}/campaign-state`, { method: 'POST', body: { ended } });
+  },
   syncLog() { return request('/api/monday-sync/log'); },
 };
 

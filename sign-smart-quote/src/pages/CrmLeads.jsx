@@ -14,6 +14,7 @@ import {
   Tooltip, TooltipTrigger, TooltipContent, TooltipProvider,
 } from "@/components/ui/tooltip";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
 import ManagerSidebar from "@/components/layout/ManagerSidebar";
 import AgentSidebar from "@/components/layout/AgentSidebar";
 import printellaLogo from "@/assets/printella-logo.png";
@@ -155,7 +156,22 @@ export default function CrmLeads() {
   const [filter, setFilter] = useState("open");
   const [status, setStatus] = useState("");
   const [assignee, setAssignee] = useState("");
-  const [campaign, setCampaign] = useState("");
+  // Persisted per-browser (not per-user, not synced anywhere): an agent who
+  // only ever works one board shouldn't have to re-pick it after every
+  // reload, and unlike a server-side default this can never change what a
+  // DIFFERENT machine sees — each browser remembers its own last pick, or
+  // none at all.
+  const [campaign, setCampaign] = useState(
+    () => { try { return localStorage.getItem("crm_leads_campaign") || ""; } catch { return ""; } }
+  );
+  useEffect(() => {
+    try { localStorage.setItem("crm_leads_campaign", campaign); } catch { /* private mode etc. */ }
+  }, [campaign]);
+  // Off by default: an ended campaign's leads are still real work for
+  // whoever owns them, but the table shouldn't quietly include years of dead
+  // campaigns either — same activeCampaignSql() the tiles already use,
+  // opted into here explicitly instead of on by default.
+  const [includeEnded, setIncludeEnded] = useState(false);
   const [sort, setSort] = useState("last_activity");
   const [agents, setAgents] = useState([]);
   const [campaigns, setCampaigns] = useState([]);
@@ -199,8 +215,17 @@ export default function CrmLeads() {
 
   const reloadSummary = useCallback(() => {
     // One call replaces the several limit=1 list requests this screen used to
-    // fire purely to read total_count off each.
-    crmLeads.summary()
+    // fire purely to read total_count off each. campaign_id rides on every
+    // one of the four calls below — otherwise picking a board filters the
+    // table but leaves every tile above it showing all-boards numbers, which
+    // is indistinguishable from the tiles being wrong. active_only rides
+    // alongside it (the backend ignores active_only whenever campaign_id is
+    // set): with no board picked, these headline numbers default to active
+    // campaigns only, so a campaign someone ended two years ago doesn't sit
+    // in every tile forever. This is tiles-only — the main table below keeps
+    // showing every open lead regardless of campaign state, on purpose: a
+    // lead doesn't stop being someone's job just because its campaign ended.
+    crmLeads.summary({ campaign_id: campaign, active_only: 1 })
       .then((s) => {
         setSummary(s);
         setNewCount(s.newRecent);
@@ -208,7 +233,7 @@ export default function CrmLeads() {
         setOverdueCount(s.followUpOverdue);
       })
       .catch(() => {});
-    crmLeads.list({ follow_up: "overdue", sort: "follow_up", limit: 1 })
+    crmLeads.list({ follow_up: "overdue", sort: "follow_up", limit: 1, campaign_id: campaign, active_only: 1 })
       .then((rows) => {
         setOverdueCount(rows[0]?.total_count ?? 0);
         setOverdueSoonest(rows[0]?.follow_up_date ?? null);
@@ -221,10 +246,10 @@ export default function CrmLeads() {
     // is invisible to it: locally 3 conversations were awaiting a reply and
     // the tile said 1. The inbox was right and the tile was wrong, which is
     // the worst way for a number to be wrong — it says "nobody is waiting".
-    inbox.listConversations({ filter: "awaiting", limit: 1 })
+    inbox.listConversations({ filter: "awaiting", limit: 1, campaign_id: campaign, active_only: 1 })
       .then((rows) => setAwaitingCount(rows[0]?.total_count ?? 0))
       .catch(() => {});
-    inbox.listConversations({ filter: "awaiting_overdue" })
+    inbox.listConversations({ filter: "awaiting_overdue", campaign_id: campaign, active_only: 1 })
       .then((rows) => {
         setAwaitingLate(rows[0]?.total_count ?? 0);
         // minutes_waiting rides on every conversation row (routes/inbox.js).
@@ -232,7 +257,7 @@ export default function CrmLeads() {
         setAwaitingLongest(longest || null);
       })
       .catch(() => {});
-  }, []);
+  }, [campaign]);
 
   useEffect(() => { reloadSummary(); }, [reloadSummary]);
 
@@ -314,9 +339,14 @@ export default function CrmLeads() {
       // An explicit assignee pick wins over the chip's own assigned_to.
       ...(assignee ? { assigned_to: assignee } : {}),
       ...(dateFrom ? { date_from: dateFrom } : {}),
+      // Same activeCampaignSql() default the dashboard tiles already use —
+      // off by default, so a campaign someone ended doesn't quietly pile up
+      // in the table forever, but every lead from it is one checkbox away,
+      // never deleted or actually hidden from the person who owns it.
+      ...(includeEnded ? {} : { active_only: 1 }),
       limit: PAGE_SIZE,
     };
-  }, [q, sort, status, campaign, assignee, filter, chips, mondayPick]);
+  }, [q, sort, status, campaign, assignee, filter, chips, mondayPick, includeEnded]);
 
   useEffect(() => {
     const t = setTimeout(async () => {
@@ -583,6 +613,14 @@ export default function CrmLeads() {
                     </SelectContent>
                   </Select>
                 </div>
+
+                {/* Off by default — an ended campaign's leads are still real
+                    work, but the table shouldn't quietly include years of
+                    dead campaigns without being asked. */}
+                <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
+                  <Checkbox checked={includeEnded} onCheckedChange={(v) => setIncludeEnded(!!v)} />
+                  כולל קמפיינים שהסתיימו
+                </label>
 
                 {campaign && mondayCols.length > 0 && (
                   <div className="space-y-1.5">

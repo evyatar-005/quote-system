@@ -28,3 +28,10 @@ tenderos-pr3/
 CLAUDE.md
 .claude/
 sign-smart-quote/CLAUDE.md
+
+# Vendor catalogs (large source PDFs — reference material, not app code)
+vendor-catalogs/
+
+# Live-database snapshots. These carry real customer names, phone numbers and
+# email addresses — they must never enter version control.
+database.sqlite.backup-*

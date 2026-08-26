@@ -1,0 +1,2561 @@
+[
+ {
+  "family": "Vista Classic",
+  "family_he": "ויסטה קלאסי",
+  "name": "Wall Signs",
+  "name_he": "שלטי קיר",
+  "page": 7,
+  "page_to": 15,
+  "cover_page": 8,
+  "image_file": "p008.jpg",
+  "sizes": [
+   {
+    "code": "V40",
+    "height_mm": 40
+   },
+   {
+    "code": "V60",
+    "height_mm": 60
+   },
+   {
+    "code": "V80",
+    "height_mm": 80
+   },
+   {
+    "code": "V100",
+    "height_mm": 100
+   },
+   {
+    "code": "V120",
+    "height_mm": 120
+   },
+   {
+    "code": "V150",
+    "height_mm": 150
+   },
+   {
+    "code": "V200",
+    "height_mm": 200
+   },
+   {
+    "code": "V11",
+    "height_mm": 279
+   },
+   {
+    "code": "V300",
+    "height_mm": 300
+   },
+   {
+    "code": "V14",
+    "height_mm": 356
+   },
+   {
+    "code": "V400",
+    "height_mm": 400
+   },
+   {
+    "code": "V16",
+    "height_mm": 406
+   },
+   {
+    "code": "V420",
+    "height_mm": 420
+   },
+   {
+    "code": "V17",
+    "height_mm": 432
+   },
+   {
+    "code": "V500",
+    "height_mm": 500
+   },
+   {
+    "code": "V22",
+    "height_mm": 559
+   },
+   {
+    "code": "V600",
+    "height_mm": 600
+   },
+   {
+    "code": "V1200",
+    "height_mm": 1200
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Vista Classic",
+  "family_he": "ויסטה קלאסי",
+  "name": "Projecting Signs",
+  "name_he": "שלטי דגל ניצבים",
+  "page": 16,
+  "page_to": 20,
+  "cover_page": 17,
+  "image_file": "p017.jpg",
+  "sizes": [
+   {
+    "code": "V100",
+    "height_mm": 100
+   },
+   {
+    "code": "V120",
+    "height_mm": 120
+   },
+   {
+    "code": "V150",
+    "height_mm": 150
+   },
+   {
+    "code": "V200",
+    "height_mm": 200
+   },
+   {
+    "code": "V11",
+    "height_mm": 279
+   },
+   {
+    "code": "V300",
+    "height_mm": 300
+   },
+   {
+    "code": "V400",
+    "height_mm": 400
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Vista Classic",
+  "family_he": "ויסטה קלאסי",
+  "name": "Directories",
+  "name_he": "לוחות מדריך",
+  "page": 21,
+  "page_to": 28,
+  "cover_page": 22,
+  "image_file": "p022.jpg",
+  "sizes": [
+   {
+    "code": "V60",
+    "height_mm": 60
+   },
+   {
+    "code": "V80",
+    "height_mm": 80
+   },
+   {
+    "code": "V100",
+    "height_mm": 100
+   },
+   {
+    "code": "V120",
+    "height_mm": 120
+   },
+   {
+    "code": "V150",
+    "height_mm": 150
+   },
+   {
+    "code": "V200",
+    "height_mm": 200
+   },
+   {
+    "code": "V11",
+    "height_mm": 279
+   },
+   {
+    "code": "V300",
+    "height_mm": 300
+   },
+   {
+    "code": "V400",
+    "height_mm": 400
+   },
+   {
+    "code": "V420",
+    "height_mm": 420
+   },
+   {
+    "code": "V500",
+    "height_mm": 500
+   },
+   {
+    "code": "V600",
+    "height_mm": 600
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Vista Classic",
+  "family_he": "ויסטה קלאסי",
+  "name": "Table Stands",
+  "name_he": "סטנדים שולחניים",
+  "page": 29,
+  "page_to": 34,
+  "cover_page": 33,
+  "image_file": "p033.jpg",
+  "sizes": [
+   {
+    "code": "V60",
+    "height_mm": 60
+   },
+   {
+    "code": "V80",
+    "height_mm": 80
+   },
+   {
+    "code": "V100",
+    "height_mm": 100
+   },
+   {
+    "code": "V120",
+    "height_mm": 120
+   },
+   {
+    "code": "V150",
+    "height_mm": 150
+   },
+   {
+    "code": "V200",
+    "height_mm": 200
+   },
+   {
+    "code": "V11",
+    "height_mm": 279
+   },
+   {
+    "code": "V300",
+    "height_mm": 300
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Vista Classic",
+  "family_he": "ויסטה קלאסי",
+  "name": "Double Sided Pylons",
+  "name_he": "פילונים דו-צדדיים",
+  "page": 35,
+  "page_to": 37,
+  "cover_page": 36,
+  "image_file": "p036.jpg",
+  "sizes": [
+   {
+    "code": "V300",
+    "height_mm": 300
+   },
+   {
+    "code": "V400",
+    "height_mm": 400
+   },
+   {
+    "code": "V420",
+    "height_mm": 420
+   },
+   {
+    "code": "V500",
+    "height_mm": 500
+   },
+   {
+    "code": "V600",
+    "height_mm": 600
+   },
+   {
+    "code": "V1200",
+    "height_mm": 1200
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Vista Classic",
+  "family_he": "ויסטה קלאסי",
+  "name": "Suspended Signs",
+  "name_he": "שלטים תלויים",
+  "page": 38,
+  "page_to": 41,
+  "cover_page": 39,
+  "image_file": "p039.jpg",
+  "sizes": [
+   {
+    "code": "V60",
+    "height_mm": 60
+   },
+   {
+    "code": "V80",
+    "height_mm": 80
+   },
+   {
+    "code": "V100",
+    "height_mm": 100
+   },
+   {
+    "code": "V120",
+    "height_mm": 120
+   },
+   {
+    "code": "V150",
+    "height_mm": 150
+   },
+   {
+    "code": "V200",
+    "height_mm": 200
+   },
+   {
+    "code": "V300",
+    "height_mm": 300
+   },
+   {
+    "code": "V400",
+    "height_mm": 400
+   },
+   {
+    "code": "V500",
+    "height_mm": 500
+   },
+   {
+    "code": "V600",
+    "height_mm": 600
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Vista Classic",
+  "family_he": "ויסטה קלאסי",
+  "name": "Double Sided Post Signs",
+  "name_he": "שלטי עמוד דו-צדדיים",
+  "page": 42,
+  "page_to": 43,
+  "cover_page": 43,
+  "image_file": "p043.jpg",
+  "sizes": [
+   {
+    "code": "V300",
+    "height_mm": 300
+   },
+   {
+    "code": "V400",
+    "height_mm": 400
+   },
+   {
+    "code": "V500",
+    "height_mm": 500
+   },
+   {
+    "code": "V600",
+    "height_mm": 600
+   },
+   {
+    "code": "V1200",
+    "height_mm": 1200
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Vista Classic",
+  "family_he": "ויסטה קלאסי",
+  "name": "Triangular Post Signs",
+  "name_he": "שלטי עמוד משולשים",
+  "page": 44,
+  "page_to": 45,
+  "cover_page": 45,
+  "image_file": "p045.jpg",
+  "sizes": [
+   {
+    "code": "V200",
+    "height_mm": 200
+   },
+   {
+    "code": "V300",
+    "height_mm": 300
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Vista Classic",
+  "family_he": "ויסטה קלאסי",
+  "name": "Triangular Pylons",
+  "name_he": "פילונים משולשים",
+  "page": 46,
+  "page_to": 48,
+  "cover_page": 47,
+  "image_file": "p047.jpg",
+  "sizes": [
+   {
+    "code": "V300",
+    "height_mm": 300
+   },
+   {
+    "code": "V400",
+    "height_mm": 400
+   },
+   {
+    "code": "V500",
+    "height_mm": 500
+   },
+   {
+    "code": "V600",
+    "height_mm": 600
+   },
+   {
+    "code": "V1200",
+    "height_mm": 1200
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Vista Classic",
+  "family_he": "ויסטה קלאסי",
+  "name": "Custom Products",
+  "name_he": "מוצרים בהתאמה אישית",
+  "page": 49,
+  "page_to": 49,
+  "cover_page": 49,
+  "image_file": "p049.jpg",
+  "sizes": [
+   {
+    "code": "V40",
+    "height_mm": 40
+   },
+   {
+    "code": "V60",
+    "height_mm": 60
+   },
+   {
+    "code": "V80",
+    "height_mm": 80
+   },
+   {
+    "code": "V100",
+    "height_mm": 100
+   },
+   {
+    "code": "V120",
+    "height_mm": 120
+   },
+   {
+    "code": "V150",
+    "height_mm": 150
+   },
+   {
+    "code": "V200",
+    "height_mm": 200
+   },
+   {
+    "code": "V11",
+    "height_mm": 279
+   },
+   {
+    "code": "V300",
+    "height_mm": 300
+   },
+   {
+    "code": "V14",
+    "height_mm": 356
+   },
+   {
+    "code": "V400",
+    "height_mm": 400
+   },
+   {
+    "code": "V16",
+    "height_mm": 406
+   },
+   {
+    "code": "V420",
+    "height_mm": 420
+   },
+   {
+    "code": "V17",
+    "height_mm": 432
+   },
+   {
+    "code": "V500",
+    "height_mm": 500
+   },
+   {
+    "code": "V22",
+    "height_mm": 559
+   },
+   {
+    "code": "V600",
+    "height_mm": 600
+   },
+   {
+    "code": "V1200",
+    "height_mm": 1200
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": true
+ },
+ {
+  "family": "Vista Classic",
+  "family_he": "ויסטה קלאסי",
+  "name": "Vista Slider",
+  "name_he": "ויסטה סליידר",
+  "page": 50,
+  "page_to": 51,
+  "cover_page": 50,
+  "image_file": "p050.jpg",
+  "sizes": [
+   {
+    "code": "V40",
+    "height_mm": 40
+   },
+   {
+    "code": "V60",
+    "height_mm": 60
+   },
+   {
+    "code": "V80",
+    "height_mm": 80
+   },
+   {
+    "code": "V100",
+    "height_mm": 100
+   },
+   {
+    "code": "V120",
+    "height_mm": 120
+   },
+   {
+    "code": "V150",
+    "height_mm": 150
+   },
+   {
+    "code": "V200",
+    "height_mm": 200
+   },
+   {
+    "code": "V11",
+    "height_mm": 279
+   },
+   {
+    "code": "V300",
+    "height_mm": 300
+   },
+   {
+    "code": "V14",
+    "height_mm": 356
+   },
+   {
+    "code": "V400",
+    "height_mm": 400
+   },
+   {
+    "code": "V16",
+    "height_mm": 406
+   },
+   {
+    "code": "V420",
+    "height_mm": 420
+   },
+   {
+    "code": "V17",
+    "height_mm": 432
+   },
+   {
+    "code": "V500",
+    "height_mm": 500
+   },
+   {
+    "code": "V22",
+    "height_mm": 559
+   },
+   {
+    "code": "V600",
+    "height_mm": 600
+   },
+   {
+    "code": "V1200",
+    "height_mm": 1200
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": true
+ },
+ {
+  "family": "Vista Sharp",
+  "family_he": "ויסטה שארפ",
+  "name": "Wall Frames - with end caps",
+  "name_he": "מסגרות קיר עם פסי סיום",
+  "page": 55,
+  "page_to": 59,
+  "cover_page": 56,
+  "image_file": "p056.jpg",
+  "sizes": [
+   {
+    "code": "FRL11",
+    "height_mm": 279
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Vista Sharp",
+  "family_he": "ויסטה שארפ",
+  "name": "Wall Frames - 4 extrusions",
+  "name_he": "מסגרות קיר 4 פרופילים",
+  "page": 60,
+  "page_to": 78,
+  "cover_page": 68,
+  "image_file": "p068.jpg",
+  "sizes": [
+   {
+    "code": "FRL28",
+    "height_mm": 28
+   },
+   {
+    "code": "FRL32",
+    "height_mm": 32
+   },
+   {
+    "code": "FRL36",
+    "height_mm": 36
+   },
+   {
+    "code": "FRL40",
+    "height_mm": 40
+   },
+   {
+    "code": "FRL48",
+    "height_mm": 48
+   },
+   {
+    "code": "FRL11",
+    "height_mm": 279
+   },
+   {
+    "code": "FRL14",
+    "height_mm": 356
+   },
+   {
+    "code": "FRL400",
+    "height_mm": 400
+   },
+   {
+    "code": "FRL420",
+    "height_mm": 420
+   },
+   {
+    "code": "FRL17",
+    "height_mm": 432
+   },
+   {
+    "code": "FRL500",
+    "height_mm": 500
+   },
+   {
+    "code": "FRL22",
+    "height_mm": 559
+   },
+   {
+    "code": "FRL600",
+    "height_mm": 600
+   },
+   {
+    "code": "FRL1500",
+    "height_mm": 1500
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Vista Sharp",
+  "family_he": "ויסטה שארפ",
+  "name": "Directories",
+  "name_he": "לוחות מדריך",
+  "page": 79,
+  "page_to": 80,
+  "cover_page": 80,
+  "image_file": "p080.jpg",
+  "sizes": [
+   {
+    "code": "FRL11",
+    "height_mm": 279
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Vista Sharp",
+  "family_he": "ויסטה שארפ",
+  "name": "Suspended Signs",
+  "name_he": "שלטים תלויים",
+  "page": 81,
+  "page_to": 88,
+  "cover_page": 82,
+  "image_file": "p082.jpg",
+  "sizes": [
+   {
+    "code": "FRL11",
+    "height_mm": 279
+   },
+   {
+    "code": "FRL14",
+    "height_mm": 356
+   },
+   {
+    "code": "FRL400",
+    "height_mm": 400
+   },
+   {
+    "code": "FRL420",
+    "height_mm": 420
+   },
+   {
+    "code": "FRL17",
+    "height_mm": 432
+   },
+   {
+    "code": "FRL500",
+    "height_mm": 500
+   },
+   {
+    "code": "FRL22",
+    "height_mm": 559
+   },
+   {
+    "code": "FRL600",
+    "height_mm": 600
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Vista Sharp",
+  "family_he": "ויסטה שארפ",
+  "name": "Flag Signs",
+  "name_he": "שלטי דגל",
+  "page": 89,
+  "page_to": 91,
+  "cover_page": 90,
+  "image_file": "p090.jpg",
+  "sizes": [
+   {
+    "code": "FRL11",
+    "height_mm": 279
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Vista Sharp",
+  "family_he": "ויסטה שארפ",
+  "name": "Double Sided Pylon",
+  "name_he": "פילון דו-צדדי",
+  "page": 92,
+  "page_to": 93,
+  "cover_page": 93,
+  "image_file": "p093.jpg",
+  "sizes": [
+   {
+    "code": "FRL400",
+    "height_mm": 400
+   },
+   {
+    "code": "FRL500",
+    "height_mm": 500
+   },
+   {
+    "code": "FRL600",
+    "height_mm": 600
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Vista Sharp",
+  "family_he": "ויסטה שארפ",
+  "name": "Table Stands",
+  "name_he": "סטנדים שולחניים",
+  "page": 94,
+  "page_to": 99,
+  "cover_page": 95,
+  "image_file": "p095.jpg",
+  "sizes": [
+   {
+    "code": "FRL11",
+    "height_mm": 279
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Vista Square",
+  "family_he": "ויסטה סקוור",
+  "name": "Wall Frames Portrait",
+  "name_he": "מסגרות קיר לאורך",
+  "page": 103,
+  "page_to": 120,
+  "cover_page": 104,
+  "image_file": "p104.jpg",
+  "sizes": [
+   {
+    "code": "F80",
+    "height_mm": 80
+   },
+   {
+    "code": "F100",
+    "height_mm": 100
+   },
+   {
+    "code": "F120",
+    "height_mm": 120
+   },
+   {
+    "code": "F150",
+    "height_mm": 150
+   },
+   {
+    "code": "F200",
+    "height_mm": 200
+   },
+   {
+    "code": "F11",
+    "height_mm": 279
+   },
+   {
+    "code": "F300",
+    "height_mm": 300
+   },
+   {
+    "code": "F14",
+    "height_mm": 356
+   },
+   {
+    "code": "F400",
+    "height_mm": 400
+   },
+   {
+    "code": "F420",
+    "height_mm": 420
+   },
+   {
+    "code": "F17",
+    "height_mm": 432
+   },
+   {
+    "code": "F500",
+    "height_mm": 500
+   },
+   {
+    "code": "F22",
+    "height_mm": 559
+   },
+   {
+    "code": "F600",
+    "height_mm": 600
+   },
+   {
+    "code": "F700",
+    "height_mm": 700
+   },
+   {
+    "code": "F800",
+    "height_mm": 800
+   },
+   {
+    "code": "F900",
+    "height_mm": 900
+   },
+   {
+    "code": "F1000",
+    "height_mm": 1000
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Vista Square",
+  "family_he": "ויסטה סקוור",
+  "name": "Wall Frames Landscape",
+  "name_he": "מסגרות קיר לרוחב",
+  "page": 121,
+  "page_to": 130,
+  "cover_page": 122,
+  "image_file": "p122.jpg",
+  "sizes": [
+   {
+    "code": "F80",
+    "height_mm": 80
+   },
+   {
+    "code": "F100",
+    "height_mm": 100
+   },
+   {
+    "code": "F120",
+    "height_mm": 120
+   },
+   {
+    "code": "F150",
+    "height_mm": 150
+   },
+   {
+    "code": "F200",
+    "height_mm": 200
+   },
+   {
+    "code": "F11",
+    "height_mm": 279
+   },
+   {
+    "code": "F300",
+    "height_mm": 300
+   },
+   {
+    "code": "F14",
+    "height_mm": 356
+   },
+   {
+    "code": "F400",
+    "height_mm": 400
+   },
+   {
+    "code": "F420",
+    "height_mm": 420
+   },
+   {
+    "code": "F500",
+    "height_mm": 500
+   },
+   {
+    "code": "F22",
+    "height_mm": 559
+   },
+   {
+    "code": "F600",
+    "height_mm": 600
+   },
+   {
+    "code": "F24",
+    "height_mm": 610
+   },
+   {
+    "code": "F700",
+    "height_mm": 700
+   },
+   {
+    "code": "F800",
+    "height_mm": 800
+   },
+   {
+    "code": "F900",
+    "height_mm": 900
+   },
+   {
+    "code": "F1000",
+    "height_mm": 1000
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Vista Square",
+  "family_he": "ויסטה סקוור",
+  "name": "Directories",
+  "name_he": "לוחות מדריך",
+  "page": 131,
+  "page_to": 138,
+  "cover_page": 132,
+  "image_file": "p132.jpg",
+  "sizes": [
+   {
+    "code": "DF26",
+    "height_mm": 26
+   },
+   {
+    "code": "DF27",
+    "height_mm": 27
+   },
+   {
+    "code": "DF28",
+    "height_mm": 28
+   },
+   {
+    "code": "DF29",
+    "height_mm": 29
+   },
+   {
+    "code": "DF30",
+    "height_mm": 30
+   },
+   {
+    "code": "DF31",
+    "height_mm": 31
+   },
+   {
+    "code": "DF34",
+    "height_mm": 34
+   },
+   {
+    "code": "DF35",
+    "height_mm": 35
+   },
+   {
+    "code": "DF36",
+    "height_mm": 36
+   },
+   {
+    "code": "DF37",
+    "height_mm": 37
+   },
+   {
+    "code": "DF38",
+    "height_mm": 38
+   },
+   {
+    "code": "DF39",
+    "height_mm": 39
+   },
+   {
+    "code": "DF40",
+    "height_mm": 40
+   },
+   {
+    "code": "DF41",
+    "height_mm": 41
+   },
+   {
+    "code": "DF42",
+    "height_mm": 42
+   },
+   {
+    "code": "DF47",
+    "height_mm": 47
+   },
+   {
+    "code": "DF48",
+    "height_mm": 48
+   },
+   {
+    "code": "DF49",
+    "height_mm": 49
+   },
+   {
+    "code": "F80",
+    "height_mm": 80
+   },
+   {
+    "code": "F100",
+    "height_mm": 100
+   },
+   {
+    "code": "F120",
+    "height_mm": 120
+   },
+   {
+    "code": "F150",
+    "height_mm": 150
+   },
+   {
+    "code": "F200",
+    "height_mm": 200
+   },
+   {
+    "code": "DF10",
+    "height_mm": 254
+   },
+   {
+    "code": "F11",
+    "height_mm": 279
+   },
+   {
+    "code": "DF11",
+    "height_mm": 279
+   },
+   {
+    "code": "F300",
+    "height_mm": 300
+   },
+   {
+    "code": "DF12",
+    "height_mm": 305
+   },
+   {
+    "code": "DF13",
+    "height_mm": 330
+   },
+   {
+    "code": "DF14",
+    "height_mm": 356
+   },
+   {
+    "code": "DF15",
+    "height_mm": 381
+   },
+   {
+    "code": "F400",
+    "height_mm": 400
+   },
+   {
+    "code": "DF16",
+    "height_mm": 406
+   },
+   {
+    "code": "DF17",
+    "height_mm": 432
+   },
+   {
+    "code": "DF19",
+    "height_mm": 483
+   },
+   {
+    "code": "F500",
+    "height_mm": 500
+   },
+   {
+    "code": "DF20",
+    "height_mm": 508
+   },
+   {
+    "code": "F600",
+    "height_mm": 600
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Vista Square",
+  "family_he": "ויסטה סקוור",
+  "name": "Suspended Signs",
+  "name_he": "שלטים תלויים",
+  "page": 139,
+  "page_to": 150,
+  "cover_page": 140,
+  "image_file": "p140.jpg",
+  "sizes": [
+   {
+    "code": "F80",
+    "height_mm": 80
+   },
+   {
+    "code": "F100",
+    "height_mm": 100
+   },
+   {
+    "code": "F120",
+    "height_mm": 120
+   },
+   {
+    "code": "F150",
+    "height_mm": 150
+   },
+   {
+    "code": "F200",
+    "height_mm": 200
+   },
+   {
+    "code": "F300",
+    "height_mm": 300
+   },
+   {
+    "code": "F14",
+    "height_mm": 356
+   },
+   {
+    "code": "F400",
+    "height_mm": 400
+   },
+   {
+    "code": "F420",
+    "height_mm": 420
+   },
+   {
+    "code": "F500",
+    "height_mm": 500
+   },
+   {
+    "code": "F22",
+    "height_mm": 559
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Vista Square",
+  "family_he": "ויסטה סקוור",
+  "name": "Flag Signs",
+  "name_he": "שלטי דגל",
+  "page": 151,
+  "page_to": 154,
+  "cover_page": 152,
+  "image_file": "p152.jpg",
+  "sizes": [
+   {
+    "code": "F100",
+    "height_mm": 100
+   },
+   {
+    "code": "F120",
+    "height_mm": 120
+   },
+   {
+    "code": "F150",
+    "height_mm": 150
+   },
+   {
+    "code": "F200",
+    "height_mm": 200
+   },
+   {
+    "code": "F11",
+    "height_mm": 279
+   },
+   {
+    "code": "F300",
+    "height_mm": 300
+   },
+   {
+    "code": "F400",
+    "height_mm": 400
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Vista Square",
+  "family_he": "ויסטה סקוור",
+  "name": "Corner Signs",
+  "name_he": "שלטי פינה",
+  "page": 155,
+  "page_to": 162,
+  "cover_page": 156,
+  "image_file": "p156.jpg",
+  "sizes": [
+   {
+    "code": "F100",
+    "height_mm": 100
+   },
+   {
+    "code": "F120",
+    "height_mm": 120
+   },
+   {
+    "code": "F150",
+    "height_mm": 150
+   },
+   {
+    "code": "F200",
+    "height_mm": 200
+   },
+   {
+    "code": "F11",
+    "height_mm": 279
+   },
+   {
+    "code": "F300",
+    "height_mm": 300
+   },
+   {
+    "code": "F14",
+    "height_mm": 356
+   },
+   {
+    "code": "F400",
+    "height_mm": 400
+   },
+   {
+    "code": "F420",
+    "height_mm": 420
+   },
+   {
+    "code": "F17",
+    "height_mm": 432
+   },
+   {
+    "code": "F500",
+    "height_mm": 500
+   },
+   {
+    "code": "F22",
+    "height_mm": 559
+   },
+   {
+    "code": "F600",
+    "height_mm": 600
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Vista Square",
+  "family_he": "ויסטה סקוור",
+  "name": "Table Signs",
+  "name_he": "שלטים שולחניים",
+  "page": 163,
+  "page_to": 166,
+  "cover_page": 164,
+  "image_file": "p164.jpg",
+  "sizes": [
+   {
+    "code": "F80",
+    "height_mm": 80
+   },
+   {
+    "code": "F100",
+    "height_mm": 100
+   },
+   {
+    "code": "F120",
+    "height_mm": 120
+   },
+   {
+    "code": "F150",
+    "height_mm": 150
+   },
+   {
+    "code": "F200",
+    "height_mm": 200
+   },
+   {
+    "code": "F11",
+    "height_mm": 279
+   },
+   {
+    "code": "F300",
+    "height_mm": 300
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Vista Square",
+  "family_he": "ויסטה סקוור",
+  "name": "Square Slider",
+  "name_he": "סקוור סליידר",
+  "page": 167,
+  "page_to": 167,
+  "cover_page": 167,
+  "image_file": "p167.jpg",
+  "sizes": [
+   {
+    "code": "DF26",
+    "height_mm": 26
+   },
+   {
+    "code": "DF27",
+    "height_mm": 27
+   },
+   {
+    "code": "DF28",
+    "height_mm": 28
+   },
+   {
+    "code": "DF29",
+    "height_mm": 29
+   },
+   {
+    "code": "DF30",
+    "height_mm": 30
+   },
+   {
+    "code": "DF31",
+    "height_mm": 31
+   },
+   {
+    "code": "DF34",
+    "height_mm": 34
+   },
+   {
+    "code": "DF35",
+    "height_mm": 35
+   },
+   {
+    "code": "DF36",
+    "height_mm": 36
+   },
+   {
+    "code": "DF37",
+    "height_mm": 37
+   },
+   {
+    "code": "DF38",
+    "height_mm": 38
+   },
+   {
+    "code": "DF39",
+    "height_mm": 39
+   },
+   {
+    "code": "DF40",
+    "height_mm": 40
+   },
+   {
+    "code": "DF41",
+    "height_mm": 41
+   },
+   {
+    "code": "DF42",
+    "height_mm": 42
+   },
+   {
+    "code": "DF47",
+    "height_mm": 47
+   },
+   {
+    "code": "DF48",
+    "height_mm": 48
+   },
+   {
+    "code": "DF49",
+    "height_mm": 49
+   },
+   {
+    "code": "F80",
+    "height_mm": 80
+   },
+   {
+    "code": "F100",
+    "height_mm": 100
+   },
+   {
+    "code": "F120",
+    "height_mm": 120
+   },
+   {
+    "code": "F150",
+    "height_mm": 150
+   },
+   {
+    "code": "F200",
+    "height_mm": 200
+   },
+   {
+    "code": "DF10",
+    "height_mm": 254
+   },
+   {
+    "code": "F11",
+    "height_mm": 279
+   },
+   {
+    "code": "DF11",
+    "height_mm": 279
+   },
+   {
+    "code": "F300",
+    "height_mm": 300
+   },
+   {
+    "code": "DF12",
+    "height_mm": 305
+   },
+   {
+    "code": "DF13",
+    "height_mm": 330
+   },
+   {
+    "code": "F14",
+    "height_mm": 356
+   },
+   {
+    "code": "DF14",
+    "height_mm": 356
+   },
+   {
+    "code": "DF15",
+    "height_mm": 381
+   },
+   {
+    "code": "F400",
+    "height_mm": 400
+   },
+   {
+    "code": "DF16",
+    "height_mm": 406
+   },
+   {
+    "code": "F420",
+    "height_mm": 420
+   },
+   {
+    "code": "F17",
+    "height_mm": 432
+   },
+   {
+    "code": "DF17",
+    "height_mm": 432
+   },
+   {
+    "code": "DF19",
+    "height_mm": 483
+   },
+   {
+    "code": "F500",
+    "height_mm": 500
+   },
+   {
+    "code": "DF20",
+    "height_mm": 508
+   },
+   {
+    "code": "F22",
+    "height_mm": 559
+   },
+   {
+    "code": "F600",
+    "height_mm": 600
+   },
+   {
+    "code": "F24",
+    "height_mm": 610
+   },
+   {
+    "code": "F700",
+    "height_mm": 700
+   },
+   {
+    "code": "F800",
+    "height_mm": 800
+   },
+   {
+    "code": "F900",
+    "height_mm": 900
+   },
+   {
+    "code": "F1000",
+    "height_mm": 1000
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": true
+ },
+ {
+  "family": "Vista Nova",
+  "family_he": "ויסטה נובה",
+  "name": "Wall Frames",
+  "name_he": "מסגרות קיר",
+  "page": 173,
+  "page_to": 178,
+  "cover_page": 174,
+  "image_file": "p174.jpg",
+  "sizes": [
+   {
+    "code": "N70",
+    "height_mm": 70
+   },
+   {
+    "code": "N94",
+    "height_mm": 94
+   },
+   {
+    "code": "N124",
+    "height_mm": 124
+   },
+   {
+    "code": "N170",
+    "height_mm": 170
+   },
+   {
+    "code": "N11",
+    "height_mm": 279
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Vista Nova",
+  "family_he": "ויסטה נובה",
+  "name": "Projecting Signs",
+  "name_he": "שלטי דגל ניצבים",
+  "page": 179,
+  "page_to": 180,
+  "cover_page": 180,
+  "image_file": "p180.jpg",
+  "sizes": [
+   {
+    "code": "N124",
+    "height_mm": 124
+   },
+   {
+    "code": "N170",
+    "height_mm": 170
+   },
+   {
+    "code": "N11",
+    "height_mm": 279
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Vista Nova",
+  "family_he": "ויסטה נובה",
+  "name": "Directories",
+  "name_he": "לוחות מדריך",
+  "page": 181,
+  "page_to": 184,
+  "cover_page": 182,
+  "image_file": "p182.jpg",
+  "sizes": [
+   {
+    "code": "N70",
+    "height_mm": 70
+   },
+   {
+    "code": "N94",
+    "height_mm": 94
+   },
+   {
+    "code": "N124",
+    "height_mm": 124
+   },
+   {
+    "code": "N170",
+    "height_mm": 170
+   },
+   {
+    "code": "N11",
+    "height_mm": 279
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Vista Nova",
+  "family_he": "ויסטה נובה",
+  "name": "Table Stands",
+  "name_he": "סטנדים שולחניים",
+  "page": 185,
+  "page_to": 187,
+  "cover_page": 186,
+  "image_file": "p186.jpg",
+  "sizes": [
+   {
+    "code": "N70",
+    "height_mm": 70
+   },
+   {
+    "code": "N94",
+    "height_mm": 94
+   },
+   {
+    "code": "N124",
+    "height_mm": 124
+   },
+   {
+    "code": "N170",
+    "height_mm": 170
+   },
+   {
+    "code": "N11",
+    "height_mm": 279
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Vista Nova",
+  "family_he": "ויסטה נובה",
+  "name": "Suspended Signs",
+  "name_he": "שלטים תלויים",
+  "page": 188,
+  "page_to": 192,
+  "cover_page": 189,
+  "image_file": "p189.jpg",
+  "sizes": [
+   {
+    "code": "N70",
+    "height_mm": 70
+   },
+   {
+    "code": "N94",
+    "height_mm": 94
+   },
+   {
+    "code": "N124",
+    "height_mm": 124
+   },
+   {
+    "code": "N170",
+    "height_mm": 170
+   },
+   {
+    "code": "N11",
+    "height_mm": 279
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Vista Nova",
+  "family_he": "ויסטה נובה",
+  "name": "Nova Slider",
+  "name_he": "נובה סליידר",
+  "page": 193,
+  "page_to": 193,
+  "cover_page": 193,
+  "image_file": "p193.jpg",
+  "sizes": [
+   {
+    "code": "N70",
+    "height_mm": 70
+   },
+   {
+    "code": "VN70",
+    "height_mm": 70
+   },
+   {
+    "code": "N94",
+    "height_mm": 94
+   },
+   {
+    "code": "VN94",
+    "height_mm": 94
+   },
+   {
+    "code": "N124",
+    "height_mm": 124
+   },
+   {
+    "code": "VN124",
+    "height_mm": 124
+   },
+   {
+    "code": "N170",
+    "height_mm": 170
+   },
+   {
+    "code": "VN170",
+    "height_mm": 170
+   },
+   {
+    "code": "N11",
+    "height_mm": 279
+   },
+   {
+    "code": "VN11",
+    "height_mm": 279
+   },
+   {
+    "code": "N300",
+    "height_mm": 300
+   },
+   {
+    "code": "VN420",
+    "height_mm": 420
+   },
+   {
+    "code": "VN500",
+    "height_mm": 500
+   },
+   {
+    "code": "N600",
+    "height_mm": 600
+   },
+   {
+    "code": "VN600",
+    "height_mm": 600
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": true
+ },
+ {
+  "family": "Vista Light",
+  "family_he": "ויסטה לייט (מואר)",
+  "name": "VL Wall Signs",
+  "name_he": "שלטי קיר מוארים",
+  "page": 205,
+  "page_to": 207,
+  "cover_page": 206,
+  "image_file": "p206.jpg",
+  "sizes": [
+   {
+    "code": "VL250",
+    "height_mm": 250
+   },
+   {
+    "code": "VL300",
+    "height_mm": 300
+   },
+   {
+    "code": "VL400",
+    "height_mm": 400
+   },
+   {
+    "code": "VL500",
+    "height_mm": 500
+   },
+   {
+    "code": "VL600",
+    "height_mm": 600
+   },
+   {
+    "code": "VL700",
+    "height_mm": 700
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Vista Light",
+  "family_he": "ויסטה לייט (מואר)",
+  "name": "VL Projecting Signs",
+  "name_he": "שלטי דגל ניצבים מוארים",
+  "page": 208,
+  "page_to": 209,
+  "cover_page": 209,
+  "image_file": "p209.jpg",
+  "sizes": [
+   {
+    "code": "VL250",
+    "height_mm": 250
+   },
+   {
+    "code": "VL300",
+    "height_mm": 300
+   },
+   {
+    "code": "VL400",
+    "height_mm": 400
+   },
+   {
+    "code": "VL500",
+    "height_mm": 500
+   },
+   {
+    "code": "VL600",
+    "height_mm": 600
+   },
+   {
+    "code": "VL700",
+    "height_mm": 700
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Vista Light",
+  "family_he": "ויסטה לייט (מואר)",
+  "name": "VL Suspended Signs",
+  "name_he": "שלטים תלויים מוארים",
+  "page": 210,
+  "page_to": 211,
+  "cover_page": 211,
+  "image_file": "p211.jpg",
+  "sizes": [
+   {
+    "code": "VL250",
+    "height_mm": 250
+   },
+   {
+    "code": "VL300",
+    "height_mm": 300
+   },
+   {
+    "code": "VL400",
+    "height_mm": 400
+   },
+   {
+    "code": "VL500",
+    "height_mm": 500
+   },
+   {
+    "code": "VL600",
+    "height_mm": 600
+   },
+   {
+    "code": "VL700",
+    "height_mm": 700
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Vista Light",
+  "family_he": "ויסטה לייט (מואר)",
+  "name": "VL Post Signs",
+  "name_he": "שלטי עמוד מוארים",
+  "page": 212,
+  "page_to": 213,
+  "cover_page": 213,
+  "image_file": "p213.jpg",
+  "sizes": [
+   {
+    "code": "VL250",
+    "height_mm": 250
+   },
+   {
+    "code": "VL300",
+    "height_mm": 300
+   },
+   {
+    "code": "VL400",
+    "height_mm": 400
+   },
+   {
+    "code": "VL500",
+    "height_mm": 500
+   },
+   {
+    "code": "VL600",
+    "height_mm": 600
+   },
+   {
+    "code": "VL700",
+    "height_mm": 700
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Vista Light",
+  "family_he": "ויסטה לייט (מואר)",
+  "name": "VL Pylons",
+  "name_he": "פילונים מוארים",
+  "page": 214,
+  "page_to": 225,
+  "cover_page": 215,
+  "image_file": "p215.jpg",
+  "sizes": [
+   {
+    "code": "VL250",
+    "height_mm": 250
+   },
+   {
+    "code": "VL300",
+    "height_mm": 300
+   },
+   {
+    "code": "VL400",
+    "height_mm": 400
+   },
+   {
+    "code": "VL500",
+    "height_mm": 500
+   },
+   {
+    "code": "VL600",
+    "height_mm": 600
+   },
+   {
+    "code": "VL700",
+    "height_mm": 700
+   },
+   {
+    "code": "VL800",
+    "height_mm": 800
+   },
+   {
+    "code": "VL900",
+    "height_mm": 900
+   },
+   {
+    "code": "VL1000",
+    "height_mm": 1000
+   },
+   {
+    "code": "VL1200",
+    "height_mm": 1200
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Vista Fabric",
+  "family_he": "ויסטה פבריק (בד)",
+  "name": "Fab20",
+  "name_he": "Fab20",
+  "page": 227,
+  "page_to": 227,
+  "cover_page": 227,
+  "image_file": "p227.jpg",
+  "sizes": [],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Vista Fabric",
+  "family_he": "ויסטה פבריק (בד)",
+  "name": "Fab40-DS",
+  "name_he": "Fab40-DS",
+  "page": 228,
+  "page_to": 228,
+  "cover_page": 228,
+  "image_file": "p228.jpg",
+  "sizes": [],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Vista Fabric",
+  "family_he": "ויסטה פבריק (בד)",
+  "name": "Fab80",
+  "name_he": "Fab80",
+  "page": 229,
+  "page_to": 229,
+  "cover_page": 229,
+  "image_file": "p229.jpg",
+  "sizes": [],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Vista Fabric",
+  "family_he": "ויסטה פבריק (בד)",
+  "name": "Fab120-DS",
+  "name_he": "Fab120-DS",
+  "page": 230,
+  "page_to": 231,
+  "cover_page": 230,
+  "image_file": "p230.jpg",
+  "sizes": [],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Vista Expand",
+  "family_he": "ויסטה אקספנד",
+  "name": "Wall Frames Portrait",
+  "name_he": "מסגרות קיר לאורך",
+  "page": 235,
+  "page_to": 237,
+  "cover_page": 236,
+  "image_file": "p236.jpg",
+  "sizes": [
+   {
+    "code": "XP700",
+    "height_mm": 700
+   },
+   {
+    "code": "XP800",
+    "height_mm": 800
+   },
+   {
+    "code": "XP900",
+    "height_mm": 900
+   },
+   {
+    "code": "XP1000",
+    "height_mm": 1000
+   },
+   {
+    "code": "XP1100",
+    "height_mm": 1100
+   },
+   {
+    "code": "XP1200",
+    "height_mm": 1200
+   },
+   {
+    "code": "XP1400",
+    "height_mm": 1400
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": true
+ },
+ {
+  "family": "Vista Expand",
+  "family_he": "ויסטה אקספנד",
+  "name": "Wall Frames Landscape",
+  "name_he": "מסגרות קיר לרוחב",
+  "page": 238,
+  "page_to": 241,
+  "cover_page": 239,
+  "image_file": "p239.jpg",
+  "sizes": [
+   {
+    "code": "XP700",
+    "height_mm": 700
+   },
+   {
+    "code": "XP800",
+    "height_mm": 800
+   },
+   {
+    "code": "XP900",
+    "height_mm": 900
+   },
+   {
+    "code": "XP1000",
+    "height_mm": 1000
+   },
+   {
+    "code": "XP1100",
+    "height_mm": 1100
+   },
+   {
+    "code": "XP1200",
+    "height_mm": 1200
+   },
+   {
+    "code": "XP1400",
+    "height_mm": 1400
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": true
+ },
+ {
+  "family": "Vista Expand",
+  "family_he": "ויסטה אקספנד",
+  "name": "Double Sided Pylons",
+  "name_he": "פילונים דו-צדדיים",
+  "page": 242,
+  "page_to": 245,
+  "cover_page": 243,
+  "image_file": "p243.jpg",
+  "sizes": [
+   {
+    "code": "XP700",
+    "height_mm": 700
+   },
+   {
+    "code": "XP800",
+    "height_mm": 800
+   },
+   {
+    "code": "XP900",
+    "height_mm": 900
+   },
+   {
+    "code": "XP1000",
+    "height_mm": 1000
+   },
+   {
+    "code": "XP1100",
+    "height_mm": 1100
+   },
+   {
+    "code": "XP1200",
+    "height_mm": 1200
+   },
+   {
+    "code": "XP1400",
+    "height_mm": 1400
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": true
+ },
+ {
+  "family": "Vista Expand",
+  "family_he": "ויסטה אקספנד",
+  "name": "Post & Panel Portrait",
+  "name_he": "עמוד ופאנל לאורך",
+  "page": 246,
+  "page_to": 249,
+  "cover_page": 247,
+  "image_file": "p247.jpg",
+  "sizes": [
+   {
+    "code": "XP700",
+    "height_mm": 700
+   },
+   {
+    "code": "XP800",
+    "height_mm": 800
+   },
+   {
+    "code": "XP900",
+    "height_mm": 900
+   },
+   {
+    "code": "XP1000",
+    "height_mm": 1000
+   },
+   {
+    "code": "XP1100",
+    "height_mm": 1100
+   },
+   {
+    "code": "XP1200",
+    "height_mm": 1200
+   },
+   {
+    "code": "XP1400",
+    "height_mm": 1400
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": true
+ },
+ {
+  "family": "Vista Expand",
+  "family_he": "ויסטה אקספנד",
+  "name": "Post & Panel Landscape",
+  "name_he": "עמוד ופאנל לרוחב",
+  "page": 250,
+  "page_to": 252,
+  "cover_page": 251,
+  "image_file": "p251.jpg",
+  "sizes": [
+   {
+    "code": "XP700",
+    "height_mm": 700
+   },
+   {
+    "code": "XP800",
+    "height_mm": 800
+   },
+   {
+    "code": "XP900",
+    "height_mm": 900
+   },
+   {
+    "code": "XP1000",
+    "height_mm": 1000
+   },
+   {
+    "code": "XP1100",
+    "height_mm": 1100
+   },
+   {
+    "code": "XP1200",
+    "height_mm": 1200
+   },
+   {
+    "code": "XP1400",
+    "height_mm": 1400
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": true
+ },
+ {
+  "family": "Vista ADA",
+  "family_he": "ויסטה ADA (נגישות)",
+  "name": "Vista ADA",
+  "name_he": "שילוט נגישות",
+  "page": 254,
+  "page_to": 259,
+  "cover_page": 257,
+  "image_file": "p257.jpg",
+  "sizes": [],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Vista Insert",
+  "family_he": "ויסטה אינסרט",
+  "name": "Vista Insert",
+  "name_he": "ויסטה אינסרט",
+  "page": 260,
+  "page_to": 262,
+  "cover_page": 260,
+  "image_file": "p260.jpg",
+  "sizes": [
+   {
+    "code": "V120",
+    "height_mm": 120
+   },
+   {
+    "code": "F120",
+    "height_mm": 120
+   },
+   {
+    "code": "VN170",
+    "height_mm": 170
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Vista Art",
+  "family_he": "ויסטה ארט",
+  "name": "Vista Art",
+  "name_he": "ויסטה ארט",
+  "page": 263,
+  "page_to": 275,
+  "cover_page": 264,
+  "image_file": "p264.jpg",
+  "sizes": [],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Tools",
+  "family_he": "כלי עבודה והתקנה",
+  "name": "Tools",
+  "name_he": "כלי עבודה והתקנה",
+  "page": 276,
+  "page_to": 281,
+  "cover_page": 277,
+  "image_file": "p277.jpg",
+  "sizes": [
+   {
+    "code": "PG11",
+    "height_mm": 279
+   },
+   {
+    "code": "PG12",
+    "height_mm": 305
+   },
+   {
+    "code": "PG14",
+    "height_mm": 356
+   },
+   {
+    "code": "PG15",
+    "height_mm": 381
+   },
+   {
+    "code": "PG16",
+    "height_mm": 406
+   },
+   {
+    "code": "PG17",
+    "height_mm": 432
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Vista Slider",
+  "family_he": "ויסטה סליידר",
+  "name": "Vista Slider",
+  "name_he": "ויסטה סליידר",
+  "page": 282,
+  "page_to": 285,
+  "cover_page": 283,
+  "image_file": "p283.jpg",
+  "sizes": [
+   {
+    "code": "V40",
+    "height_mm": 40
+   },
+   {
+    "code": "V60",
+    "height_mm": 60
+   },
+   {
+    "code": "V80",
+    "height_mm": 80
+   },
+   {
+    "code": "F80",
+    "height_mm": 80
+   },
+   {
+    "code": "F200",
+    "height_mm": 200
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Snap Frames",
+  "family_he": "מסגרות סנאפ",
+  "name": "Snap Frames",
+  "name_he": "מסגרות סנאפ",
+  "page": 286,
+  "page_to": 293,
+  "cover_page": 287,
+  "image_file": "p287.jpg",
+  "sizes": [],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Wall Mounted Display",
+  "family_he": "תצוגה לקיר",
+  "name": "Wall Mounted Display",
+  "name_he": "תצוגה לקיר",
+  "page": 294,
+  "page_to": 298,
+  "cover_page": 294,
+  "image_file": "p294.jpg",
+  "sizes": [
+   {
+    "code": "MS12",
+    "height_mm": 305
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Plexiglas Display Stands",
+  "family_he": "סטנדים פרספקס",
+  "name": "Plexiglas Display Stands",
+  "name_he": "סטנדים פרספקס",
+  "page": 299,
+  "page_to": 299,
+  "cover_page": 299,
+  "image_file": "p299.jpg",
+  "sizes": [],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "A-Sign",
+  "family_he": "שלט A",
+  "name": "A-Sign",
+  "name_he": "שלט A למדרכה",
+  "page": 300,
+  "page_to": 302,
+  "cover_page": 300,
+  "image_file": "p300.jpg",
+  "sizes": [],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Counter Slide-in Frame",
+  "family_he": "מסגרת דלפק",
+  "name": "Counter Slide-in Frame",
+  "name_he": "מסגרת דלפק",
+  "page": 303,
+  "page_to": 303,
+  "cover_page": 303,
+  "image_file": "p303.jpg",
+  "sizes": [],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Brochure Holders",
+  "family_he": "מתקני ברושורים",
+  "name": "Brochure Holders",
+  "name_he": "מתקני ברושורים",
+  "page": 304,
+  "page_to": 313,
+  "cover_page": 311,
+  "image_file": "p311.jpg",
+  "sizes": [],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Information and Menu Stands",
+  "family_he": "סטנדי מידע ותפריט",
+  "name": "Information and Menu Stands",
+  "name_he": "סטנדי מידע ותפריט",
+  "page": 314,
+  "page_to": 316,
+  "cover_page": 314,
+  "image_file": "p314.jpg",
+  "sizes": [],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Bulletin Board",
+  "family_he": "לוח מודעות",
+  "name": "Bulletin Board",
+  "name_he": "לוח מודעות",
+  "page": 317,
+  "page_to": 318,
+  "cover_page": 317,
+  "image_file": "p317.jpg",
+  "sizes": [],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Poster Stands",
+  "family_he": "סטנדי פוסטר",
+  "name": "Poster Stands",
+  "name_he": "סטנדי פוסטר",
+  "page": 319,
+  "page_to": 321,
+  "cover_page": 319,
+  "image_file": "p319.jpg",
+  "sizes": [],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Sidewalk Sign",
+  "family_he": "שלט מדרכה",
+  "name": "Sidewalk Sign",
+  "name_he": "שלט מדרכה",
+  "page": 322,
+  "page_to": 322,
+  "cover_page": 322,
+  "image_file": "p322.jpg",
+  "sizes": [],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Rigid Poster Stand",
+  "family_he": "סטנד פוסטר קשיח",
+  "name": "Rigid Poster Stand",
+  "name_he": "סטנד פוסטר קשיח",
+  "page": 323,
+  "page_to": 323,
+  "cover_page": 323,
+  "image_file": "p323.jpg",
+  "sizes": [],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Queue Belt Barriers",
+  "family_he": "מחסומי תור",
+  "name": "Queue Belt Barriers",
+  "name_he": "מחסומי תור",
+  "page": 324,
+  "page_to": 328,
+  "cover_page": 327,
+  "image_file": "p327.jpg",
+  "sizes": [],
+  "active": 1,
+  "sizes_inherited": false
+ },
+ {
+  "family": "Sample & Display Kits",
+  "family_he": "ערכות דוגמה",
+  "name": "Sample & Display Kits",
+  "name_he": "ערכות דוגמה",
+  "page": 329,
+  "page_to": 331,
+  "cover_page": 329,
+  "image_file": "p329.jpg",
+  "sizes": [
+   {
+    "code": "XP700",
+    "height_mm": 700
+   }
+  ],
+  "active": 1,
+  "sizes_inherited": false
+ }
+]

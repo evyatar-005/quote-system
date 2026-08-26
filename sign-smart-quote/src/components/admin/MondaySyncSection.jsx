@@ -5,11 +5,13 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from "@/components/ui/command";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, Save, RefreshCw, Trash2, Plus, GitMerge, Check, ChevronsUpDown, X } from "lucide-react";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import { Loader2, Save, RefreshCw, Trash2, Plus, GitMerge, Check, ChevronsUpDown, X, Flag, Play, ChevronDown, MoreHorizontal, Send } from "lucide-react";
 import { toast } from "sonner";
 import { listMondayBoards } from "@/api/mondayClient";
 import { STATUS_LABELS, STATUS_TONE, LEAD_STATUS_KEYS } from "@/lib/leadStatuses";
 import { mondaySync, crmSettings } from "@/api/mondaySyncClient";
+import { crmCampaignList } from "@/api/crmClient";
 import CostSectionCard from "./CostSectionCard";
 
 // CRM Phase 2 admin UI — map monday.com boards (one per campaign) to the CRM
@@ -22,6 +24,20 @@ export default function MondaySyncSection() {
   const [boardMaps, setBoardMaps] = useState([]);
   const [mondayBoards, setMondayBoards] = useState([]);
   const [selectedBoardId, setSelectedBoardId] = useState("");
+  // Campaign is now required to create a board map — see createMap. "" means
+  // "צור קמפיין חדש בשם הבורד", the default and the convention every
+  // existing board already follows (all 6 are named exactly like their board).
+  const [campaigns, setCampaigns] = useState([]);
+  const [selectedCampaignId, setSelectedCampaignId] = useState("");
+  // Per-row spinner for "סיים קמפיין"/"הפעל מחדש" — load() re-fetches the
+  // whole list on success, so without this every row's action buttons would
+  // spin together and hide which one was actually clicked.
+  const [campaignBusyId, setCampaignBusyId] = useState(null);
+  const [syncBusyId, setSyncBusyId] = useState(null);
+  // Maintenance (backfill + lead reset) is collapsed by default: both are
+  // one-off repairs, and the destructive one used to sit mid-screen above the
+  // board list an admin opens this panel to reach.
+  const [maintenanceOpen, setMaintenanceOpen] = useState(false);
   const [columns, setColumns] = useState([]);
   const [loadingColumns, setLoadingColumns] = useState(false);
   const [nameCol, setNameCol] = useState("");
@@ -55,9 +71,12 @@ export default function MondaySyncSection() {
   const load = async () => {
     setLoading(true);
     try {
-      const [settings, boards] = await Promise.all([crmSettings.get(), mondaySync.listBoards()]);
+      const [settings, boards, campaignRows] = await Promise.all([
+        crmSettings.get(), mondaySync.listBoards(), crmCampaignList.list(),
+      ]);
       setPollEnabled(!!settings?.monday_poll_enabled);
       setBoardMaps(boards);
+      setCampaigns(campaignRows);
       try { setMondayBoards(await listMondayBoards()); } catch { /* monday.com not configured yet */ }
     } catch (err) {
       toast.error(err.message || "טעינת הגדרות הסנכרון נכשלה");
@@ -85,6 +104,7 @@ export default function MondaySyncSection() {
   const onBoardSelect = async (boardId) => {
     setSelectedBoardId(boardId);
     setColumns([]); setNameCol(""); setPhoneCol(""); setEmailCol(""); setStatusCol(""); setQuoteFileCol(""); setFollowUpCol("");
+    setSelectedCampaignId("");
     if (!boardId) return;
     setLoadingColumns(true);
     try {
@@ -102,15 +122,25 @@ export default function MondaySyncSection() {
     setCreating(true);
     try {
       const boardName = mondayBoards.find((b) => b.id === selectedBoardId)?.name || "";
+      // A board with no campaign is a board "סיים קמפיין" can never reach —
+      // require one. "" (the default) means create a new campaign named
+      // exactly like the board, matching what every existing board here
+      // already does, rather than making the admin type the same name twice.
+      let campaignId = selectedCampaignId;
+      if (!campaignId) {
+        const campaign = await crmCampaignList.create({ name: boardName || selectedBoardId, channel: "monday", status: "active" });
+        campaignId = campaign.id;
+      }
       await mondaySync.createBoardMap({
         board_id: selectedBoardId,
         board_name: boardName,
+        campaign_id: campaignId,
         column_map: { name: nameCol || undefined, phone: phoneCol || undefined, email: emailCol || undefined, quote_file: quoteFileCol || undefined, follow_up: followUpCol || undefined },
         status_column_id: statusCol || null,
         status_values: serializeStatusValues(statusMap),
       });
       toast.success("הבורד מופה בהצלחה");
-      setSelectedBoardId(""); setColumns([]); setQuoteFileCol(""); setStatusMap({});
+      setSelectedBoardId(""); setColumns([]); setQuoteFileCol(""); setStatusMap({}); setSelectedCampaignId("");
       load();
     } catch (err) {
       toast.error(err.message || "מיפוי הבורד נכשל");
@@ -252,6 +282,50 @@ export default function MondaySyncSection() {
     }
   };
 
+  // One click = campaign ended + this board's sync off, in one transaction —
+  // reversible, so unlike removeMap/applyReset this asks for no confirmation.
+  const setCampaignEnded = async (id, ended) => {
+    setCampaignBusyId(id);
+    try {
+      await mondaySync.setCampaignEnded(id, ended);
+      toast.success(ended
+        ? "הקמפיין הסתיים — הסנכרון לבורד הזה כובה. הלידים נשמרו במלואם"
+        : "הקמפיין הופעל מחדש — הסנכרון לבורד חזר לפעול");
+      load();
+    } catch (err) {
+      toast.error(err.message || (ended ? "סיום הקמפיין נכשל" : "הפעלת הקמפיין נכשלה"));
+    } finally {
+      setCampaignBusyId(null);
+    }
+  };
+
+  // Sync on/off for ONE board — the control the UI was missing entirely: the
+  // pull/push flags were read (to draw the "עדיין נספר בדוחות" badge) but
+  // never written, so the panel reported a state nobody could change except
+  // through the global switch or by ending the campaign outright.
+  //
+  // The two flags move together because "סנכרון לבורד הזה" is one idea to an
+  // admin; they only ever diverged because nothing could set them. No new
+  // endpoint — PUT /boards/:id already whitelists both.
+  const toggleBoardSync = async (id, enabled) => {
+    setSyncBusyId(id);
+    try {
+      await mondaySync.updateBoardMap(id, { pull_enabled: enabled ? 1 : 0, push_enabled: enabled ? 1 : 0 });
+      // The "off" message spells out the half that isn't obvious: pausing the
+      // flow does NOT take the existing leads out of the dashboard tiles.
+      // That is what "סיים קמפיין" is for, and confusing the two is exactly
+      // how five boards ended up drifted.
+      toast.success(enabled
+        ? "הסנכרון לבורד הופעל"
+        : "הסנכרון לבורד הופסק — הלידים הקיימים עדיין נספרים בדוחות");
+      load();
+    } catch (err) {
+      toast.error(err.message || "עדכון הסנכרון נכשל");
+    } finally {
+      setSyncBusyId(null);
+    }
+  };
+
   // Lets an admin add/change the "quote file" column on a board that was
   // already mapped before this field existed, without deleting and
   // recreating the whole mapping.
@@ -339,161 +413,6 @@ export default function MondaySyncSection() {
         <Switch checked={pollEnabled} onCheckedChange={togglePoll} disabled={savingSettings} />
       </div>
 
-      {/* Historical completion. Deliberately apart from the per-board pull/push
-          controls: it is a one-off repair of leads whose board is gone, not
-          part of the ongoing sync. */}
-      <div className="rounded-xl border border-amber-300 bg-amber-50/40 p-4 space-y-3">
-        <div className="flex items-start justify-between gap-3 flex-wrap">
-          <div className="min-w-0">
-            <div className="text-sm font-semibold text-slate-700">השלמת סטטוסים היסטורית</div>
-            <p className="text-xs text-muted-foreground mt-0.5 max-w-2xl">
-              לידים שנמשכו מבורדים שכבר אינם מסונכרנים נשארו בסטטוס ״חדש״ — אין מול מה לסנכרן אותם.
-              נתוני מנדיי שלהם עדיין שמורים אצלנו, ואפשר להשלים מהם את הסטטוס. ליד שסוכן כבר טיפל בו לא ישתנה.
-            </p>
-          </div>
-          <Button variant="outline" onClick={previewBackfill} disabled={backfillBusy} className="gap-2 shrink-0">
-            {backfillBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-            בדוק מה ישתנה
-          </Button>
-        </div>
-
-        {backfill && (
-          <div className="rounded-lg border border-amber-300 bg-white p-3 space-y-2 text-xs">
-            <div className="font-semibold text-slate-700">
-              {backfill.matched} מתוך {backfill.candidates} לידים בסטטוס ״חדש״ יעודכנו
-            </div>
-            {backfill.byStatus.length > 0 && (
-              <ul className="space-y-1">
-                {backfill.byStatus.map((b) => (
-                  <li key={b.label} className="flex items-center gap-2 flex-wrap">
-                    <span className={`px-2 py-0.5 rounded-full border ${STATUS_TONE[b.status] || ""}`}>
-                      {STATUS_LABELS[b.status] || b.status}
-                    </span>
-                    <span className="text-slate-500">← ״{b.label}״ · {b.count} לידים</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {/* What will NOT be updated matters as much as what will: the
-                leftover is the answer to "why is the tile still high", and
-                showing it only when nothing matched hid it in exactly the
-                case where the admin can still act on it. */}
-            {backfill.candidates > backfill.matched && (
-              <p className="text-slate-500 border-t border-amber-200 pt-2">
-                {backfill.matched === 0
-                  ? "אף ליד לא תואם למיפוי הקיים — ייתכן שהבורדים הישנים השתמשו בתוויות אחרות."
-                  : `${backfill.candidates - backfill.matched} לידים יישארו ״חדש״ — אין להם תווית מוכרת בנתונים השמורים.`}
-                {backfill.topUnmatched?.length > 0 && (
-                  <> הערכים הנפוצים אצלם: {backfill.topUnmatched.slice(0, 6).map((u) => `״${u.label}״ (${u.count})`).join(", ")}.
-                    {" "}אם אחד מהם הוא סטטוס אמיתי — הוסף אותו למיפוי והרץ שוב.</>
-                )}
-              </p>
-            )}
-            {backfill.matched > 0 && (
-              <div className="flex items-center gap-2 pt-1">
-                <Button onClick={applyBackfill} disabled={backfillBusy} className="gap-2">
-                  {backfillBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                  בצע עדכון ל-{backfill.matched} לידים
-                </Button>
-                <Button variant="ghost" onClick={() => setBackfill(null)}>ביטול</Button>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Destructive. Red rather than amber, and placed last, because unlike
-          everything above it this REMOVES data instead of reconciling it. */}
-      <div className="rounded-xl border-2 border-red-300 bg-red-50/40 p-4 space-y-3">
-        <div className="flex items-start justify-between gap-3 flex-wrap">
-          <div className="min-w-0">
-            <div className="text-sm font-semibold text-red-800">התחלה מהיום — ניקוי היסטוריית לידים</div>
-            <p className="text-xs text-slate-600 mt-0.5 max-w-2xl">
-              מוחק לידים שנמשכו ממנדיי מבורדים שכבר אינם מחוברים. הם אינם קיימים בשום בורד, אי אפשר
-              לסנכרן או לתקן אותם, והם מעוותים כל ספירה ואחוז סגירה במסכי האנליטיקה.
-              <strong className="text-red-800"> נשארים: </strong>
-              הלידים מהבורד המחובר, וכל ליד שנוצר במערכת עצמה (ווצאפ נכנס או ידני).
-              הצעות מחיר והזמנות אינן מושפעות כלל. גיבוי מלא נשמר בשרת לפני המחיקה.
-            </p>
-          </div>
-          <Button variant="outline" onClick={previewReset} disabled={resetBusy} className="gap-2 shrink-0">
-            {resetBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-            בדוק מה יימחק
-          </Button>
-        </div>
-
-        {reset && (
-          <div className="rounded-lg border border-red-300 bg-white p-3 space-y-3 text-xs">
-            <div className="font-semibold text-slate-800">
-              {reset.doomed} לידים יימחקו · {reset.kept} יישארו (מתוך {reset.total})
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <p className="font-semibold text-red-800 mb-1">יימחקו — לפי סטטוס</p>
-                {reset.byStatus.length === 0 ? (
-                  <p className="text-slate-400">אין מה למחוק</p>
-                ) : (
-                  <ul className="space-y-0.5">
-                    {reset.byStatus.map((b) => (
-                      <li key={b.status} className="flex items-center gap-2">
-                        <span className={`px-2 py-0.5 rounded-full border ${STATUS_TONE[b.status] || ""}`}>
-                          {STATUS_LABELS[b.status] || b.status}
-                        </span>
-                        <span className="text-slate-500">{b.n}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-              <div>
-                <p className="font-semibold text-emerald-800 mb-1">יישארו</p>
-                <ul className="space-y-0.5 text-slate-600">
-                  <li>{reset.keptOnBoard} מהבורד המחובר</li>
-                  {reset.keptNonMonday.map((k) => (
-                    <li key={k.source}>{k.n} שנוצרו במערכת ({k.source})</li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-
-            {reset.conversationsAffected > 0 && (
-              <p className="text-slate-500">
-                {reset.conversationsAffected} שיחות ווצאפ מקושרות ללידים האלה — השיחות עצמן
-                יישמרו במלואן ורק הקישור לליד יוסר.
-              </p>
-            )}
-
-            {reset.doomed > 0 && (
-              <div className="border-t border-red-200 pt-2 space-y-2">
-                <label className="block text-slate-700">
-                  לאישור, הקלד את המספר <strong>{reset.doomed}</strong>:
-                </label>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Input
-                    value={resetConfirm}
-                    onChange={(e) => setResetConfirm(e.target.value)}
-                    placeholder={String(reset.doomed)}
-                    dir="ltr"
-                    className="w-32 bg-background"
-                  />
-                  <Button
-                    variant="destructive"
-                    onClick={applyReset}
-                    disabled={resetBusy || resetConfirm.trim() !== String(reset.doomed)}
-                    className="gap-2"
-                  >
-                    {resetBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                    מחק {reset.doomed} לידים
-                  </Button>
-                  <Button variant="ghost" onClick={() => { setReset(null); setResetConfirm(""); }}>ביטול</Button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
       {boardMaps.length > 0 && (
         <div className="space-y-2">
           <div className="text-sm font-semibold text-slate-600">בורדים ממופים</div>
@@ -515,42 +434,139 @@ export default function MondaySyncSection() {
             const mappedStatuses = INTERNAL_STATUSES.filter((k) => (normalized[k] || []).length);
             const totalLabels = mappedStatuses.reduce((n, k) => n + normalized[k].length, 0);
             const pushOff = !b.status_column_id || mappedStatuses.length === 0;
+            // "הסתיים" (deliberately, via the button below) vs. "נסחף" (sync
+            // flags were turned off some other way — directly in the DB, or
+            // before this button existed — while the campaign itself is still
+            // marked active and so still counted in every dashboard tile).
+            // The five boards this session found itself protecting live leads
+            // against are exactly this second state.
+            const campaignEnded = !!b.campaign_ended_at;
+            const syncOn = !!(b.pull_enabled || b.push_enabled);
+            const drifted = !campaignEnded && !syncOn;
+            const live = !campaignEnded && syncOn;
+            const missingStatuses = INTERNAL_STATUSES
+              .filter((k) => !(normalized[k] || []).length)
+              .map((k) => STATUS_LABELS[k]);
             return (
-              <div key={b.id} className="border border-black rounded-xl px-3 py-2 text-sm space-y-2">
+              <div key={b.id} className={`border border-black rounded-xl px-3 py-2.5 text-sm space-y-2 ${campaignEnded ? "opacity-60" : ""}`}>
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="font-medium truncate">{b.board_name || b.board_id}</div>
-                    <div className="text-xs text-slate-400">
-                      {b.last_polled_at ? `נסרק לאחרונה: ${new Date(b.last_polled_at).toLocaleString("he-IL")}` : "טרם נסרק"}
-                      {b.last_error && <span className="text-red-500"> — {b.last_error}</span>}
-                      {" · "}
-                      {mappedQuoteFile ? <span className="text-emerald-600">קובץ הצעת מחיר ממופה</span> : <span className="text-amber-600">אין מיפוי לקובץ הצעת מחיר</span>}
-                    </div>
-                    <div className="text-xs mt-0.5">
-                      {pushOff ? (
-                        <span className="text-red-600 font-medium">
-                          ⚠ דחיפת סטטוס ל-monday לא פעילה —{" "}
-                          {!b.status_column_id ? "לא נבחרה עמודת סטטוס" : "אף סטטוס לא מופה לתווית בבורד"}.
-                          שינויי סטטוס ב-CRM לא יגיעו לבורד.
+                    {/* The one question this row has to answer instantly — is
+                        this board syncing right now. A coloured dot answers it
+                        before any text is read; the three states are mutually
+                        exclusive by construction. */}
+                    <div className="font-medium truncate flex items-center gap-2 flex-wrap">
+                      <span
+                        className={`w-2 h-2 rounded-full shrink-0 ${live ? "bg-emerald-500" : drifted ? "bg-amber-500" : "bg-slate-300"}`}
+                        title={live ? "מסונכרן" : drifted ? "הסנכרון כבוי" : "הקמפיין הסתיים"}
+                      />
+                      {b.board_name || b.board_id}
+                      {campaignEnded && (
+                        <span className="text-[11px] px-2 py-0.5 rounded-full border border-slate-300 bg-slate-100 text-slate-600 font-normal">
+                          קמפיין הסתיים
                         </span>
-                      ) : mappedStatuses.length < INTERNAL_STATUSES.length ? (
-                        <span className="text-amber-600">
-                          מיפוי חלקי — {mappedStatuses.length} מתוך {INTERNAL_STATUSES.length} סטטוסים ממופים
-                          ({totalLabels} תוויות בסה"כ). חסר: {INTERNAL_STATUSES.filter((k) => !(normalized[k] || []).length)
-                            .map((k) => STATUS_LABELS[k]).join(", ")}
-                        </span>
-                      ) : (
-                        <span className="text-emerald-600">
-                          כל {INTERNAL_STATUSES.length} הסטטוסים ממופים ({totalLabels} תוויות בסה"כ)
+                      )}
+                      {drifted && (
+                        <span
+                          className="text-[11px] px-2 py-0.5 rounded-full border border-amber-300 bg-amber-50 text-amber-700 font-normal"
+                          title="הסנכרון כובה, אך הקמפיין לא סומן כהסתיים — הלידים שלו עדיין נספרים בכרטיסים ובדוחות. ״סיים קמפיין״ סוגר את הפער."
+                        >
+                          עדיין נספר בדוחות
                         </span>
                       )}
                     </div>
+                    {/* One chip per fact instead of three stacked sentences —
+                        the full explanation moves to the title attribute, so
+                        six boards read as a list and not as a wall of text. */}
+                    <div className="text-xs text-slate-400 mt-1 flex items-center gap-x-2 flex-wrap">
+                      <span title={b.last_polled_at ? new Date(b.last_polled_at).toLocaleString("he-IL") : "הבורד עוד לא נסרק"}>
+                        {b.last_polled_at ? `נסרק ${new Date(b.last_polled_at).toLocaleDateString("he-IL")}` : "טרם נסרק"}
+                      </span>
+                      <span>·</span>
+                      <span
+                        className={pushOff ? "text-red-600" : missingStatuses.length ? "text-amber-600" : "text-emerald-600"}
+                        title={missingStatuses.length ? `חסר: ${missingStatuses.join(", ")}` : `${totalLabels} תוויות ממופות`}
+                      >
+                        סטטוסים {mappedStatuses.length}/{INTERNAL_STATUSES.length}
+                      </span>
+                      <span>·</span>
+                      <span
+                        className={mappedQuoteFile ? "text-emerald-600" : "text-amber-600"}
+                        title={mappedQuoteFile ? "קובץ הצעת המחיר נדחף חזרה לבורד" : "לא נבחרה עמודה — הצעות מחיר לא יידחפו לבורד"}
+                      >
+                        קובץ הצעה {mappedQuoteFile ? "✓" : "✗"}
+                      </span>
+                      {b.last_error && (
+                        <>
+                          <span>·</span>
+                          <span className="text-red-500 truncate max-w-[16rem]" title={b.last_error}>שגיאה אחרונה</span>
+                        </>
+                      )}
+                    </div>
+                    {/* Stays a full sentence rather than a chip: this is silent
+                        data loss — status changes never reach monday and
+                        nothing else in the UI would ever say so. */}
+                    {pushOff && !campaignEnded && (
+                      <div className="text-xs text-red-600 font-medium mt-1">
+                        ⚠ דחיפת סטטוס לא פעילה — {!b.status_column_id ? "לא נבחרה עמודת סטטוס" : "אף סטטוס לא מופה לתווית בבורד"}.
+                        שינויי סטטוס ב-CRM לא יגיעו לבורד.
+                      </div>
+                    )}
                   </div>
+                  {/* Two everyday actions stay visible, the lifecycle button
+                      keeps its own place (it is the whole point of the row),
+                      and the rare/irreversible ones move behind the menu — the
+                      delete used to look LIGHTER than the reversible actions
+                      next to it, which had the visual weight backwards. */}
                   <div className="flex items-center gap-1 shrink-0">
+                    {/* Disabled once the campaign has ended: switching sync back
+                        on there would recreate the drift in the other direction
+                        — flowing again while still absent from every report.
+                        "הפעל מחדש" is the one action that restores both. */}
+                    <div
+                      className="flex items-center gap-1.5 ml-2"
+                      title={campaignEnded
+                        ? "הקמפיין הסתיים — השתמש ב״הפעל מחדש״ כדי להחזיר גם את הסנכרון וגם את הספירה בדוחות"
+                        : syncOn
+                          ? "לידים נמשכים מהבורד וסטטוסים נדחפים אליו אוטומטית"
+                          : "הזרימה מהבורד מושהית — הלידים הקיימים עדיין נספרים בדוחות"}
+                    >
+                      <span className="text-xs text-slate-500">סנכרון</span>
+                      <Switch
+                        checked={syncOn}
+                        disabled={campaignEnded || syncBusyId === b.id}
+                        onCheckedChange={(v) => toggleBoardSync(b.id, v)}
+                      />
+                    </div>
                     <Button size="sm" variant="outline" onClick={() => pullNow(b.id)} className="gap-1"><RefreshCw className="w-3.5 h-3.5" />משוך</Button>
-                    <Button size="sm" variant="outline" onClick={() => pushNow(b.id)} className="gap-1">דחוף סטטוס</Button>
                     <Button size="sm" variant="outline" onClick={() => startEdit(b)}>ערוך מיפוי</Button>
-                    <Button size="sm" variant="ghost" onClick={() => removeMap(b.id)}><Trash2 className="w-3.5 h-3.5 text-red-500" /></Button>
+                    <Button
+                      size="sm"
+                      variant={drifted ? "default" : "outline"}
+                      disabled={campaignBusyId === b.id}
+                      onClick={() => setCampaignEnded(b.id, !campaignEnded)}
+                      className="gap-1"
+                    >
+                      {campaignBusyId === b.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        : campaignEnded ? <Play className="w-3.5 h-3.5" /> : <Flag className="w-3.5 h-3.5" />}
+                      {campaignEnded ? "הפעל מחדש" : "סיים קמפיין"}
+                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button size="sm" variant="ghost" className="px-2" title="פעולות נוספות">
+                          <MoreHorizontal className="w-4 h-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start">
+                        <DropdownMenuItem onClick={() => pushNow(b.id)} className="gap-2">
+                          <Send className="w-3.5 h-3.5" />דחוף סטטוס עכשיו
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => removeMap(b.id)} className="gap-2 text-red-600 focus:text-red-600">
+                          <Trash2 className="w-3.5 h-3.5" />מחק מיפוי
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </div>
                 {editingId === b.id && (
@@ -605,6 +621,23 @@ export default function MondaySyncSection() {
       <div className="space-y-3 border-t border-slate-200 pt-4">
         <div className="text-sm font-semibold text-slate-600">מיפוי בורד חדש</div>
         <BoardCombobox boards={mondayBoards} value={selectedBoardId} onChange={onBoardSelect} />
+
+        {selectedBoardId && (
+          <div className="space-y-1.5">
+            <label className="text-xs text-slate-500">
+              קמפיין — חובה, כדי ש"סיים קמפיין" תמיד יוכל לפעול על הבורד הזה
+            </label>
+            <Select value={selectedCampaignId || "__new__"} onValueChange={(v) => setSelectedCampaignId(v === "__new__" ? "" : v)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__new__">
+                  צור קמפיין חדש בשם "{mondayBoards.find((b) => b.id === selectedBoardId)?.name || selectedBoardId}"
+                </SelectItem>
+                {campaigns.map((c) => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
         {loadingColumns && <Loader2 className="w-5 h-5 animate-spin text-slate-400" />}
 
@@ -664,6 +697,183 @@ export default function MondaySyncSection() {
           </>
         )}
       </div>
+
+      {/* One-off repairs of lead history, not part of the ongoing sync — so
+          they sit below the boards an admin actually works with, collapsed by
+          default. Before this, the destructive block sat in the middle of the
+          screen, above the daily content. */}
+      <div className="border-t border-slate-200 pt-4">
+        <button
+          type="button"
+          onClick={() => setMaintenanceOpen((o) => !o)}
+          className="w-full text-right flex items-center justify-between gap-3"
+        >
+          <div>
+            <div className="text-sm font-semibold text-slate-600">תחזוקה ותיקונים</div>
+            <p className="text-xs text-muted-foreground">פעולות חד-פעמיות על היסטוריית הלידים — לא חלק מהסנכרון השוטף</p>
+          </div>
+          <ChevronDown className={`w-4 h-4 text-slate-400 shrink-0 transition-transform ${maintenanceOpen ? "" : "-rotate-90"}`} />
+        </button>
+      </div>
+
+      {maintenanceOpen && (
+        <div className="space-y-4">
+        {/* Historical completion. Deliberately apart from the per-board pull/push
+            controls: it is a one-off repair of leads whose board is gone, not
+            part of the ongoing sync. */}
+        <div className="rounded-xl border border-amber-300 bg-amber-50/40 p-4 space-y-3">
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-slate-700">השלמת סטטוסים היסטורית</div>
+              <p className="text-xs text-muted-foreground mt-0.5 max-w-2xl">
+                לידים שנמשכו מבורדים שכבר אינם מסונכרנים נשארו בסטטוס ״חדש״ — אין מול מה לסנכרן אותם.
+                נתוני מנדיי שלהם עדיין שמורים אצלנו, ואפשר להשלים מהם את הסטטוס. ליד שסוכן כבר טיפל בו לא ישתנה.
+              </p>
+            </div>
+            <Button variant="outline" onClick={previewBackfill} disabled={backfillBusy} className="gap-2 shrink-0">
+              {backfillBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+              בדוק מה ישתנה
+            </Button>
+          </div>
+
+          {backfill && (
+            <div className="rounded-lg border border-amber-300 bg-white p-3 space-y-2 text-xs">
+              <div className="font-semibold text-slate-700">
+                {backfill.matched} מתוך {backfill.candidates} לידים בסטטוס ״חדש״ יעודכנו
+              </div>
+              {backfill.byStatus.length > 0 && (
+                <ul className="space-y-1">
+                  {backfill.byStatus.map((b) => (
+                    <li key={b.label} className="flex items-center gap-2 flex-wrap">
+                      <span className={`px-2 py-0.5 rounded-full border ${STATUS_TONE[b.status] || ""}`}>
+                        {STATUS_LABELS[b.status] || b.status}
+                      </span>
+                      <span className="text-slate-500">← ״{b.label}״ · {b.count} לידים</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {/* What will NOT be updated matters as much as what will: the
+                  leftover is the answer to "why is the tile still high", and
+                  showing it only when nothing matched hid it in exactly the
+                  case where the admin can still act on it. */}
+              {backfill.candidates > backfill.matched && (
+                <p className="text-slate-500 border-t border-amber-200 pt-2">
+                  {backfill.matched === 0
+                    ? "אף ליד לא תואם למיפוי הקיים — ייתכן שהבורדים הישנים השתמשו בתוויות אחרות."
+                    : `${backfill.candidates - backfill.matched} לידים יישארו ״חדש״ — אין להם תווית מוכרת בנתונים השמורים.`}
+                  {backfill.topUnmatched?.length > 0 && (
+                    <> הערכים הנפוצים אצלם: {backfill.topUnmatched.slice(0, 6).map((u) => `״${u.label}״ (${u.count})`).join(", ")}.
+                      {" "}אם אחד מהם הוא סטטוס אמיתי — הוסף אותו למיפוי והרץ שוב.</>
+                  )}
+                </p>
+              )}
+              {backfill.matched > 0 && (
+                <div className="flex items-center gap-2 pt-1">
+                  <Button onClick={applyBackfill} disabled={backfillBusy} className="gap-2">
+                    {backfillBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                    בצע עדכון ל-{backfill.matched} לידים
+                  </Button>
+                  <Button variant="ghost" onClick={() => setBackfill(null)}>ביטול</Button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Destructive. Red rather than amber, and placed last, because unlike
+            everything above it this REMOVES data instead of reconciling it. */}
+        <div className="rounded-xl border-2 border-red-300 bg-red-50/40 p-4 space-y-3">
+          <div className="flex items-start justify-between gap-3 flex-wrap">
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-red-800">התחלה מהיום — ניקוי היסטוריית לידים</div>
+              <p className="text-xs text-slate-600 mt-0.5 max-w-2xl">
+                מוחק לידים שנמשכו ממנדיי מבורדים שכבר אינם מחוברים. הם אינם קיימים בשום בורד, אי אפשר
+                לסנכרן או לתקן אותם, והם מעוותים כל ספירה ואחוז סגירה במסכי האנליטיקה.
+                <strong className="text-red-800"> נשארים: </strong>
+                הלידים מהבורד המחובר, וכל ליד שנוצר במערכת עצמה (ווצאפ נכנס או ידני).
+                הצעות מחיר והזמנות אינן מושפעות כלל. גיבוי מלא נשמר בשרת לפני המחיקה.
+              </p>
+            </div>
+            <Button variant="outline" onClick={previewReset} disabled={resetBusy} className="gap-2 shrink-0">
+              {resetBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+              בדוק מה יימחק
+            </Button>
+          </div>
+
+          {reset && (
+            <div className="rounded-lg border border-red-300 bg-white p-3 space-y-3 text-xs">
+              <div className="font-semibold text-slate-800">
+                {reset.doomed} לידים יימחקו · {reset.kept} יישארו (מתוך {reset.total})
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <p className="font-semibold text-red-800 mb-1">יימחקו — לפי סטטוס</p>
+                  {reset.byStatus.length === 0 ? (
+                    <p className="text-slate-400">אין מה למחוק</p>
+                  ) : (
+                    <ul className="space-y-0.5">
+                      {reset.byStatus.map((b) => (
+                        <li key={b.status} className="flex items-center gap-2">
+                          <span className={`px-2 py-0.5 rounded-full border ${STATUS_TONE[b.status] || ""}`}>
+                            {STATUS_LABELS[b.status] || b.status}
+                          </span>
+                          <span className="text-slate-500">{b.n}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                <div>
+                  <p className="font-semibold text-emerald-800 mb-1">יישארו</p>
+                  <ul className="space-y-0.5 text-slate-600">
+                    <li>{reset.keptOnBoard} מהבורד המחובר</li>
+                    {reset.keptNonMonday.map((k) => (
+                      <li key={k.source}>{k.n} שנוצרו במערכת ({k.source})</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+
+              {reset.conversationsAffected > 0 && (
+                <p className="text-slate-500">
+                  {reset.conversationsAffected} שיחות ווצאפ מקושרות ללידים האלה — השיחות עצמן
+                  יישמרו במלואן ורק הקישור לליד יוסר.
+                </p>
+              )}
+
+              {reset.doomed > 0 && (
+                <div className="border-t border-red-200 pt-2 space-y-2">
+                  <label className="block text-slate-700">
+                    לאישור, הקלד את המספר <strong>{reset.doomed}</strong>:
+                  </label>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Input
+                      value={resetConfirm}
+                      onChange={(e) => setResetConfirm(e.target.value)}
+                      placeholder={String(reset.doomed)}
+                      dir="ltr"
+                      className="w-32 bg-background"
+                    />
+                    <Button
+                      variant="destructive"
+                      onClick={applyReset}
+                      disabled={resetBusy || resetConfirm.trim() !== String(reset.doomed)}
+                      className="gap-2"
+                    >
+                      {resetBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                      מחק {reset.doomed} לידים
+                    </Button>
+                    <Button variant="ghost" onClick={() => { setReset(null); setResetConfirm(""); }}>ביטול</Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        </div>
+      )}
     </CostSectionCard>
   );
 }

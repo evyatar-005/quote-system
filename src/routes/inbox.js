@@ -14,7 +14,7 @@ const { slotCount, crmSettingsRow } = require('../services/crm/leadClaims');
 const { pickAgentForLead } = require('../services/crm/leadRouting');
 const { createItemForLead } = require('../services/crm/mondayCreateItem');
 const { drainNow } = require('../services/crm/jobs');
-const { CLOSED_SQL } = require('../services/crm/leadStatuses');
+const { CLOSED_SQL, activeCampaignSql } = require('../services/crm/leadStatuses');
 
 // Must stay in sync with SESSION_TTL_MS in routes/auth.js — the SSE stream
 // below authenticates its own token (EventSource can't send headers) and has
@@ -95,7 +95,7 @@ module.exports = function registerInbox(app, db, deps) {
 
   // ── List / detail ──────────────────────────────────────────────────────
   app.get('/api/inbox/conversations', requireAuth, (req, res) => {
-    const { status, channel, include_broadcast, q, filter } = req.query;
+    const { status, channel, include_broadcast, q, filter, campaign_id } = req.query;
     const where = [];
     // Named (not positional) params: with q/filter/status/channel all
     // optional, positional `?` ordering becomes impossible to follow. Note
@@ -116,6 +116,16 @@ module.exports = function registerInbox(app, db, deps) {
     where.push('EXISTS (SELECT 1 FROM crm_messages m WHERE m.conversation_id = c.id)');
     if (status) { where.push('c.status = @status'); params.status = status; }
     if (channel) { where.push('c.channel = @channel'); params.channel = channel; }
+    // Board/campaign scoping, same as the leads screen — a tile counted over
+    // conversations must agree with the leads table when a board is picked,
+    // not just when it's cleared. Goes through the lead join, so a
+    // conversation with no lead at all is excluded once a board is chosen.
+    if (campaign_id) { where.push('ld.campaign_id = @campaign_id'); params.campaign_id = campaign_id; }
+    // Opt-in, same reasoning as the leads list: this endpoint is also the
+    // shared inbox, which must keep showing every conversation regardless of
+    // its lead's campaign state. Only the headline "awaiting reply" tiles
+    // ask for active_only.
+    else if (req.query.active_only === '1') { where.push(activeCampaignSql('ld')); }
 
     if (q && q.trim()) {
       // channel_thread_id is in there so a number with no saved name is still

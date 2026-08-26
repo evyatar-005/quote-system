@@ -5,6 +5,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { useState, useRef, useEffect } from "react";
 import { ChevronDown, ChevronRight, Check, X } from "lucide-react";
 import { base44 } from "@/api/base44Client";
+import GlowSignPicker, { glowSignLabel, glowImageSrc } from "./GlowSignPicker";
+import VistaPicker, { vistaLineLabel, vistaProductLabel, vistaImageSrc } from "./VistaPicker";
 import logo001 from "@/assets/products/logo-001.png";
 import sticker002 from "@/assets/products/sticker-002.png";
 import kapa004 from "@/assets/products/kapa-004.png";
@@ -69,6 +71,8 @@ export const PRODUCT_CODES = {
   numbers_perspex_mirror: "012-5",
   numbers_perspex_metallic: "012-6",
   graphics: "0000",
+  glow_sign: "004",
+  vista_item: "014",
 };
 
 // Product image for a given productType, resolved via its מק"ט's parent code
@@ -113,6 +117,8 @@ export const PRODUCT_NAMES = {
   numbers_perspex_mirror: "מספרים בחיתוך לייזר פרספקס מראה",
   numbers_perspex_metallic: "מספרים בחיתוך לייזר פרספקס מטאלי",
   graphics: "גרפיקה",
+  glow_sign: "שילוט פולט אור",
+  vista_item: "שילוט משרדי ויסטה",
 };
 
 const STICKER_TYPES = ["vinyl_sticker", "texture_sticker"];
@@ -123,6 +129,11 @@ const FOAMEX_TYPES = ["foamex_white", "foamex_black"];
 const GLASS_TYPES = ["glass_extra_clear"];
 const PVC_CARPET_TYPES = ["pvc_carpet"];
 const GRAPHICS_TYPES = ["graphics"];
+// Glow signs (004) — one product type; the specific sign is chosen from the
+// catalog modal, not from a sub-product list.
+const GLOW_TYPES = ["glow_sign"];
+// Vista (014) — vendor catalog items, chosen from the same style of modal.
+const VISTA_TYPES = ["vista_item"];
 // Laser-cut numbers (012) — same perspex finishes as the logo family, but
 // priced per single digit by height+thickness, not per m².
 const NUMBER_TYPES = [
@@ -176,7 +187,6 @@ const STICKER_PRODUCTS = { vinyl_sticker: 'מדבקת ויניל', texture_stick
 // disabled with a "בקרוב" badge instead of a live SKU (no calculator behind
 // them yet). Once an admin sets real prices for one, move it into CATALOG.
 const COMING_SOON_PRODUCTS = [
-  "שילוט פולט אור",
   "מדבקות בחיתוך צורני",
   "ארגז מואר",
 ];
@@ -196,6 +206,8 @@ export const CATALOG = [
   { parent: "010", label: "זכוכית אקסטרה קליר", subs: ["glass_extra_clear"] },
   { parent: "012", label: "מספרים בחיתוך לייזר", subs: NUMBER_TYPES },
   { parent: "013", label: "שטיח פיויסי", subs: ["pvc_carpet"] },
+  { parent: "004", label: "שילוט פולט אור", subs: ["glow_sign"] },
+  { parent: "014", label: "שילוט משרדי ויסטה", subs: ["vista_item"] },
   { parent: "0000", label: "גרפיקה", subs: ["graphics"] },
 ];
 
@@ -208,6 +220,8 @@ const CATEGORY_ACCENT = {
   "001": "border-brand-green bg-brand-green",  // לוקובונד
   "002": "border-brand-purple bg-brand-purple", // פיויסי
   "003": "border-brand-teal bg-brand-teal",   // פרספקס
+  "004": "border-brand-gold bg-brand-gold",   // פולט אור
+  "014": "border-brand-teal bg-brand-teal",   // ויסטה
   "005": "border-brand-gold bg-brand-gold",   // לוגו
   "006": "border-brand-pink bg-brand-pink",   // מדבקות
   "008": "border-brand-teal bg-brand-teal",   // קאפה
@@ -241,6 +255,11 @@ const CATEGORY_DEFAULTS = {
   numbers: { quantity: "1", extras: [] },
   // Graphics is a fixed-price catalog row (like kapa/rollup/glass) — no dimensions.
   graphics: { quantity: "1", extras: [] },
+  // Glow signs carry the chosen catalog row's standard size, but the agent can
+  // still override it — a non-standard size is priced off the same ₪/מ"ר.
+  glow: { widthM: "", heightM: "", quantity: "1", extras: [] },
+  // Vista is a fixed-price catalog row — the frame model already fixes the size.
+  vista: { quantity: "1", extras: [] },
 };
 
 export function categoryOf(pt) {
@@ -254,6 +273,8 @@ export function categoryOf(pt) {
   if (PVC_CARPET_TYPES.includes(pt)) return "pvcCarpet";
   if (NUMBER_TYPES.includes(pt)) return "numbers";
   if (GRAPHICS_TYPES.includes(pt)) return "graphics";
+  if (GLOW_TYPES.includes(pt)) return "glow";
+  if (VISTA_TYPES.includes(pt)) return "vista";
   return "logo";
 }
 
@@ -343,6 +364,10 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
   const [expandedParent, setExpandedParent] = useState(() => (filteredCatalog.length === 1 ? filteredCatalog[0].parent : null));
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerSearch, setPickerSearch] = useState("");
+  // The 004 catalog opens as its own full-screen modal rather than as another
+  // branch of the מק"ט dropdown — see GlowSignPicker for why.
+  const [glowPickerOpen, setGlowPickerOpen] = useState(false);
+  const [vistaPickerOpen, setVistaPickerOpen] = useState(false);
   // Live value of the לוקובונד/פיויסי price-per-sqm slider while mid-drag —
   // null when not dragging (falls back to the committed values.customPricePerSqm).
   const [sliderDragValue, setSliderDragValue] = useState(null);
@@ -393,6 +418,11 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
   // Choosing a sub-product (תת מק"ט) applies its family defaults and reveals the
   // dry calculator params — the description line is preserved across the change.
   const selectSub = (pt) => {
+    // 004 has no meaningful "sub-product" — reaching it from the flat search
+    // results must open the artwork catalog, not drop an empty glow line that
+    // has no sign, no size and no description on it.
+    if (pt === "glow_sign") { setGlowPickerOpen(true); return; }
+    if (pt === "vista_item") { setVistaPickerOpen(true); return; }
     const cat = categoryOf(pt);
     const defaults = CATEGORY_DEFAULTS[cat];
     // "Smart" thickness re-selection only applies to families that actually
@@ -453,7 +483,41 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
     setPickerOpen(false);
     setPickerSearch("");
   };
-  const clearProduct = () => onChange({ productType: "", kapaTierId: null, rollupTierId: null, glassTierId: null, numberTierId: null, graphicsTierId: null, lineLabel: values.lineLabel || "", extras: [] });
+  // Glow sign = catalog artwork + its standard size; the price comes from the
+  // global ₪/מ"ר, so nothing price-related is copied onto the line. The sign's
+  // full name goes into lineLabel so it reaches the quote description without
+  // the agent typing it — which is the whole point of the catalog.
+  const selectGlowSign = (sign) => {
+    onChange({
+      ...CATEGORY_DEFAULTS.glow,
+      productType: "glow_sign",
+      glowSignId: sign.id,
+      glowSignName: sign.name,
+      glowSignImage: sign.image_file || "",
+      widthM: sign.width_cm > 0 ? String(sign.width_cm / 100) : "",
+      heightM: sign.height_cm > 0 ? String(sign.height_cm / 100) : "",
+      lineLabel: glowSignLabel(sign),
+    });
+    setExpandedParent(null);
+    setPickerOpen(false);
+    setPickerSearch("");
+  };
+  // Vista = משפחה → מוצר → מידה. The line carries the SIZE id (that is where
+  // the price lives, read live off the row) plus the product artwork/title.
+  const selectVistaItem = (product, size) => {
+    onChange({
+      ...CATEGORY_DEFAULTS.vista,
+      productType: "vista_item",
+      vistaSizeId: size.id,
+      vistaItemName: size.code && size.code !== "יחידה" ? `${vistaProductLabel(product)} — ${size.code}` : vistaProductLabel(product),
+      vistaItemImage: product.image_file || "",
+      lineLabel: vistaLineLabel(product, size),
+    });
+    setExpandedParent(null);
+    setPickerOpen(false);
+    setPickerSearch("");
+  };
+  const clearProduct = () => onChange({ productType: "", kapaTierId: null, rollupTierId: null, glassTierId: null, numberTierId: null, graphicsTierId: null, glowSignId: null, glowSignName: "", glowSignImage: "", vistaSizeId: null, vistaItemName: "", vistaItemImage: "", lineLabel: values.lineLabel || "", extras: [] });
   const kapaTier = values.kapaTierId != null ? kapaPriceTiers.find(t => String(t.id) === String(values.kapaTierId)) : null;
   const rollupTier = values.rollupTierId != null ? rollupPriceTiers.find(t => String(t.id) === String(values.rollupTierId)) : null;
   const glassTier = values.glassTierId != null ? glassPriceTiers.find(t => String(t.id) === String(values.glassTierId)) : null;
@@ -509,7 +573,11 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
   const isGlass = GLASS_TYPES.includes(values.productType);
   const isNumbers = NUMBER_TYPES.includes(values.productType);
   const isGraphics = GRAPHICS_TYPES.includes(values.productType);
-  const isFixedPrice = isKapa || isRollup || isGlass || isNumbers || isGraphics;
+  // Glow signs are area-priced, so they are NOT a fixed-price family — they keep
+  // the אורך/גובה fields (pre-filled from the catalog, still editable).
+  const isGlow = GLOW_TYPES.includes(values.productType);
+  const isVista = VISTA_TYPES.includes(values.productType);
+  const isFixedPrice = isKapa || isRollup || isGlass || isNumbers || isGraphics || isVista;
   const category = categoryOf(values.productType);
 
   useEffect(() => {
@@ -529,10 +597,10 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
   const isSticker = STICKER_TYPES.includes(values.productType);
   // Elements (for מ"א calc) apply to logo + foamex — anything with real dimensions
   // that isn't a sticker, lokobond, PVC carpet, or a fixed-price kapa/rollup/glass row.
-  const showElementsField = !isSticker && !isFixedPrice && category !== "lokobond" && category !== "pvcCarpet";
+  const showElementsField = !isSticker && !isFixedPrice && !isGlow && category !== "lokobond" && category !== "pvcCarpet";
   // PVC carpet has one fixed thickness (like lokobond) — no dropdown, the
   // engine only uses thicknessMm as an internal price-tier lookup key.
-  const showThicknessField = !isSticker && !isFixedPrice && category !== "lokobond" && category !== "pvcCarpet";
+  const showThicknessField = !isSticker && !isFixedPrice && !isGlow && category !== "lokobond" && category !== "pvcCarpet";
 
   // If the selected thickness stops being priced out from under the agent —
   // priceTiers loading in after the row was already on "5", or an admin
@@ -818,7 +886,7 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
                 <button
                   type="button"
                   key={cat.parent}
-                  onClick={() => setExpandedParent(cat.parent)}
+                  onClick={() => (cat.parent === "004" ? setGlowPickerOpen(true) : cat.parent === "014" ? setVistaPickerOpen(true) : setExpandedParent(cat.parent))}
                   className={`w-full flex items-center justify-between gap-3 px-4 py-2 text-right border-r-4 border-b border-slate-100 last:border-b-0 ${accentBorder} bg-white hover:bg-slate-50 transition-colors`}
                 >
                   <div className="flex items-center gap-3">
@@ -874,6 +942,8 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
             <div className={`${READONLY} text-slate-500`}>—</div>
           </Field>
         </div>
+        <GlowSignPicker open={glowPickerOpen} onClose={() => setGlowPickerOpen(false)} onSelect={selectGlowSign} />
+        <VistaPicker open={vistaPickerOpen} onClose={() => setVistaPickerOpen(false)} onSelect={selectVistaItem} />
       </div>
     );
   }
@@ -948,16 +1018,24 @@ export default function CalculatorForm({ values, onChange, allowedProducts, extr
     : isGlass && glassTier ? glassTier.description
     : isNumbers && numberTier ? `${PRODUCT_NAMES[numberTier.product_type]} — ${numberTier.height_cm} ס"מ / ${numberTier.thickness_mm} מ"מ`
     : isGraphics && graphicsTier ? graphicsTier.description
+    : isGlow && values.glowSignName ? values.glowSignName
+    : isVista && values.vistaItemName ? values.vistaItemName
     : PRODUCT_NAMES[values.productType];
   const skuCode = isKapa ? "008"
     : isRollup ? PRODUCT_CODES[values.productType]
     : isGlass ? "010"
     : isGraphics ? "0000"
+    : isGlow ? "004"
+    : isVista ? "014"
     : PRODUCT_CODES[values.productType];
   const skuImg = isKapa ? CATEGORY_IMAGES["008"]
     : isRollup ? CATEGORY_IMAGES[PRODUCT_CODES[values.productType]]
     : isGlass ? CATEGORY_IMAGES["010"]
     : isGraphics ? CATEGORY_IMAGES["0000"]
+    // The chosen artwork itself is the most useful thumbnail here — it is how
+    // the agent recognises the line at a glance.
+    : isGlow ? glowImageSrc({ image_file: values.glowSignImage })
+    : isVista ? vistaImageSrc({ image_file: values.vistaItemImage })
     : CATEGORY_IMAGES[PRODUCT_CODES[values.productType]?.split("-")[0]];
 
   // Note: this component used to have its own "אישור פרטי מוצר" lock/confirm

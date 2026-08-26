@@ -6,7 +6,7 @@
 const { toE164 } = require('../services/crm/phone');
 const { releaseClaim, releaseReason } = require('../services/crm/leadClaims');
 const { DOCUMENT_TYPE } = require('../services/morning/mappings');
-const { CLOSED_SQL, WON_SQL, LOST_SQL, isClosed, isWon, labelOf } = require('../services/crm/leadStatuses');
+const { CLOSED_SQL, WON_SQL, LOST_SQL, isClosed, isWon, labelOf, activeCampaignSql } = require('../services/crm/leadStatuses');
 
 // Server-side twin of sign-smart-quote/src/lib/quoteEconomics.js's
 // linesOf/economicsOf — same definition (cost = Σ line totalCostAll,
@@ -606,9 +606,17 @@ module.exports = function registerCrm(app, db, deps) {
     const mine = req.user.role === 'admin'
       ? ''
       : `AND (l.assigned_to = @me OR EXISTS (SELECT 1 FROM crm_lead_claims k WHERE k.lead_id = l.id AND k.username = @me))`;
+    // Same board/campaign scoping the leads list already applies — without
+    // this the tiles stay all-boards even when the table below is filtered
+    // to one, so a tile and the table it opens can disagree by design. With
+    // no campaign picked, default to active campaigns only — an ended
+    // campaign's leads are still all there, just not drowning the headline
+    // numbers; picking it explicitly overrides this and shows it in full.
+    const campaignId = req.query.campaign_id || null;
+    const campaignFilter = campaignId ? `AND l.campaign_id = @campaignId` : `AND ${activeCampaignSql('l')}`;
     const count = (extra) => db.prepare(
-      `SELECT COUNT(*) n FROM crm_leads l WHERE 1=1 ${extra} ${mine}`
-    ).get({ me, since: newLeadsSince() }).n;
+      `SELECT COUNT(*) n FROM crm_leads l WHERE 1=1 ${extra} ${mine} ${campaignFilter}`
+    ).get({ me, since: newLeadsSince(), campaignId }).n;
 
     res.json({
       // All-time totals — the shape of the database, not today's workload.
@@ -654,6 +662,12 @@ module.exports = function registerCrm(app, db, deps) {
     else if (assigned_to) { where.push('l.assigned_to = ?'); params.push(assigned_to); }
     if (customer_id) { where.push('l.customer_id = ?'); params.push(customer_id); }
     if (campaign_id) { where.push('l.campaign_id = ?'); params.push(campaign_id); }
+    // Opt-in, not a default: this endpoint also serves the main leads table,
+    // which must keep showing every open lead regardless of its campaign's
+    // state — ending a campaign stops new leads, it does not mean the ones
+    // already assigned stop being anyone's job. Only the headline-number
+    // callers (leads/summary's sibling tile queries) ask for active_only.
+    else if (req.query.active_only === '1') { where.push(activeCampaignSql('l')); }
     if (date_from) { where.push(`date(COALESCE(l.source_created_at, l.created_at)) >= date(?)`); params.push(date_from); }
     if (date_to) { where.push(`date(COALESCE(l.source_created_at, l.created_at)) <= date(?)`); params.push(date_to); }
 

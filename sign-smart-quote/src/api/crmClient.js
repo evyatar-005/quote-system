@@ -83,8 +83,8 @@ export const crmLeads = {
     return request(`/api/crm/leads${buildQuery(params)}`);
   },
   // Every headline count in one request, scoped the same way the list is.
-  summary() {
-    return request('/api/crm/leads/summary');
+  summary(params) {
+    return request(`/api/crm/leads/summary${buildQuery(params)}`);
   },
   create(data) {
     return request('/api/crm/leads', { method: 'POST', body: data });
@@ -115,6 +115,12 @@ export const crmLeads = {
 export const crmCampaignList = {
   list() {
     return request('/api/crm/campaigns');
+  },
+  // Via the generic entities CRUD (routes/entities.js REGISTRY.Campaign) —
+  // used by MondaySyncSection to create a campaign inline when mapping a new
+  // board, instead of making the admin create one on a separate screen first.
+  create(data) {
+    return request('/api/entities/Campaign', { method: 'POST', body: data });
   },
 };
 

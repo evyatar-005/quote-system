@@ -12,8 +12,14 @@ const path = require('path');
 module.exports = function registerMondaySync(app, db, deps) {
   const { requireAdmin } = deps;
 
+  // JOIN, not SELECT * — a board with pull/push off and a board whose
+  // campaign has actually ended look identical on the flags alone. The UI
+  // reads b.campaign_ended_at (null = active) to tell the two apart.
   app.get('/api/monday-sync/boards', requireAdmin, (req, res) => {
-    res.json(db.prepare(`SELECT * FROM monday_board_map ORDER BY created_at DESC`).all());
+    res.json(db.prepare(`
+      SELECT m.*, c.ended_at AS campaign_ended_at, c.name AS campaign_name
+        FROM monday_board_map m LEFT JOIN crm_campaigns c ON c.id = m.campaign_id
+       ORDER BY m.created_at DESC`).all());
   });
 
   // Real column ids/types for the mapping UI — never guessed.
@@ -28,6 +34,9 @@ module.exports = function registerMondaySync(app, db, deps) {
   app.post('/api/monday-sync/boards', requireAdmin, (req, res) => {
     const body = req.body || {};
     if (!body.board_id) return res.status(400).json({ error: 'board_id required' });
+    // A board with no campaign is a board the "סיים קמפיין" action can never
+    // reach — the UI is convenience, this is the guarantee.
+    if (!body.campaign_id) return res.status(400).json({ error: 'יש לבחור קמפיין לבורד' });
     const row = {
       board_id: body.board_id,
       board_name: body.board_name || null,
@@ -143,6 +152,38 @@ module.exports = function registerMondaySync(app, db, deps) {
     } catch (err) {
       res.status(400).json({ error: err.message });
     }
+  });
+
+  // ── סיום / הפעלה מחדש של קמפיין ───────────────────────────────────────────
+  // "סיימתי עם הבורד הזה" הן שתי עובדות שאסור להן להיסחף זו מזו: הקמפיין
+  // נגמר, והבורד הזה בלבד מפסיק להסתנכרן. המתג הגלובלי
+  // crm_settings.monday_poll_enabled לא נוגעים בו בכוונה — הוא היה עוצר גם
+  // כל בורד חי אחר. לידים לא נוגעים בהם בכלל: קמפיין שהסתיים נעלם מברירת
+  // המחדל דרך activeCampaignSql(), ונשאר קריא במלואו כשבוחרים אותו מפורשות.
+  app.post('/api/monday-sync/boards/:id/campaign-state', requireAdmin, (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    const boardMap = db.prepare(`SELECT * FROM monday_board_map WHERE id = ?`).get(id);
+    if (!boardMap) return res.status(404).json({ error: 'לא נמצא' });
+    if (!boardMap.campaign_id) {
+      return res.status(400).json({ error: 'הבורד אינו מקושר לקמפיין — ערוך את המיפוי ובחר קמפיין לפני סיום' });
+    }
+    const ended = req.body && req.body.ended !== false;
+
+    db.transaction(() => {
+      db.prepare(`UPDATE monday_board_map SET pull_enabled = @flag, push_enabled = @flag WHERE id = @id`)
+        .run({ flag: ended ? 0 : 1, id });
+      db.prepare(
+        `UPDATE crm_campaigns
+            SET ended_at = ${ended ? `datetime('now')` : 'NULL'}, status = @status
+          WHERE id = @campaign_id`
+      ).run({ status: ended ? 'ended' : 'active', campaign_id: boardMap.campaign_id });
+    })();
+
+    console.log(`[POST /api/monday-sync/boards/${id}/campaign-state] campaign ${boardMap.campaign_id} ${ended ? 'ended' : 'reactivated'} by ${req.user.username}`);
+    res.json(db.prepare(`
+      SELECT m.*, c.ended_at AS campaign_ended_at, c.name AS campaign_name
+        FROM monday_board_map m LEFT JOIN crm_campaigns c ON c.id = m.campaign_id
+       WHERE m.id = ?`).get(id));
   });
 
   app.get('/api/monday-sync/log', requireAdmin, (req, res) => {

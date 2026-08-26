@@ -32,6 +32,14 @@ const REGISTRY = {
   GlassPriceTier:       { table: 'signshop_glass_tiers', cols: ['product_type', 'sku', 'description', 'width_cm', 'height_cm', 'cost_price', 'selling_price'] },
   NumberPriceTier:      { table: 'signshop_number_tiers', cols: ['product_type', 'height_cm', 'thickness_mm', 'price_per_unit', 'min_price'] },
   GraphicsPriceTier:    { table: 'signshop_graphics_tiers', cols: ['sku', 'description', 'price'] },
+  // Glow signs (004) — catalog rows only (name/size/artwork). No price column
+  // on purpose: the whole family shares one ₪/מ"ר from signshop_config.
+  GlowSign:             { table: 'signshop_glow_signs', cols: ['category', 'name', 'width_cm', 'height_cm', 'image_file', 'active', 'sort'] },
+  // Vista (014) — משפחה → מוצר → מידה. The product row carries the catalog
+  // page/artwork; the price lives on the size, because one product ships in a
+  // dozen frame heights that do not cost the same.
+  VistaProduct:         { table: 'signshop_vista_products', cols: ['family', 'family_he', 'name', 'name_he', 'page_from', 'page_to', 'image_file', 'sizes_inherited', 'active', 'sort'] },
+  VistaSize:            { table: 'signshop_vista_sizes', cols: ['product_id', 'code', 'height_mm', 'price', 'active', 'sort'] },
   // Production recipes (תפ"י) — phase 1, template only, no timing.
   Station:              { table: 'production_stations',     cols: ['key', 'name', 'kind'] },
   Operation:             { table: 'production_operations',   cols: ['key', 'name'] },
@@ -46,7 +54,7 @@ const REGISTRY = {
 // Which entities require admin for writes.
 const ADMIN_WRITE = new Set([
   'PriceTier', 'StickerPriceTier', 'PaintSurchargeTier',
-  'LightboxSizeTier', 'LightboxSellingPrice', 'PricingConfig', 'KapaPriceTier', 'KapaDeal', 'RollupPriceTier', 'LokobondAreaTier', 'GlassPriceTier', 'NumberPriceTier', 'GraphicsPriceTier',
+  'LightboxSizeTier', 'LightboxSellingPrice', 'PricingConfig', 'KapaPriceTier', 'KapaDeal', 'RollupPriceTier', 'LokobondAreaTier', 'GlassPriceTier', 'NumberPriceTier', 'GraphicsPriceTier', 'GlowSign', 'VistaProduct', 'VistaSize',
   // Campaign was missing here, so it fell through to the generic requireAuth
   // tier: any CRM-enabled user could create, edit and DELETE crm_campaigns
   // rows through /api/entities/Campaign/:id — completely bypassing the

@@ -166,7 +166,7 @@ function hydrateBuilderState(state) {
   return { ...state, items, formDataMap, itemLabels };
 }
 
-export default function MultiProductCalculator({ config, priceTiers, stickerPriceTiers, paintSurchargeTiers, kapaPriceTiers, rollupPriceTiers, lokobondAreaTiers, glassPriceTiers, numberPriceTiers, graphicsPriceTiers, defaultForm, allowedProducts, allTabs, initialBuilderState, sourceQuoteNumber, sourceLeadId }) {
+export default function MultiProductCalculator({ config, priceTiers, stickerPriceTiers, paintSurchargeTiers, kapaPriceTiers, rollupPriceTiers, lokobondAreaTiers, glassPriceTiers, numberPriceTiers, graphicsPriceTiers, vistaSizes, defaultForm, allowedProducts, allTabs, initialBuilderState, sourceQuoteNumber, sourceLeadId }) {
   const firstTabKey = allTabs?.[0]?.key;
   // Computed once on mount (never on re-render, which would otherwise burn
   // fresh ids from nextId every time) — see hydrateBuilderState above.
@@ -1010,6 +1010,7 @@ export default function MultiProductCalculator({ config, priceTiers, stickerPric
                       glassPriceTiers={glassPriceTiers}
                       numberPriceTiers={numberPriceTiers}
                       graphicsPriceTiers={graphicsPriceTiers}
+                      vistaSizes={vistaSizes}
                       defaultForm={EMPTY_ITEM_FORM}
                       initialFormData={formDataMap[item.id]}
                       enforceMinimumPrice={getEnforceMinimumPrice(config, formDataMap[item.id], items.length)}

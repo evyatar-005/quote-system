@@ -1063,3 +1063,62 @@ CREATE TABLE IF NOT EXISTS raw_materials_scan (
   created_at                      TEXT DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_raw_materials_scan_doc ON raw_materials_scan(morning_document_id);
+
+-- Glow signs (004 "שילוט פולט אור") — a fixed catalog of standard photoluminescent
+-- safety signs (name + standard size + artwork thumbnail), scraped from the
+-- supplier catalog. Unlike kapa/glass/rollup this is NOT a per-row price list:
+-- every glow sign is priced off ONE global ₪/מ"ר set in the admin config
+-- (glow_price_per_sqm), by explicit request — the rows exist so an agent can
+-- pick the right artwork and get its name + dimensions onto the quote line
+-- without typing them.
+CREATE TABLE IF NOT EXISTS signshop_glow_signs (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  category    TEXT NOT NULL DEFAULT 'כללי',
+  name        TEXT NOT NULL,
+  width_cm    REAL NOT NULL DEFAULT 0,
+  height_cm   REAL NOT NULL DEFAULT 0,
+  image_file  TEXT NOT NULL DEFAULT '',  -- filename under client public/glow-signs/
+  active      INTEGER NOT NULL DEFAULT 1,
+  sort        INTEGER NOT NULL DEFAULT 0
+);
+
+-- Vista (014 "שילוט משרדי ויסטה") — the Vista System 2026 catalog, kept in the
+-- three levels the catalog itself is built on:
+--   family  → משפחה   (Vista Classic / Square / Nova / Light ...)
+--   product → מוצר    ("Wall Signs - Portrait", "Directories") — one per row here
+--   size    → מידה    (V100, V300, F420 ...) — one row per size in the table below
+-- A Vista product comes in many frame heights at different prices, so the price
+-- lives on the SIZE, never on the product.
+CREATE TABLE IF NOT EXISTS signshop_vista_products (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  family      TEXT NOT NULL DEFAULT '',
+  family_he   TEXT NOT NULL DEFAULT '',   -- folder label in the agent's picker
+  name        TEXT NOT NULL,               -- vendor's English section name
+  name_he     TEXT NOT NULL DEFAULT '',    -- Hebrew label shown to the agent
+  page_from   INTEGER NOT NULL DEFAULT 0, -- source pages in the 2026 catalog
+  page_to     INTEGER NOT NULL DEFAULT 0,
+  image_file  TEXT NOT NULL DEFAULT '',   -- filename under client public/vista-pages/
+  -- 1 = the size list was NOT read off this product's own catalog page (that
+  -- page is vector art with no text layer) but inherited from its family, so it
+  -- may list sizes this particular product doesn't ship in. Shown as a warning
+  -- in the admin table; clear it once the list has been checked against the PDF.
+  sizes_inherited INTEGER NOT NULL DEFAULT 0,
+  active      INTEGER NOT NULL DEFAULT 1,
+  sort        INTEGER NOT NULL DEFAULT 0
+);
+
+-- One frame size of one Vista product. `code` is the vendor model code and is
+-- also the height in mm (V300 = 300mm) — that is Vista's own naming rule, not
+-- an assumption: the catalog prints "V300 (A3)" and "V11 (279)" side by side.
+-- price 0 = never configured; the calculator refuses to quote it rather than
+-- selling it for nothing (same guard as every other family here).
+CREATE TABLE IF NOT EXISTS signshop_vista_sizes (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  product_id  INTEGER NOT NULL REFERENCES signshop_vista_products(id) ON DELETE CASCADE,
+  code        TEXT NOT NULL,
+  height_mm   REAL NOT NULL DEFAULT 0,
+  price       REAL NOT NULL DEFAULT 0,   -- selling price per unit (₪)
+  active      INTEGER NOT NULL DEFAULT 1,
+  sort        INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_vista_sizes_product ON signshop_vista_sizes(product_id);

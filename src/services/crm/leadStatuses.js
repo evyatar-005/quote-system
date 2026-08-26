@@ -73,8 +73,17 @@ const LEGACY_STATUS_MAP = {
   disqualified: 'lost_other',
 };
 
+// A lead/conversation's campaign counts as "active" when it has no campaign
+// at all (inbound WhatsApp nobody has assigned one to yet) or its campaign
+// hasn't been marked ended. This is what every default (no explicit
+// campaign_id) view should scope to — ending a campaign hides it from those
+// defaults without touching a single row of its data; picking it explicitly
+// in a filter still shows it in full, same as before it ended.
+const activeCampaignSql = (alias) =>
+  `(${alias}.campaign_id IS NULL OR ${alias}.campaign_id IN (SELECT id FROM crm_campaigns WHERE ended_at IS NULL))`;
+
 module.exports = {
   LEAD_STATUSES, BY_KEY, OPEN_KEYS, WON_KEYS, LOST_KEYS, CLOSED_KEYS,
   CLOSED_SQL, OPEN_SQL, WON_SQL, LOST_SQL,
-  isClosed, isWon, labelOf, statusForLabel, LEGACY_STATUS_MAP,
+  isClosed, isWon, labelOf, statusForLabel, LEGACY_STATUS_MAP, activeCampaignSql,
 };

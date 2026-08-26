@@ -91,6 +91,10 @@ const CONFIG_SEED = [
   ['sticker_min_height', 50, 'מדבקה — גובה מינימום (ס"מ)'],
   ['sticker_min_price',   0, 'מדבקה — מחיר מינימום (₪)'],
   ['lightbox_min_price',  0, 'ארגז מואר — מחיר מינימום (₪)'],
+  // Glow signs (004) — ONE ₪/מ"ר for the whole family, by explicit request:
+  // every sign in the catalog is priced off the same rate, not per row.
+  ['glow_price_per_sqm', 0, 'שילוט פולט אור — מחיר למ"ר (₪)'],
+  ['glow_min_price',     0, 'שילוט פולט אור — מחיר מינימום לשלט (₪)'],
   // Global financial params — used by both calculators
   ['vat_percent',                      18,  'מע״מ (%)'],
   ['cash_discount_percent',             5,  'הנחת מזומן (%)'],
@@ -194,6 +198,15 @@ const GRAPHICS_TIERS = [
   ['0000', 'חצי שעת גרפיקה', 50],
 ];
 
+// Glow-sign catalog (004) — 130 standard photoluminescent safety signs, name +
+// standard size + artwork filename. Static reference data, kept as JSON next to
+// this file rather than inline so the seed stays readable.
+const GLOW_SIGNS = require('./glow-signs.json');
+
+// Vista System 2026 catalog (014) — 236 products across 25 families, each with
+// its own frame sizes. Reference data, same reasoning as GLOW_SIGNS.
+const VISTA_CATALOG = require('./vista-catalog.json');
+
 function seedSignshop(db) {
   const isEmpty = (table) => db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get().n === 0;
   const summary = [];
@@ -244,6 +257,25 @@ function seedSignshop(db) {
       const ins = db.prepare(`INSERT INTO signshop_graphics_tiers (sku, description, price) VALUES (?, ?, ?)`);
       for (const r of GRAPHICS_TIERS) ins.run(...r);
       summary.push(`signshop_graphics_tiers: ${GRAPHICS_TIERS.length} שורות`);
+    }
+    if (isEmpty('signshop_vista_products')) {
+      const insP = db.prepare(`INSERT INTO signshop_vista_products (family, family_he, name, name_he, page_from, page_to, image_file, sizes_inherited, active, sort) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+      const insS = db.prepare(`INSERT INTO signshop_vista_sizes (product_id, code, height_mm, sort) VALUES (?, ?, ?, ?)`);
+      let sizeCount = 0;
+      for (const p of VISTA_CATALOG) {
+        const { lastInsertRowid } = insP.run(p.family, p.family_he, p.name, p.name_he || '', p.page, p.page_to, p.image_file, p.sizes_inherited ? 1 : 0, p.active, p.page);
+        // A product the catalog lists without model codes (accessories, display
+        // stands) still needs one quotable row, or an agent could open it and
+        // find nothing to pick.
+        const sizes = p.sizes.length ? p.sizes : [{ code: 'יחידה', height_mm: 0 }];
+        sizes.forEach((z, i) => { insS.run(lastInsertRowid, z.code, z.height_mm, i); sizeCount++; });
+      }
+      summary.push(`signshop_vista_products: ${VISTA_CATALOG.length} מוצרים, ${sizeCount} מידות`);
+    }
+    if (isEmpty('signshop_glow_signs')) {
+      const ins = db.prepare(`INSERT INTO signshop_glow_signs (category, name, width_cm, height_cm, image_file, sort) VALUES (?, ?, ?, ?, ?, ?)`);
+      for (const r of GLOW_SIGNS) ins.run(r.category, r.name, r.width_cm, r.height_cm, r.image_file, r.sort);
+      summary.push(`signshop_glow_signs: ${GLOW_SIGNS.length} שורות`);
     }
     if (isEmpty('signshop_lightbox_selling_prices')) {
       const ins = db.prepare(`INSERT INTO signshop_lightbox_selling_prices (sub_type, size_label, selling_base_price, selling_price_per_sqm) VALUES (?, ?, ?, ?)`);
