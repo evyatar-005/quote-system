@@ -381,13 +381,80 @@ async function pullBoard(db, boardMap, ownerUsername) {
 
 // Pushes any lead whose status changed since it was last written to the
 // board's status column. Returns { pushed }.
+// 2026-08-26 incident: a row whose lead status has no monday label monday's
+// column actually accepts (missingLabel/ColumnValueException) failed forever
+// — nothing marked it, so it was retried every tick, at no backoff, with no
+// LIMIT bounding the query. 1,679 such rows produced ~450 failing requests/min
+// for 19+ hours. Retrying that kind of failure can never succeed — it's a
+// configuration mismatch, not a blip — so it gets parked far out rather than
+// retried on the normal backoff.
+const PERMANENT_PUSH_ERROR = /missingLabel|ColumnValueException/;
+
+// Exponential backoff for genuinely transient failures (network errors,
+// monday rate limits): 1, 2, 4, 8... minutes, capped at 6h so a row doesn't
+// get stranded for days once whatever was wrong recovers.
+function nextAttemptDelayMs(attempts) {
+  return Math.min(2 ** attempts, 360) * 60_000;
+}
+
+// CURRENT_TIMESTAMP (used in the WHERE clause below) is SQLite's own
+// 'YYYY-MM-DD HH:MM:SS' format, not ISO 8601 — a plain .toISOString() puts
+// 'T' (0x54) where CURRENT_TIMESTAMP has a space (0x20), and a string
+// comparison ranks 'T' > any digit, so an ISO timestamp always compares as
+// LATER than same-day CURRENT_TIMESTAMP values. Every backoff shorter than
+// "past midnight" would silently never become eligible again. Same fixed-
+// width format jobs.js already uses for this reason.
+function sqliteTimestamp(msFromNow) {
+  return new Date(Date.now() + msFromNow).toISOString().slice(0, 19).replace('T', ' ');
+}
+
+// The real label bank for the target status column, cached at pull time
+// (fetchBoardColumns, above) — same discriminator crm.js:519 already uses:
+// labels is an array (possibly empty) for a status/color column, null for
+// anything else. Returns undefined when there's nothing to check against
+// (no cached columns yet, or the column isn't in the cache) — the caller
+// treats that as "can't verify" and skips rather than guesses, since a
+// guessed label that doesn't exist on the real column is exactly how the
+// 2026-08-26 incident started.
+function realLabelBank(boardMap) {
+  let columns;
+  try { columns = JSON.parse(boardMap.columns_json || '[]'); } catch (_) { return undefined; }
+  if (!Array.isArray(columns)) return undefined;
+  const col = columns.find(c => c.id === boardMap.status_column_id);
+  if (!col) return undefined;
+  return Array.isArray(col.labels) ? col.labels : null; // null = not a status/color column, nothing to enforce
+}
+
+// Shared by every "this row can't be pushed right now" path (a real network
+// failure, or a label-bank mismatch caught before ever calling monday):
+// records the failure, schedules the next attempt, and logs at most once per
+// distinct error — never once per retry, which is what turned one bad row
+// into 358k log rows during the incident.
+function parkRow(db, boardMap, row, { delayMs, errorMessage }) {
+  const attempts = row.push_attempts + 1;
+  db.prepare(`UPDATE monday_item_map SET push_attempts = ?, push_next_attempt_at = ?, push_last_error = ? WHERE id = ?`)
+    .run(attempts, sqliteTimestamp(delayMs), errorMessage, row.id);
+  if (row.push_attempts === 0 || row.push_last_error !== errorMessage) {
+    logSync(db, { direction: 'push', board_id: boardMap.board_id, monday_item_id: row.monday_item_id, lead_id: row.lead_id, success: false, error_message: errorMessage });
+  }
+}
+
 async function pushBoard(db, boardMap) {
   if (!boardMap.status_column_id) return { pushed: 0 };
   const statusValues = JSON.parse(boardMap.status_values || '{}');
+  const labelBank = realLabelBank(boardMap);
+  // push_next_attempt_at gates rows that already failed (NULL = never tried
+  // or last attempt succeeded). ORDER BY push_attempts ASC + LIMIT is the
+  // starvation fix: previously a jammed run of early rows could occupy the
+  // entire unbounded query forever, and 1,531 of the 1,679 stuck rows were
+  // never even reached.
   const rows = db.prepare(
     `SELECT m.*, l.status AS lead_status FROM monday_item_map m
      JOIN crm_leads l ON l.id = m.lead_id
-     WHERE m.board_id = ? AND (m.last_pushed_status IS NULL OR m.last_pushed_status != l.status)`
+     WHERE m.board_id = ? AND (m.last_pushed_status IS NULL OR m.last_pushed_status != l.status)
+       AND (m.push_next_attempt_at IS NULL OR m.push_next_attempt_at <= CURRENT_TIMESTAMP)
+     ORDER BY m.push_attempts ASC, m.id ASC
+     LIMIT 100`
   ).all(boardMap.board_id);
 
   let pushed = 0;
@@ -402,6 +469,23 @@ async function pushBoard(db, boardMap) {
     // board with no status_values at all still gets written to correctly.
     const label = (Array.isArray(mapped) ? mapped[0] : mapped) || labelOf(row.lead_status);
     if (!label) continue; // nothing sensible to write — skip silently
+
+    // Never send a label the board's real column doesn't have — that guess
+    // is exactly what started the incident (labelOf('new') = "ליד חדש",
+    // rejected by monday as missingLabel, forever). labelBank === null means
+    // this isn't a status/color column (nothing to enforce, current
+    // behavior); undefined means the cache can't answer right now, which
+    // self-heals on the next pull (poll_minutes, default 10) so this is
+    // parked short rather than treated as a hard failure.
+    if (labelBank === undefined) {
+      parkRow(db, boardMap, row, { delayMs: (boardMap.poll_minutes || 10) * 60_000, errorMessage: 'no cached column labels yet (board not pulled, or column missing from cache) — will retry after next pull' });
+      continue;
+    }
+    if (Array.isArray(labelBank) && !labelBank.includes(label)) {
+      parkRow(db, boardMap, row, { delayMs: 24 * 3600_000, errorMessage: `label "${label}" is not in the board's real label bank for this column — skipped without calling monday` });
+      continue;
+    }
+
     try {
       await mondayRequest(
         db,
@@ -410,12 +494,17 @@ async function pushBoard(db, boardMap) {
          }`,
         { boardId: boardMap.board_id, itemId: row.monday_item_id, columnId: boardMap.status_column_id, value: label }
       );
-      db.prepare(`UPDATE monday_item_map SET last_pushed_at = CURRENT_TIMESTAMP, last_pushed_status = ? WHERE id = ?`)
-        .run(row.lead_status, row.id);
+      db.prepare(
+        `UPDATE monday_item_map SET last_pushed_at = CURRENT_TIMESTAMP, last_pushed_status = ?,
+           push_attempts = 0, push_next_attempt_at = NULL, push_last_error = NULL WHERE id = ?`
+      ).run(row.lead_status, row.id);
       logSync(db, { direction: 'push', board_id: boardMap.board_id, monday_item_id: row.monday_item_id, lead_id: row.lead_id, success: true });
       pushed += 1;
     } catch (err) {
-      logSync(db, { direction: 'push', board_id: boardMap.board_id, monday_item_id: row.monday_item_id, lead_id: row.lead_id, success: false, error_message: err.message });
+      const attempts = row.push_attempts + 1;
+      const permanent = PERMANENT_PUSH_ERROR.test(err.message);
+      const delayMs = permanent ? 24 * 3600_000 : nextAttemptDelayMs(attempts);
+      parkRow(db, boardMap, row, { delayMs, errorMessage: err.message });
     }
   }
   return { pushed };

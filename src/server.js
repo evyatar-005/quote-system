@@ -301,6 +301,14 @@ try { db.exec(`INSERT OR IGNORE INTO crm_settings (id) VALUES (1)`); } catch (_)
 // unguarded CREATE TABLE IF NOT EXISTS, so a plain ALTER is needed here too).
 try { db.exec(`ALTER TABLE crm_settings ADD COLUMN wa_webhook_secret TEXT`); } catch (_) {}
 
+// pushBoard failure tracking (2026-08-26 incident: a row whose status has no
+// mapped monday label failed forever and was retried every tick with no
+// backoff — see services/crm/mondaySync.js pushBoard for the fix this
+// supports.
+try { db.exec(`ALTER TABLE monday_item_map ADD COLUMN push_attempts INTEGER NOT NULL DEFAULT 0`); } catch (_) {}
+try { db.exec(`ALTER TABLE monday_item_map ADD COLUMN push_next_attempt_at TEXT`); } catch (_) {}
+try { db.exec(`ALTER TABLE monday_item_map ADD COLUMN push_last_error TEXT`); } catch (_) {}
+
 // ─── CRM (Phase 4) — bulk broadcasts / דיוור ──────────────────────────────
 // Second slice of the granular permission model (after can_view_costs): who
 // may START a WhatsApp broadcast. Deliberately NOT implied by the admin role

@@ -65,7 +65,15 @@ function claimNext(db, username) {
     const candidate = db.prepare(NEXT_CLAIMABLE_SQL).get({ me: username });
     if (!candidate) throw Object.assign(new Error('אין לידים ממתינים בתור'), { status: 404, code: 'empty_pool' });
 
-    const expiresAt = ttlHours > 0 ? new Date(Date.now() + ttlHours * 3600e3).toISOString() : null;
+    // Same fixed-width 'YYYY-MM-DD HH:MM:SS' format CURRENT_TIMESTAMP uses —
+    // NOT .toISOString(). This was dormant until now (lead_claim_ttl_hours
+    // was 0, so expiresAt was always NULL), but a plain ISO string here
+    // compares as always-later than same-day CURRENT_TIMESTAMP (the 'T' vs
+    // space byte), so the moment a TTL is configured, expires_at rows in
+    // slotCount/claimNext/releaseClaim's comparisons would never be seen as
+    // expired until the date rolls over — see mondaySync.js's pushBoard fix
+    // for the same bug, non-dormant there.
+    const expiresAt = ttlHours > 0 ? new Date(Date.now() + ttlHours * 3600e3).toISOString().slice(0, 19).replace('T', ' ') : null;
 
     // Mirrors routes/inbox.js's claim upsert — the WHERE on DO UPDATE is what
     // makes this a true "claim if free" upsert rather than a blind overwrite.
