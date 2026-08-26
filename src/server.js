@@ -592,7 +592,7 @@ startReportScheduler(db, {
   [deliveryNotesReport.REPORT_TYPE]: deliveryNotesReport.sendReport,
   [salesReport.REPORT_TYPE]: salesReport.sendReport,
 });
-if (!process.env.DISABLE_CRM_JOBS) startCrmJobs(db);
+startCrmJobs(db);
 
 // ─── Version info — read by deploy/UPDATE.ps1's post-deploy smoke check and
 // by anyone wanting to confirm which release is live without RDP access ─────
