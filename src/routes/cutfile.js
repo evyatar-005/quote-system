@@ -379,8 +379,11 @@ module.exports = function registerCutFile(app, db, deps) {
         insertHistory.run(req.params.jobId, path.basename(job.originalPath), job.rasterMime, num(req.query.widthCm, null), JSON.stringify(req.query), req.user.username);
       } catch (_) { /* history is best-effort, never blocks the download */ }
 
+      const shortId = req.params.jobId.slice(0, 8);
+      const humanName = `קו-חיתוך-${shortId}.${format}`;
       res.setHeader('Content-Type', contentType);
-      res.setHeader('Content-Disposition', `attachment; filename="cutfile-${req.params.jobId}.${format}"`);
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('Content-Disposition', `attachment; filename="cutfile-${shortId}.${format}"; filename*=UTF-8''${encodeURIComponent(humanName)}`);
       res.send(body);
       console.log(`[GET /api/cutfile/${req.params.jobId}/export] format=${format} by "${req.user.username}"`);
     } catch (e) {

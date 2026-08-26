@@ -1,5 +1,5 @@
 const express   = require('express');
-const cors      = require('cors');
+const helmet    = require('helmet');
 const path      = require('path');
 const fs        = require('fs');
 const Database  = require('better-sqlite3');
@@ -35,7 +35,12 @@ const PORT    = process.env.PORT || 3000;
 const DB_PATH = path.join(__dirname, '../database.sqlite');
 
 const app = express();
-app.use(cors());
+app.use(helmet({ contentSecurityPolicy: false }));
+// The client is served from this same origin (client/dist, below) and every
+// webhook caller (monday.com, Morning, WhatsApp providers) is server-to-server
+// and never subject to CORS in the first place — so there is no legitimate
+// cross-origin browser caller left to allow. Removed rather than restricted
+// to a specific origin: there's nothing to list.
 app.use(express.json());
 
 const db = new Database(DB_PATH);
@@ -300,6 +305,11 @@ try { db.exec(`INSERT OR IGNORE INTO crm_settings (id) VALUES (1)`); } catch (_)
 // Phase 3 addition to crm_settings (table already existed from Phase 1's
 // unguarded CREATE TABLE IF NOT EXISTS, so a plain ALTER is needed here too).
 try { db.exec(`ALTER TABLE crm_settings ADD COLUMN wa_webhook_secret TEXT`); } catch (_) {}
+
+// Stage 1 hardening — shared secret for the monday.com item-webhook, same
+// "optional, degrade gracefully" convention as morning_credentials.webhook_secret
+// and crm_settings.wa_webhook_secret above. Table already existed unguarded.
+try { db.exec(`ALTER TABLE monday_credentials ADD COLUMN webhook_secret TEXT`); } catch (_) {}
 
 // ─── CRM (Phase 4) — bulk broadcasts / דיוור ──────────────────────────────
 // Second slice of the granular permission model (after can_view_costs): who
@@ -582,7 +592,7 @@ startReportScheduler(db, {
   [deliveryNotesReport.REPORT_TYPE]: deliveryNotesReport.sendReport,
   [salesReport.REPORT_TYPE]: salesReport.sendReport,
 });
-startCrmJobs(db);
+if (!process.env.DISABLE_CRM_JOBS) startCrmJobs(db);
 
 // ─── Version info — read by deploy/UPDATE.ps1's post-deploy smoke check and
 // by anyone wanting to confirm which release is live without RDP access ─────

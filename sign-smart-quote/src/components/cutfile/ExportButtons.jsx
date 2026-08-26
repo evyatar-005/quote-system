@@ -28,7 +28,7 @@ export default function ExportButtons({ jobId, params, disabled }) {
       document.body.appendChild(a);
       a.click();
       a.remove();
-      URL.revokeObjectURL(url);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (err) {
       toast.error(err.message || `ייצוא ${format.toUpperCase()} נכשל`);
     } finally {

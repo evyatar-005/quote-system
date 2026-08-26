@@ -24,6 +24,20 @@ function crmSettingsRow(db) {
   return db.prepare(`SELECT * FROM crm_settings WHERE id = 1`).get() || {};
 }
 
+// Object-level access check for a single lead — the per-row equivalent of the
+// WHERE clause routes/crm.js's GET /leads applies to the list. Admin sees
+// everything; anyone else must own the lead (assigned_to) or hold its claim
+// slot. Same "default closed" reasoning as the list query: a role added later
+// doesn't silently inherit access to leads it doesn't hold.
+function canAccessLead(db, user, leadId) {
+  if (user.role === 'admin') return true;
+  return !!db.prepare(
+    `SELECT 1 FROM crm_leads l
+      WHERE l.id = ?
+        AND (l.assigned_to = ? OR EXISTS (SELECT 1 FROM crm_lead_claims k WHERE k.lead_id = l.id AND k.username = ?))`
+  ).get(leadId, user.username, user.username);
+}
+
 function slotCount(db, username) {
   return db.prepare(
     `SELECT COUNT(*) n FROM crm_lead_claims WHERE username = ? AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)`
@@ -176,4 +190,4 @@ function releaseClaim(db, leadId, reason) {
   return claim.username;
 }
 
-module.exports = { claimNext, claimFill, releaseClaim, releaseReason, slotCount, crmSettingsRow };
+module.exports = { claimNext, claimFill, releaseClaim, releaseReason, slotCount, crmSettingsRow, canAccessLead };

@@ -19,6 +19,7 @@
     "clipper-lib": "^6.4.2",
     "cors": "^2.8.6",
     "express": "^5.2.1",
+    "helmet": "^8.3.0",
     "multer": "^2.1.1",
     "mupdf": "^1.28.0",
     "nodemailer": "^9.0.3",

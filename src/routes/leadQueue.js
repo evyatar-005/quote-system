@@ -5,7 +5,7 @@
 //
 // deps: { requireAuth, requireAdmin }
 
-const { claimNext, claimFill, releaseClaim, slotCount, crmSettingsRow } = require('../services/crm/leadClaims');
+const { claimNext, claimFill, releaseClaim, slotCount, crmSettingsRow, canAccessLead } = require('../services/crm/leadClaims');
 const { buildLeadContext } = require('../services/crm/leadContext');
 const { enqueue, resolveConversation } = require('../services/channels/whatsapp/outbox');
 const { drainNow } = require('../services/crm/jobs');
@@ -59,7 +59,9 @@ module.exports = function registerLeadQueue(app, db, deps) {
   });
 
   app.get('/api/crm/leads/:id/context', requireAuth, (req, res) => {
-    const context = buildLeadContext(db, parseInt(req.params.id, 10));
+    const id = parseInt(req.params.id, 10);
+    if (!canAccessLead(db, req.user, id)) return res.status(403).json({ error: 'אין הרשאה לליד זה' });
+    const context = buildLeadContext(db, id);
     if (!context) return res.status(404).json({ error: 'ליד לא נמצא' });
     res.json(context);
   });

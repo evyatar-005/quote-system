@@ -4,9 +4,9 @@
 // can't express. See CLAUDE.md CRM plan §3.
 
 const { toE164 } = require('../services/crm/phone');
-const { releaseClaim, releaseReason } = require('../services/crm/leadClaims');
+const { releaseClaim, releaseReason, canAccessLead } = require('../services/crm/leadClaims');
 const { DOCUMENT_TYPE } = require('../services/morning/mappings');
-const { CLOSED_SQL, WON_SQL, LOST_SQL, isClosed, isWon, labelOf } = require('../services/crm/leadStatuses');
+const { CLOSED_SQL, WON_SQL, LOST_SQL, isClosed, isWon, labelOf, BY_KEY } = require('../services/crm/leadStatuses');
 
 // Server-side twin of sign-smart-quote/src/lib/quoteEconomics.js's
 // linesOf/economicsOf — same definition (cost = Σ line totalCostAll,
@@ -357,6 +357,12 @@ module.exports = function registerCrm(app, db, deps) {
         row[c] = v;
         setCols.push(c);
       }
+    }
+    // Same dedupe POST already enforces at creation — without it, an update
+    // can silently produce the exact duplicate phone number POST refuses to create.
+    if ('phone_e164' in row && row.phone_e164) {
+      const dupe = db.prepare(`SELECT id FROM customers WHERE phone_e164 = ? AND merged_into_id IS NULL AND id != ?`).get(row.phone_e164, existing.id);
+      if (dupe) return res.status(409).json({ error: 'מספר הטלפון כבר שייך ללקוח אחר', existing_customer_id: dupe.id });
     }
     if (setCols.length) {
       setCols.push('updated_at');
@@ -1076,12 +1082,14 @@ module.exports = function registerCrm(app, db, deps) {
     const body = req.body || {};
     const customerId = parseInt(body.customer_id, 10);
     if (!customerId || !customerById(customerId)) return res.status(400).json({ error: 'customer_id required' });
+    const status = body.status || 'new';
+    if (!BY_KEY.has(status)) return res.status(400).json({ error: `סטטוס לא חוקי: ${status}` });
     const row = {
       customer_id: customerId,
       campaign_id: body.campaign_id || null,
       source: body.source || 'manual',
       external_ref: body.external_ref || null,
-      status: body.status || 'new',
+      status,
       title: body.title || null,
       notes: body.notes || null,
       assigned_to: body.assigned_to || req.user.username,
@@ -1111,13 +1119,18 @@ module.exports = function registerCrm(app, db, deps) {
     const id = parseInt(req.params.id, 10);
     const existing = db.prepare(`SELECT * FROM crm_leads WHERE id = ?`).get(id);
     if (!existing) return res.status(404).json({ error: 'ליד לא נמצא' });
+    if (!canAccessLead(db, req.user, id)) return res.status(403).json({ error: 'אין הרשאה לליד זה' });
     const body = req.body || {};
+    if (body.status && !BY_KEY.has(body.status)) return res.status(400).json({ error: `סטטוס לא חוקי: ${body.status}` });
     const editable = leadCols.filter(c => !['id', 'customer_id', 'created_at'].includes(c)
       && (req.user.role === 'admin' || !AGENT_LOCKED_FIELDS.has(c)));
     const row = { id };
     const setCols = [];
     for (const c of editable) {
-      if (c in body) { row[c] = body[c]; setCols.push(c); }
+      if (c in body) {
+        row[c] = c === 'value_estimate' && body[c] != null ? Number(body[c]) : body[c];
+        setCols.push(c);
+      }
     }
     if (body.status && body.status !== existing.status) {
       if (isClosed(body.status) && !('closed_at' in row)) {
@@ -1154,6 +1167,7 @@ module.exports = function registerCrm(app, db, deps) {
     const id = parseInt(req.params.id, 10);
     const lead = db.prepare(`SELECT * FROM crm_leads WHERE id = ?`).get(id);
     if (!lead) return res.status(404).json({ error: 'ליד לא נמצא' });
+    if (!canAccessLead(db, req.user, id)) return res.status(403).json({ error: 'אין הרשאה לליד זה' });
     const text = (req.body?.text || '').toString().trim();
     if (!text) return res.status(400).json({ error: 'text required' });
 
@@ -1174,6 +1188,7 @@ module.exports = function registerCrm(app, db, deps) {
     const id = parseInt(req.params.id, 10);
     const lead = db.prepare(`SELECT * FROM crm_leads WHERE id = ?`).get(id);
     if (!lead) return res.status(404).json({ error: 'ליד לא נמצא' });
+    if (!canAccessLead(db, req.user, id)) return res.status(403).json({ error: 'אין הרשאה לליד זה' });
     const activity = db.prepare(
       `SELECT id, type AS kind, summary, actor, created_at FROM crm_activity_log WHERE lead_id = ? ORDER BY created_at DESC LIMIT 200`
     ).all(id);
@@ -1197,6 +1212,7 @@ module.exports = function registerCrm(app, db, deps) {
     const id = parseInt(req.params.id, 10);
     const lead = db.prepare(`SELECT * FROM crm_leads WHERE id = ?`).get(id);
     if (!lead) return res.status(404).json({ error: 'ליד לא נמצא' });
+    if (!canAccessLead(db, req.user, id)) return res.status(403).json({ error: 'אין הרשאה לליד זה' });
     const quoteId = parseInt((req.body || {}).quote_id, 10);
     if (!quoteId) return res.status(400).json({ error: 'quote_id required' });
     const quote = db.prepare(`SELECT * FROM signshop_quotes WHERE id = ?`).get(quoteId);

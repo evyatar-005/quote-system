@@ -19,21 +19,25 @@ module.exports = function registerMonday(app, db, deps) {
       api_token_masked: row && row.api_token ? '••••' + row.api_token.slice(-4) : '',
       board_id: (row && row.board_id) || '',
       group_id: (row && row.group_id) || '',
+      webhook_secret_masked: row && row.webhook_secret ? '••••' + row.webhook_secret.slice(-4) : '',
     });
   });
 
   app.put('/api/monday/config', requireAdmin, (req, res) => {
-    const { api_token, board_id, group_id } = req.body || {};
+    const { api_token, board_id, group_id, webhook_secret } = req.body || {};
     const existing = credRow.get();
     const tokenToStore = (api_token && api_token.trim())
       ? api_token.trim()
       : (existing ? existing.api_token : null);
+    const webhookSecretToStore = (webhook_secret && webhook_secret.trim())
+      ? webhook_secret.trim()
+      : (existing ? existing.webhook_secret : null);
 
     db.prepare(
-      `INSERT INTO monday_credentials (id, api_token, board_id, group_id) VALUES (1, ?, ?, ?)
+      `INSERT INTO monday_credentials (id, api_token, board_id, group_id, webhook_secret) VALUES (1, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET api_token=excluded.api_token, board_id=excluded.board_id,
-         group_id=excluded.group_id, updated_at=CURRENT_TIMESTAMP`
-    ).run(tokenToStore, board_id || null, group_id || null);
+         group_id=excluded.group_id, webhook_secret=excluded.webhook_secret, updated_at=CURRENT_TIMESTAMP`
+    ).run(tokenToStore, board_id || null, group_id || null, webhookSecretToStore);
 
     console.log(`[PUT /api/monday/config] board_id="${board_id || ''}" group_id="${group_id || ''}"`);
     res.json({ ok: true });

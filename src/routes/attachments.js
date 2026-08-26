@@ -48,6 +48,19 @@ module.exports = function registerAttachments(app, db, deps) {
   const rowById = db.prepare(`SELECT * FROM signshop_quote_attachments WHERE id = ? AND quote_id = ?`);
   const deleteStmt = db.prepare(`DELETE FROM signshop_quote_attachments WHERE id = ? AND quote_id = ?`);
   const quoteExists = db.prepare(`SELECT id FROM signshop_quotes WHERE id = ?`);
+  const quoteOwner = db.prepare(`SELECT created_by FROM signshop_quotes WHERE id = ?`);
+
+  // Object-level access check for a quote's attachments — admin sees
+  // everything, everyone else only their own quote (same "default closed"
+  // reasoning as canAccessLead in services/crm/leadClaims.js). Returns the
+  // HTTP status to send (404 if the quote itself doesn't exist, 403 if it
+  // exists but isn't theirs), or null if access is allowed.
+  function attachmentAccessDenial(quoteId, user) {
+    const quote = quoteOwner.get(quoteId);
+    if (!quote) return 404;
+    if (user.role === 'admin' || quote.created_by === user.username) return null;
+    return 403;
+  }
 
   // POST /api/quotes/:id/attachments — multipart, field name "files" (multiple)
   app.post('/api/quotes/:id/attachments', requireAuth, (req, res) => {
@@ -55,6 +68,8 @@ module.exports = function registerAttachments(app, db, deps) {
     if (!Number.isInteger(quoteId) || !quoteExists.get(quoteId)) {
       return res.status(404).json({ error: 'Quote not found' });
     }
+    const denial = attachmentAccessDenial(quoteId, req.user);
+    if (denial) return res.status(denial).json({ error: 'אין הרשאה להצעה זו' });
     upload.array('files', MAX_FILES)(req, res, (err) => {
       if (err) return res.status(400).json({ error: err.message });
       const files = req.files || [];
@@ -73,6 +88,8 @@ module.exports = function registerAttachments(app, db, deps) {
   // GET /api/quotes/:id/attachments — metadata only, no file bytes
   app.get('/api/quotes/:id/attachments', requireAuth, (req, res) => {
     const quoteId = parseInt(req.params.id, 10);
+    const denial = attachmentAccessDenial(quoteId, req.user);
+    if (denial) return res.status(denial).json({ error: denial === 404 ? 'Quote not found' : 'אין הרשאה להצעה זו' });
     res.json(listByQuote.all(quoteId));
   });
 
@@ -80,12 +97,16 @@ module.exports = function registerAttachments(app, db, deps) {
   app.get('/api/quotes/:id/attachments/:attId/file', requireAuth, (req, res) => {
     const quoteId = parseInt(req.params.id, 10);
     const attId = parseInt(req.params.attId, 10);
+    const denial = attachmentAccessDenial(quoteId, req.user);
+    if (denial) return res.status(denial).json({ error: denial === 404 ? 'Quote not found' : 'אין הרשאה להצעה זו' });
     const row = rowById.get(attId, quoteId);
     if (!row) return res.status(404).json({ error: 'attachment not found' });
     const filePath = path.join(UPLOAD_ROOT, row.filename);
     if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'file missing on disk' });
     res.setHeader('Content-Type', row.mime_type);
-    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(row.original_name)}"`);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    const asciiFallback = (row.original_name || 'attachment').replace(/[^\x20-\x7E]/g, '_').replace(/"/g, "'");
+    res.setHeader('Content-Disposition', `inline; filename="${asciiFallback}"; filename*=UTF-8''${encodeURIComponent(row.original_name)}`);
     fs.createReadStream(filePath).pipe(res);
   });
 
@@ -93,6 +114,8 @@ module.exports = function registerAttachments(app, db, deps) {
   app.delete('/api/quotes/:id/attachments/:attId', requireAuth, (req, res) => {
     const quoteId = parseInt(req.params.id, 10);
     const attId = parseInt(req.params.attId, 10);
+    const denial = attachmentAccessDenial(quoteId, req.user);
+    if (denial) return res.status(denial).json({ error: denial === 404 ? 'Quote not found' : 'אין הרשאה להצעה זו' });
     const row = rowById.get(attId, quoteId);
     if (!row) return res.status(404).json({ error: 'attachment not found' });
     deleteStmt.run(attId, quoteId);

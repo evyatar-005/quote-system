@@ -154,9 +154,23 @@ module.exports = function registerMondaySync(app, db, deps) {
   // (src/routes/morning.js): respond immediately so monday.com's own retry
   // logic doesn't fire on a slow downstream pull, then process async.
   // monday.com's challenge handshake must be echoed back verbatim on setup.
+  // Optional shared secret (monday_credentials.webhook_secret), same
+  // "optional, degrade gracefully" convention as morning_credentials.webhook_secret
+  // and crm_settings.wa_webhook_secret — unset = unverified but still
+  // processed. Checked as ?secret= (monday.com webhooks carry no custom
+  // headers), and only AFTER the challenge handshake below: monday.com's own
+  // registration call never sends the secret, so gating the challenge on it
+  // would make it impossible to (re-)register the webhook.
   app.post('/api/monday-sync/webhooks/items', (req, res) => {
     const body = req.body || {};
     if (body.challenge) return res.json({ challenge: body.challenge });
+
+    const creds = db.prepare(`SELECT webhook_secret FROM monday_credentials WHERE id = 1`).get();
+    if (creds && creds.webhook_secret && req.query.secret !== creds.webhook_secret) {
+      console.error('[monday webhook] secret verification failed');
+      logSync(db, { direction: 'webhook', success: false, error_message: 'secret verification failed', request_json: body });
+      return res.status(200).json({ ok: true }); // 200, not 401 — never give an unauthenticated caller a signal to probe against
+    }
     res.status(200).json({ ok: true });
 
     (async () => {
