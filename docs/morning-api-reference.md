@@ -7,40 +7,44 @@ For anything not covered here, consult the full docs directly.
 
 ## Base URLs
 
-- **Everything, including auth:** `https://api.greeninvoice.co.il/api/v1`
+- **Resources (documents, clients, items, ...):** `https://api.greeninvoice.co.il/api/v1`
+- **Authentication only:** `https://api.morning.co/idp/v1/oauth/token`
 
-**Correction (2026-07-15) — verified against the live API, not just the PDF
-docs:** the PDF ("morning API Documentation 2.0.0") describes an OAuth 2.0
-`client_credentials` flow at `https://api.morning.co/idp/v1/oauth/token`.
-That host/path returned a plain `404` against the real API when this
-integration was first tested with real credentials — it is not live (yet, or
-for this account). The actual working auth endpoint, confirmed by probing it
-directly and getting Green Invoice's own structured error codes back (`2014`
-"invalid key data" on a malformed body, `401` "invalid credentials" on a
-well-formed-but-fake one) instead of a generic 404, is the classic Green
-Invoice endpoint documented below. `src/services/morning/client.js` uses
-this corrected endpoint, not the PDF's.
+**Update (2026-10-18) — verified live.** Morning completed the auth migration
+described in the 2.0.0 PDF. The old Green Invoice `POST /account/token` now
+returns a plain `404` (it is gone); the OAuth2 endpoint on `api.morning.co`,
+which used to 404, is now live — it returns the RFC 6749 `invalid_client`
+error shape on bad credentials and a real token on good ones. This reverses
+the earlier 2026-07-15 correction that used to be in this file. Only auth
+moved — every resource call still goes to `api.greeninvoice.co.il/api/v1`
+unchanged.
 
 ## Authentication
 
-`POST /account/token` (on `api.greeninvoice.co.il`, same host as every other call)
+`POST https://api.morning.co/idp/v1/oauth/token` (OAuth 2.0 client_credentials)
 
 Request body:
 ```json
-{ "id": "<API Key Client ID>", "secret": "<API Key Client Secret>" }
+{
+  "grant_type": "client_credentials",
+  "client_id": "<API Key Client ID>",
+  "client_secret": "<API Key Client Secret>"
+}
 ```
 
-Response (field name not confirmed against a real success response yet —
-client.js accepts either `token` or `accessToken`):
+Response:
 ```json
-{ "token": "<JWT>" }
+{ "accessToken": "<JWT>", "tokenType": "Bearer", "expiresAt": 1771317327 }
 ```
 
-- The token has no documented expiry on this endpoint; `client.js` refreshes
-  proactively after 55 minutes rather than assuming a full hour.
-- Send it as `Authorization: Bearer <token>` on every subsequent call.
+- `expiresAt` is a Unix timestamp in **seconds**; the token is valid for 1 hour.
+  `client.js` refreshes 60s early, falling back to 55 minutes if the field is missing.
+- Send it as `Authorization: Bearer <accessToken>` on every subsequent call.
+- Auth errors use the OAuth format (`invalid_client`, `invalid_grant`,
+  `unauthorized_client`, `unsupported_grant_type`), not Green Invoice error codes.
 - A `401` on any authenticated call means the token expired or was
   invalidated — request a new one and retry once (already implemented).
+- The auth URL can be overridden with the `MORNING_AUTH_URL` env var.
 
 ## Documents
 

@@ -2,14 +2,14 @@
 // and a generic authenticated request helper. No business logic here (that's
 // ./sync.js); this module only knows how to talk to the API.
 
-// The PDF docs describe an OAuth2 client_credentials flow at api.morning.co —
-// that host 404s on the documented path against the real live API. Verified
-// directly (curl) that the actual working auth endpoint is the classic Green
-// Invoice one, same host as every other call: POST {API_BASE}/account/token
-// with {id, secret} — confirmed by getting a structured 401 "invalid
-// credentials" (not 404) back from Green Invoice's own error format when
-// probing with placeholder values.
+// Morning moved auth to the OAuth2 client_credentials flow documented in
+// "morning API Documentation 2.0.0": POST https://api.morning.co/idp/v1/oauth/token
+// with {grant_type, client_id, client_secret} -> {accessToken, tokenType, expiresAt}.
+// The classic Green Invoice POST {API_BASE}/account/token this integration used
+// before now returns a plain 404 (verified directly, 2026-10-18) — it is gone.
+// Only auth moved; every resource call still goes to api.greeninvoice.co.il/api/v1.
 const API_BASE = 'https://api.greeninvoice.co.il/api/v1';
+const AUTH_URL = process.env.MORNING_AUTH_URL || 'https://api.morning.co/idp/v1/oauth/token';
 // Confirmed via direct probing (same Green Invoice error-code pattern as
 // production: 2014 on a malformed body, 401 on a well-formed-but-fake one) —
 // this is the real sandbox host, not a guess. Production credentials will
@@ -73,20 +73,23 @@ async function getAccessToken(db) {
   if (cached.token && cached.expiresAt - now > 60 * 1000) return cached.token;
 
   const creds = getCredentials(db);
-  const apiBase = resolveApiBase(creds);
-  const res = await withTransientRetry(() => safeFetch(`${apiBase}/account/token`, {
+  const res = await withTransientRetry(() => safeFetch(AUTH_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ id: creds.client_id, secret: creds.client_secret }),
+    body: JSON.stringify({
+      grant_type: 'client_credentials',
+      client_id: creds.client_id,
+      client_secret: creds.client_secret,
+    }),
   }));
   const text = await res.text();
   if (!res.ok) throw new Error(`Morning auth failed (${res.status}): ${text}`);
 
   const data = JSON.parse(text);
-  const token = data.token || data.accessToken;
+  const token = data.accessToken || data.token;
   if (!token) throw new Error(`Morning auth succeeded but no token in response: ${text}`);
-  // No documented expiresAt on this endpoint's response — refresh proactively
-  // at 55 minutes rather than assume a full hour.
+  // expiresAt is a Unix timestamp (seconds) — the token lives 1 hour. Fall back
+  // to 55 minutes if the field is ever missing, so we still refresh before expiry.
   const expiresAt = data.expiresAt ? data.expiresAt * 1000 : Date.now() + 55 * 60 * 1000;
   cached = { token, expiresAt };
   return cached.token;
